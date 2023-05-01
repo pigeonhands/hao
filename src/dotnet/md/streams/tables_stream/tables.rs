@@ -49,7 +49,7 @@ impl<'a> ReadData<TypeRefTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct TypeDefFlags: u32 {
+    pub struct TypeAttributes: u32 {
                  // Use this mask to retrieve the type visibility information.
         const     VisibilityMask        =   0x00000007;
         const     NotPublic             =   0x00000000;     // Class is not public scope.
@@ -104,7 +104,7 @@ bitflags! {
 
 #[derive(Debug, Clone)]
 pub struct TypeDefTableRow {
-    pub flags: TypeDefFlags,
+    pub flags: TypeAttributes,
     pub name: StringsStreamOffset,
     pub namespace: StringsStreamOffset,
     pub extends: CodedToken<TypeDefOrRefToken>,
@@ -115,7 +115,7 @@ pub struct TypeDefTableRow {
 impl<'a> ReadData<TypeDefTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<TypeDefTableRow> {
         Ok(TypeDefTableRow {
-            flags: TypeDefFlags::from_bits_retain(self.read()?),
+            flags: TypeAttributes::from_bits_retain(self.read()?),
             name: self.read()?,
             namespace: self.read()?,
             extends: self.read()?,
@@ -360,9 +360,9 @@ impl<'a> ReadData<InterfaceImplTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct MemberRefTableRow {
-    pub class: (),
-    pub name: (),
-    pub signature: (),
+    pub class: CodedToken<MemberRefParentToken>,
+    pub name: StringsStreamOffset,
+    pub signature: BlobStreamOffset,
 }
 
 impl<'a> ReadData<MemberRefTableRow> for TablesStreamReader<'a> {
@@ -377,10 +377,10 @@ impl<'a> ReadData<MemberRefTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ConstantTableRow {
-    pub ty: (),
-    pub padding: (),
-    pub parent: (),
-    pub value: (),
+    pub ty: u8,
+    pub padding: u8,
+    pub parent: CodedToken<HasConstantToken>,
+    pub value: BlobStreamOffset,
 }
 
 impl<'a> ReadData<ConstantTableRow> for TablesStreamReader<'a> {
@@ -396,9 +396,9 @@ impl<'a> ReadData<ConstantTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct CustomAttributeTableRow {
-    pub parent: (),
-    pub ty: (),
-    pub value: (),
+    pub parent: CodedToken<HasCustomAttributeToken>,
+    pub ty: CodedToken<CustomAttributeTypeToken>,
+    pub value: BlobStreamOffset,
 }
 
 impl<'a> ReadData<CustomAttributeTableRow> for TablesStreamReader<'a> {
@@ -413,8 +413,8 @@ impl<'a> ReadData<CustomAttributeTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct FieldMarshalTableRow {
-    pub parent: (),
-    pub native_type: (),
+    pub parent: CodedToken<HasFieldMarshalToken>,
+    pub native_type: BlobStreamOffset,
 }
 
 impl<'a> ReadData<FieldMarshalTableRow> for TablesStreamReader<'a> {
@@ -428,9 +428,9 @@ impl<'a> ReadData<FieldMarshalTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct DeclSecurityTableRow {
-    pub action: (),
-    pub parent: (),
-    pub permission_set: (),
+    pub action: u16,
+    pub parent: CodedToken<HasDeclSecurityToken>,
+    pub permission_set: BlobStreamOffset,
 }
 
 impl<'a> ReadData<DeclSecurityTableRow> for TablesStreamReader<'a> {
@@ -445,9 +445,9 @@ impl<'a> ReadData<DeclSecurityTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ClassLayoutTableRow {
-    pub packing_size: (),
-    pub class_size: (),
-    pub parent: (),
+    pub packing_size: u16,
+    pub class_size: u32,
+    pub parent: TypeDefTableOffset,
 }
 
 impl<'a> ReadData<ClassLayoutTableRow> for TablesStreamReader<'a> {
@@ -462,14 +462,14 @@ impl<'a> ReadData<ClassLayoutTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct FieldLayoutTableRow {
-    pub off_set: (),
-    pub field: (),
+    pub offset: u32,
+    pub field: FieldTableOffset,
 }
 
 impl<'a> ReadData<FieldLayoutTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldLayoutTableRow> {
         Ok(FieldLayoutTableRow {
-            off_set: self.read()?,
+            offset: self.read()?,
             field: self.read()?,
         })
     }
@@ -477,7 +477,7 @@ impl<'a> ReadData<FieldLayoutTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct StandAloneSigTableRow {
-    pub signature: (),
+    pub signature: BlobStreamOffset,
 }
 
 impl<'a> ReadData<StandAloneSigTableRow> for TablesStreamReader<'a> {
@@ -490,8 +490,8 @@ impl<'a> ReadData<StandAloneSigTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct EventMapTableRow {
-    pub parent: (),
-    pub event_list: (),
+    pub parent: TypeDefTableOffset,
+    pub event_list: EventTableOffset,
 }
 
 impl<'a> ReadData<EventMapTableRow> for TablesStreamReader<'a> {
@@ -505,7 +505,7 @@ impl<'a> ReadData<EventMapTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct EventPtrTableRow {
-    pub event: (),
+    pub event: EventTableOffset,
 }
 
 impl<'a> ReadData<EventPtrTableRow> for TablesStreamReader<'a> {
@@ -516,17 +516,28 @@ impl<'a> ReadData<EventPtrTableRow> for TablesStreamReader<'a> {
     }
 }
 
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct EventFlags: u16 {
+        const SpecialName           =   0x0200;     // const ent is special. Name describes how.
+
+        // Reserved flags for Runtime use only.
+        const ReservedMask          =   0x0400;
+        const RTSpecialName         =   0x0400;     // Runtime(metadata internal APIs) should check name encoding.
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EventTableRow {
-    pub event_flags: (),
-    pub name: (),
-    pub event_type: (),
+    pub event_flags: EventFlags,
+    pub name: StringsStreamOffset,
+    pub event_type: CodedToken<TypeDefOrRefToken>,
 }
 
 impl<'a> ReadData<EventTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<EventTableRow> {
         Ok(EventTableRow {
-            event_flags: self.read()?,
+            event_flags: EventFlags::from_bits_retain(self.read()?),
             name: self.read()?,
             event_type: self.read()?,
         })
@@ -535,8 +546,8 @@ impl<'a> ReadData<EventTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct PropertyMapTableRow {
-    pub parent: (),
-    pub property_list: (),
+    pub parent: TypeDefTableOffset,
+    pub property_list: PropertyTableOffset,
 }
 
 impl<'a> ReadData<PropertyMapTableRow> for TablesStreamReader<'a> {
@@ -550,7 +561,7 @@ impl<'a> ReadData<PropertyMapTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct PropertyPtrTableRow {
-    pub property: (),
+    pub property: PropertyTableOffset,
 }
 
 impl<'a> ReadData<PropertyPtrTableRow> for TablesStreamReader<'a> {
@@ -561,34 +572,63 @@ impl<'a> ReadData<PropertyPtrTableRow> for TablesStreamReader<'a> {
     }
 }
 
+
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct PropertyFlags: u16 {
+        const SpecialName           =   0x0200;     // const operty is special. Name describes how.
+
+        // Reserved flags for Runtime use only.
+        const ReservedMask          =   0xf400;
+        const RTSpecialName         =   0x0400;     // Runtime(metadata internal APIs) should check name encoding.
+        const HasDefault            =   0x1000;     // const operty has default
+
+        const Unused                =   0xe9ff;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PropertyTableRow {
-    pub prop_flags: (),
-    pub name: (),
-    pub ty: (),
+    pub prop_flags: PropertyFlags,
+    pub name: StringsStreamOffset,
+    // indexes the signature in the Blob heap of the Property
+    pub ty: BlobStreamOffset,
 }
 
 impl<'a> ReadData<PropertyTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<PropertyTableRow> {
         Ok(PropertyTableRow {
-            prop_flags: self.read()?,
+            prop_flags: PropertyFlags::from_bits_retain(self.read()?),
             name: self.read()?,
             ty: self.read()?,
         })
     }
 }
 
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct MethodSemanticsFlags: u16 {
+        const Setter    =   0x0001;     // Setter for property
+        const Getter    =   0x0002;     // Getter for property
+        const Other     =   0x0004;     // other method for property or event
+        const AddOn     =   0x0008;     // AddOn method for event
+        const RemoveOn  =   0x0010;     // RemoveOn method for event
+        const Fire      =   0x0020;     // Fire method for event
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub struct MethodSemanticsTableRow {
-    pub semantic: (),
-    pub method: (),
-    pub association: (),
+    pub semantic: MethodSemanticsFlags,
+    pub method: MethodTableOffset,
+    pub association: CodedToken<HasSemanticToken>,
 }
 
 impl<'a> ReadData<MethodSemanticsTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodSemanticsTableRow> {
         Ok(MethodSemanticsTableRow {
-            semantic: self.read()?,
+            semantic: MethodSemanticsFlags::from_bits_retain(self.read()?),
             method: self.read()?,
             association: self.read()?,
         })
@@ -597,9 +637,9 @@ impl<'a> ReadData<MethodSemanticsTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct MethodImplTableRow {
-    pub class: (),
-    pub method_body: (),
-    pub method_declaration: (),
+    pub class: TypeDefTableOffset,
+    pub method_body: CodedToken<MethodDefOrRefToken>,
+    pub method_declaration: CodedToken<MethodDefOrRefToken>,
 }
 
 impl<'a> ReadData<MethodImplTableRow> for TablesStreamReader<'a> {
@@ -614,7 +654,7 @@ impl<'a> ReadData<MethodImplTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ModuleRefTableRow {
-    pub name: (),
+    pub name: StringsStreamOffset,
 }
 
 impl<'a> ReadData<ModuleRefTableRow> for TablesStreamReader<'a> {
@@ -625,7 +665,7 @@ impl<'a> ReadData<ModuleRefTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct TypeSpecTableRow {
-    pub signature: (),
+    pub signature: BlobStreamOffset,
 }
 
 impl<'a> ReadData<TypeSpecTableRow> for TablesStreamReader<'a> {
@@ -636,18 +676,55 @@ impl<'a> ReadData<TypeSpecTableRow> for TablesStreamReader<'a> {
     }
 }
 
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct PInvokeMapFlags: u16 {
+        const NoMangle          = 0x0001;   // Pinvoke is to use the member name as specified.
+
+        // Use this mask to retrieve the CharSet information.
+        const CharSetMask       = 0x0006;
+        const CharSetNotSpec    = 0x0000;
+        const CharSetAnsi       = 0x0002;
+        const CharSetUnicode    = 0x0004;
+        const CharSetAuto       = 0x0006;
+    
+    
+        const BestFitUseAssem   = 0x0000;
+        const BestFitEnabled    = 0x0010;
+        const BestFitDisabled   = 0x0020;
+        const BestFitMask       = 0x0030;
+    
+        const ThrowOnUnmappableCharUseAssem   = 0x0000;
+        const ThrowOnUnmappableCharEnabled    = 0x1000;
+        const ThrowOnUnmappableCharDisabled   = 0x2000;
+        const ThrowOnUnmappableCharMask       = 0x3000;
+    
+        const SupportsLastError = 0x0040;   // Information about target function. Not relevant for fields.
+    
+        // None of the calling convention flags is relevant for fields.
+        const CallConvMask      = 0x0700;
+        const CallConvWinapi    = 0x0100;   // Pinvoke will use native callconv appropriate to target windows platform.
+        const CallConvCdecl     = 0x0200;
+        const CallConvStdcall   = 0x0300;
+        const CallConvThiscall  = 0x0400;   // In M9; pinvoke will raise exception.
+        const CallConvFastcall  = 0x0500;
+    
+        const MaxValue          = 0xFFFF;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ImplMapTableRow {
-    pub mapping_flags: (),
-    pub member_forwarded: (),
-    pub import_name: (),
-    pub import_scope: (),
+    pub mapping_flags: PInvokeMapFlags,
+    pub member_forwarded: CodedToken<MemberForwardedToken>,
+    pub import_name: StringsStreamOffset,
+    pub import_scope: ModuleRefTableOffset,
 }
 
 impl<'a> ReadData<ImplMapTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ImplMapTableRow> {
         Ok(ImplMapTableRow {
-            mapping_flags: self.read()?,
+            mapping_flags: PInvokeMapFlags::from_bits_retain(self.read()?),
             member_forwarded: self.read()?,
             import_name: self.read()?,
             import_scope: self.read()?,
@@ -657,8 +734,8 @@ impl<'a> ReadData<ImplMapTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct FieldRVATableRow {
-    pub rva: (),
-    pub field: (),
+    pub rva: u32,
+    pub field: FieldTableOffset,
 }
 
 impl<'a> ReadData<FieldRVATableRow> for TablesStreamReader<'a> {
@@ -672,8 +749,8 @@ impl<'a> ReadData<FieldRVATableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ENCLogTableRow {
-    pub token: (),
-    pub func_code: (),
+    pub token: u32,
+    pub func_code: u32,
 }
 
 impl<'a> ReadData<ENCLogTableRow> for TablesStreamReader<'a> {
@@ -687,7 +764,7 @@ impl<'a> ReadData<ENCLogTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ENCMapTableRow {
-    pub token: (),
+    pub token: u32,
 }
 
 impl<'a> ReadData<ENCMapTableRow> for TablesStreamReader<'a> {
@@ -698,28 +775,59 @@ impl<'a> ReadData<ENCMapTableRow> for TablesStreamReader<'a> {
     }
 }
 
+
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct AssemblyFlags: u32 {
+        const PublicKey             =   0x0001;     // The assembly ref holds the full (unhashed) public key.
+   
+        const PA_None               =   0x0000;     // Processor Architecture unspecified
+        const PA_MSIL               =   0x0010;     // Processor Architecture: neutral (PE32)
+        const PA_x86                =   0x0020;     // Processor Architecture: x86 (PE32)
+        const PA_IA64               =   0x0030;     // Processor Architecture: Itanium (PE32+)
+        const PA_AMD64              =   0x0040;     // Processor Architecture: AMD X64 (PE32+)
+        const PA_Specified          =   0x0080;     // Propagate PA flags to AssemblyRef record
+        const PA_Mask               =   0x0070;     // Bits describing the processor architecture
+        const PA_FullMask           =   0x00F0;     // Bits describing the PA incl. Specified
+        const PA_Shift              =   0x0004;     // NOT A FLAG; shift count in PA flags <--> index conversion
+    
+        const EnableJITcompileTracking  =   0x8000; // From "DebuggableAttribute".
+        const DisableJITcompileOptimizer=   0x4000; // From "DebuggableAttribute".
+    
+        const Retargetable          =   0x0100;     // The assembly can be retargeted (at runtime) to an
+                                                // assembly from a different publisher.
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub struct AssemblyTableRow {
-    pub hash_alg_id: (),
-    pub major_version: (),
-    pub minor_version: (),
-    pub build_number: (),
-    pub revision_number: (),
-    pub flags: (),
-    pub public_key: (),
-    pub name: (),
-    pub locale: (),
+    pub hash_alg_id: u32,
+    pub major_version: u16,
+    pub minor_version: u16,
+    pub build_number: u16,
+    pub revision_number: u16,
+    pub flags: AssemblyFlags,
+    pub public_key: BlobStreamOffset,
+    pub name: StringsStreamOffset,
+    pub locale: StringsStreamOffset,
 }
 
 impl<'a> ReadData<AssemblyTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyTableRow> {
+        if self.header.table_rows.assembly != 1 {
+            return Err(crate::error::HaoError::BadImageFormat(
+                "Assembly table should have exactly one entry",
+            ));
+        }
+
         Ok(AssemblyTableRow {
             hash_alg_id: self.read()?,
             major_version: self.read()?,
             minor_version: self.read()?,
             build_number: self.read()?,
             revision_number: self.read()?,
-            flags: self.read()?,
+            flags: AssemblyFlags::from_bits_retain(self.read()?),
             public_key: self.read()?,
             name: self.read()?,
             locale: self.read()?,
@@ -729,7 +837,7 @@ impl<'a> ReadData<AssemblyTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct AssemblyProcessorTableRow {
-    pub processor: (),
+    pub processor: u32,
 }
 
 impl<'a> ReadData<AssemblyProcessorTableRow> for TablesStreamReader<'a> {
@@ -742,9 +850,9 @@ impl<'a> ReadData<AssemblyProcessorTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct AssemblyOSTableRow {
-    pub os_platform_id: (),
-    pub os_major_version: (),
-    pub os_minor_version: (),
+    pub os_platform_id: u32,
+    pub os_major_version: u32,
+    pub os_minor_version: u32,
 }
 
 impl<'a> ReadData<AssemblyOSTableRow> for TablesStreamReader<'a> {
@@ -759,15 +867,15 @@ impl<'a> ReadData<AssemblyOSTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct AssemblyRefTableRow {
-    pub major_version: (),
-    pub minor_version: (),
-    pub build_number: (),
-    pub revision_number: (),
-    pub flags: (),
-    pub public_key_or_token: (),
-    pub name: (),
-    pub locale: (),
-    pub hash_value: (),
+    pub major_version: u16,
+    pub minor_version: u16,
+    pub build_number: u16,
+    pub revision_number: u16,
+    pub flags: AssemblyFlags,
+    pub public_key_or_token: BlobStreamOffset,
+    pub name: StringsStreamOffset,
+    pub locale:StringsStreamOffset,
+    pub hash_value: BlobStreamOffset,
 }
 
 impl<'a> ReadData<AssemblyRefTableRow> for TablesStreamReader<'a> {
@@ -777,7 +885,7 @@ impl<'a> ReadData<AssemblyRefTableRow> for TablesStreamReader<'a> {
             minor_version: self.read()?,
             build_number: self.read()?,
             revision_number: self.read()?,
-            flags: self.read()?,
+            flags: AssemblyFlags::from_bits_retain(self.read()?),
             public_key_or_token: self.read()?,
             name: self.read()?,
             locale: self.read()?,
@@ -788,8 +896,8 @@ impl<'a> ReadData<AssemblyRefTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct AssemblyRefProcessorTableRow {
-    pub processor: (),
-    pub assembly_ref: (),
+    pub processor: u32,
+    pub assembly_ref: AssemblyRefTableOffset,
 }
 
 impl<'a> ReadData<AssemblyRefProcessorTableRow> for TablesStreamReader<'a> {
@@ -803,10 +911,10 @@ impl<'a> ReadData<AssemblyRefProcessorTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct AssemblyRefOSTableRow {
-    pub os_platform_id: (),
-    pub os_major_version: (),
-    pub os_minor_version: (),
-    pub assembly_ref: (),
+    pub os_platform_id: u32,
+    pub os_major_version: u32,
+    pub os_minor_version: u32,
+    pub assembly_ref: AssemblyRefTableOffset,
 }
 
 impl<'a> ReadData<AssemblyRefOSTableRow> for TablesStreamReader<'a> {
@@ -820,17 +928,25 @@ impl<'a> ReadData<AssemblyRefOSTableRow> for TablesStreamReader<'a> {
     }
 }
 
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct FileFlags: u16 {
+        const ContainsMetaData      =   0x0000;     // This is not a resource file
+        const ContainsNoMetaData    =   0x0001;     // This is a resource file or other non-metadata-containing file                                      // assembly from a different publisher.
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FileTableRow {
-    pub flags: (),
-    pub name: (),
-    pub hash_value: (),
+    pub flags: FileFlags,
+    pub name: StringsStreamOffset,
+    pub hash_value: BlobStreamOffset,
 }
 
 impl<'a> ReadData<FileTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FileTableRow> {
         Ok(FileTableRow {
-            flags: self.read()?,
+            flags: FileFlags::from_bits_retain(self.read()?),
             name: self.read()?,
             hash_value: self.read()?,
         })
@@ -839,17 +955,17 @@ impl<'a> ReadData<FileTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ExportedTypeTableRow {
-    pub flags: (),
-    pub type_def_id: (),
-    pub type_name: (),
-    pub type_namespace: (),
-    pub implementation: (),
+    pub flags: TypeAttributes,
+    pub type_def_id: TypeDefTableOffset,
+    pub type_name: StringsStreamOffset,
+    pub type_namespace: StringsStreamOffset,
+    pub implementation: CodedToken<ImplementationToken>,
 }
 
 impl<'a> ReadData<ExportedTypeTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ExportedTypeTableRow> {
         Ok(ExportedTypeTableRow {
-            flags: self.read()?,
+            flags: TypeAttributes::from_bits_retain(self.read()?),
             type_def_id: self.read()?,
             type_name: self.read()?,
             type_namespace: self.read()?,
@@ -858,19 +974,28 @@ impl<'a> ReadData<ExportedTypeTableRow> for TablesStreamReader<'a> {
     }
 }
 
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct ManifestResourceFlags: u32 {
+        const VisibilityMask        =   0x0007;
+        const Public                =   0x0001;     // The Resource is exported from the Assembly.
+        const Private               =   0x0002;     // The Resource is private to the Assembly.
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ManifestResourceTableRow {
-    pub offset: (),
-    pub flags: (),
-    pub name: (),
-    pub implementation: (),
+    pub offset: u32,
+    pub flags: ManifestResourceFlags,
+    pub name: StringsStreamOffset,
+    pub implementation: CodedToken<ImplementationToken>,
 }
 
 impl<'a> ReadData<ManifestResourceTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ManifestResourceTableRow> {
         Ok(ManifestResourceTableRow {
             offset: self.read()?,
-            flags: self.read()?,
+            flags: ManifestResourceFlags::from_bits_truncate(self.read()?),
             name: self.read()?,
             implementation: self.read()?,
         })
@@ -881,8 +1006,8 @@ impl<'a> ReadData<ManifestResourceTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct NestedClassTableRow {
-    pub nested_class: (),
-    pub enclosing_class: (),
+    pub nested_class: TypeDefTableOffset,
+    pub enclosing_class: TypeDefTableOffset,
 }
 
 impl<'a> ReadData<NestedClassTableRow> for TablesStreamReader<'a> {
@@ -894,20 +1019,41 @@ impl<'a> ReadData<NestedClassTableRow> for TablesStreamReader<'a> {
     }
 }
 
+
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct GenericParamFlags: u16 {
+        // Variance of type parameters; only applicable to generic parameters
+        // for generic interfaces and delegates
+        const VarianceMask          =   0x0003;
+        const NonVariant            =   0x0000;
+        const Covariant             =   0x0001;
+        const Contravariant         =   0x0002;
+
+        // Special constraints; applicable to any type parameters
+        const SpecialConstraintMask =  0x001C;
+        const NoSpecialConstraint   =   0x0000;     
+        const ReferenceTypeConstraint = 0x0004;      // type argument must be a reference type
+        const NotNullableValueTypeConstraint   =   0x0008; // type argument must be a value type but not Nullable
+        const DefaultConstructorConstraint = 0x0010; // type argument must have a public default constructor
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GenericParamTableRow {
-    pub number: (),
-    pub flags: (),
-    pub owner: (),
-    pub name: (),
-    pub kind: Option<()>,
+    pub number: u16,
+    pub flags: GenericParamFlags,
+    pub owner: CodedToken<TypeOrMethodDefToken>,
+    pub name: StringsStreamOffset,
+    // Kind is only in assemblies of version 1.1
+    pub kind: Option<CodedToken<TypeDefOrRefToken>>,
 }
 
 impl<'a> ReadData<GenericParamTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<GenericParamTableRow> {
         Ok(GenericParamTableRow {
             number: self.read()?,
-            flags: self.read()?,
+            flags: GenericParamFlags::from_bits_retain(self.read()?),
             owner: self.read()?,
             name: self.read()?,
             kind: (self.header.version == Version(1, 1))
@@ -919,8 +1065,8 @@ impl<'a> ReadData<GenericParamTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct MethodSpecTableRow {
-    pub method: (),
-    pub instantiation: (),
+    pub method: CodedToken<MethodDefOrRefToken>,
+    pub instantiation: BlobStreamOffset,
 }
 
 impl<'a> ReadData<MethodSpecTableRow> for TablesStreamReader<'a> {
@@ -934,8 +1080,8 @@ impl<'a> ReadData<MethodSpecTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct GenericParamConstraintTableRow {
-    pub owner: (),
-    pub constraint: (),
+    pub owner: GenericParamTableOffset,
+    pub constraint: CodedToken<TypeDefOrRefToken>,
 }
 
 impl<'a> ReadData<GenericParamConstraintTableRow> for TablesStreamReader<'a> {
@@ -949,10 +1095,10 @@ impl<'a> ReadData<GenericParamConstraintTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct DocumentTableRow {
-    pub name: (),
-    pub hash_algorithm: (),
-    pub hash: (),
-    pub language: (),
+    pub name: BlobStreamOffset,
+    pub hash_algorithm: GuidStreamOffset,
+    pub hash: BlobStreamOffset,
+    pub language: GuidStreamOffset,
 }
 
 impl<'a> ReadData<DocumentTableRow> for TablesStreamReader<'a> {
@@ -968,8 +1114,8 @@ impl<'a> ReadData<DocumentTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct MethodDebugInformationTableRow {
-    pub document: (),
-    pub sequence_points: (),
+    pub document: DocumentTableRow,
+    pub sequence_points: BlobStreamOffset,
 }
 
 impl<'a> ReadData<MethodDebugInformationTableRow> for TablesStreamReader<'a> {
@@ -983,12 +1129,12 @@ impl<'a> ReadData<MethodDebugInformationTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct LocalScopeTableRow {
-    pub method: (),
-    pub import_scope: (),
-    pub variable_list: (),
-    pub constant_list: (),
-    pub start_offset: (),
-    pub length: (),
+    pub method: MethodTableOffset,
+    pub import_scope: ImportScopeTableOffset,
+    pub variable_list: LocalVariableTableOffset,
+    pub constant_list: LocalConstantTableOffset,
+    pub start_offset: u32,
+    pub length: u32,
 }
 
 impl<'a> ReadData<LocalScopeTableRow> for TablesStreamReader<'a> {
