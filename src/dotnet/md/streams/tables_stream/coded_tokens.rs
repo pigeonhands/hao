@@ -18,9 +18,27 @@ pub enum CodedTokenSize {
 
 #[derive(Debug, Clone, Copy)]
 pub struct CodedToken<T: CodedTokenTarget> {
-    pub table_offset: u32,
+    pub rid: u32,
     pub target: T,
 }
+
+impl<T: CodedTokenTarget> CodedToken<T> {
+    pub fn decode(coded_value: u32) -> Result<Self> {
+        let offset_mask = 0xFFFFFFFF << T::BITS;
+        let target_mask = !offset_mask;
+
+        let table_offset = coded_value >> T::BITS;
+        let target = coded_value & target_mask; 
+
+        Ok(CodedToken {
+            rid: table_offset,
+            target: T::from_u32(target).ok_or_else(|| {
+                HaoError::InvalidCodedToken(coded_value, std::any::type_name::<T>())
+            })?,
+        })
+    }
+}
+
 impl<'a, T: CodedTokenTarget> ReadData<CodedToken<T>> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<CodedToken<T>> {
         let coded_value = match T::token_size(&self.header.coded_token_sizes) {
@@ -31,18 +49,7 @@ impl<'a, T: CodedTokenTarget> ReadData<CodedToken<T>> for TablesStreamReader<'a>
             }
         };
 
-        let offset_mask = 0xFFFFFFFF << T::BITS;
-        let target_mask = !offset_mask;
-
-        let table_offset = coded_value >> T::BITS;
-        let target = coded_value & target_mask; 
-
-        Ok(CodedToken {
-            table_offset,
-            target: T::from_u32(target).ok_or_else(|| {
-                HaoError::InvalidCodedToken(coded_value, std::any::type_name::<T>())
-            })?,
-        })
+        CodedToken::decode(coded_value)
     }
 }
 

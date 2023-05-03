@@ -1,9 +1,23 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, ops::Range};
 
 use crate::error::{HaoError, Result};
 
-use super::ReadData;
+pub trait ReadData<T> {
+    fn read(&mut self) -> Result<T>;
+}
 
+pub trait Readable: Sized {
+    fn from_reader(reader: &mut DataReader) -> Result<Self>;
+}
+
+impl<'a, T> ReadData<T> for DataReader<'a>
+where T: Readable {
+    fn read(&mut self) -> Result<T> {
+        T::from_reader(self)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct DataReader<'a> {
     buffer: &'a [u8],
     index: usize,
@@ -17,6 +31,7 @@ impl<'a> DataReader<'a> {
     pub fn position(&self) -> usize {
         self.index
     }
+    
 
     pub fn remaning(&self) -> usize {
         self.buffer.len() - self.position()
@@ -42,13 +57,24 @@ impl<'a> DataReader<'a> {
         Ok(&self.buffer[self.index..self.index + len])
     }
 
+    pub fn view_range(&self, range: Range<usize>) -> Result<&'a [u8]> {
+        if self.buffer.len() < range.end {
+            return Err(HaoError::NotEnoughDataLeft(
+                range.end - self.buffer.len(),
+            ));
+        }
+
+        Ok(&self.buffer[range])
+    }
+    
+
     pub fn read_slice(&mut self, len: usize) -> Result<&'a [u8]> {
         let s = self.view_slice(len)?;
         self.index += s.len();
         Ok(s)
     }
 
-    pub fn remaning_slice(&mut self) -> &'a [u8] {
+    pub fn remaning_slice(&self) -> &'a [u8] {
         &self.buffer[self.index..]
     }
 }

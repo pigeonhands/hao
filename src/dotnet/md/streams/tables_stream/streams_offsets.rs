@@ -5,8 +5,8 @@ use crate::{
 };
 use super::TablesStreamReader;
 
-#[derive(Debug, Clone)]
-pub struct StringsStreamOffset(u32);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StringsStreamOffset(pub u32);
 
 
 impl<'a> ReadData<StringsStreamOffset> for TablesStreamReader<'a> {
@@ -20,8 +20,8 @@ impl<'a> ReadData<StringsStreamOffset> for TablesStreamReader<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct BlobStreamOffset(u32);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlobStreamOffset(pub u32);
 
 impl<'a> ReadData<BlobStreamOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<BlobStreamOffset> {
@@ -34,8 +34,8 @@ impl<'a> ReadData<BlobStreamOffset> for TablesStreamReader<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct GuidStreamOffset(u32);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuidStreamOffset(pub u32);
 
 impl<'a> ReadData<GuidStreamOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<GuidStreamOffset> {
@@ -50,7 +50,7 @@ impl<'a> ReadData<GuidStreamOffset> for TablesStreamReader<'a> {
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ModuleTableOffset(u32);
+pub struct ModuleTableOffset(pub u32);
 
 impl<'a> ReadData<ModuleTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ModuleTableOffset> {
@@ -60,7 +60,7 @@ impl<'a> ReadData<ModuleTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TypeRefTableOffset(u32);
+pub struct TypeRefTableOffset(pub u32);
 
 impl<'a> ReadData<TypeRefTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<TypeRefTableOffset> {
@@ -70,7 +70,7 @@ impl<'a> ReadData<TypeRefTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TypeDefTableOffset(u32);
+pub struct TypeDefTableOffset(pub u32);
 
 impl<'a> ReadData<TypeDefTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<TypeDefTableOffset> {
@@ -80,7 +80,7 @@ impl<'a> ReadData<TypeDefTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FieldPtrTableOffset(u32);
+pub struct FieldPtrTableOffset(pub u32);
 
 impl<'a> ReadData<FieldPtrTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldPtrTableOffset> {
@@ -90,7 +90,7 @@ impl<'a> ReadData<FieldPtrTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FieldTableOffset(u32);
+pub struct FieldTableOffset(pub u32);
 
 impl<'a> ReadData<FieldTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldTableOffset> {
@@ -100,7 +100,7 @@ impl<'a> ReadData<FieldTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MethodPtrTableOffset(u32);
+pub struct MethodPtrTableOffset(pub u32);
 
 impl<'a> ReadData<MethodPtrTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodPtrTableOffset> {
@@ -110,7 +110,7 @@ impl<'a> ReadData<MethodPtrTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MethodTableOffset(u32);
+pub struct MethodTableOffset(pub u32);
 
 impl<'a> ReadData<MethodTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodTableOffset> {
@@ -120,7 +120,7 @@ impl<'a> ReadData<MethodTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ParamPtrTableOffset(u32);
+pub struct ParamPtrTableOffset(pub u32);
 
 impl<'a> ReadData<ParamPtrTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ParamPtrTableOffset> {
@@ -130,7 +130,7 @@ impl<'a> ReadData<ParamPtrTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ParamTableOffset(u32);
+pub struct ParamTableOffset(pub u32);
 
 impl<'a> ReadData<ParamTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ParamTableOffset> {
@@ -140,7 +140,7 @@ impl<'a> ReadData<ParamTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct InterfaceImplTableOffset(u32);
+pub struct InterfaceImplTableOffset(pub u32);
 
 impl<'a> ReadData<InterfaceImplTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<InterfaceImplTableOffset> {
@@ -150,7 +150,7 @@ impl<'a> ReadData<InterfaceImplTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MemberRefTableOffset(u32);
+pub struct MemberRefTableOffset(pub u32);
 
 impl<'a> ReadData<MemberRefTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MemberRefTableOffset> {
@@ -160,7 +160,7 @@ impl<'a> ReadData<MemberRefTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ConstantTableOffset(u32);
+pub struct ConstantTableOffset(pub u32);
 
 impl<'a> ReadData<ConstantTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ConstantTableOffset> {
@@ -170,7 +170,7 @@ impl<'a> ReadData<ConstantTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct CustomAttributeTableOffset(u32);
+pub struct CustomAttributeTableOffset(pub u32);
 
 impl<'a> ReadData<CustomAttributeTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<CustomAttributeTableOffset> {
@@ -180,7 +180,7 @@ impl<'a> ReadData<CustomAttributeTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FieldMarshalTableOffset(u32);
+pub struct FieldMarshalTableOffset(pub u32);
 
 impl<'a> ReadData<FieldMarshalTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldMarshalTableOffset> {
@@ -190,7 +190,7 @@ impl<'a> ReadData<FieldMarshalTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DeclSecurityTableOffset(u32);
+pub struct DeclSecurityTableOffset(pub u32);
 
 impl<'a> ReadData<DeclSecurityTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<DeclSecurityTableOffset> {
@@ -200,7 +200,7 @@ impl<'a> ReadData<DeclSecurityTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ClassLayoutTableOffset(u32);
+pub struct ClassLayoutTableOffset(pub u32);
 
 impl<'a> ReadData<ClassLayoutTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ClassLayoutTableOffset> {
@@ -210,7 +210,7 @@ impl<'a> ReadData<ClassLayoutTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FieldLayoutTableOffset(u32);
+pub struct FieldLayoutTableOffset(pub u32);
 
 impl<'a> ReadData<FieldLayoutTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldLayoutTableOffset> {
@@ -220,7 +220,7 @@ impl<'a> ReadData<FieldLayoutTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct StandAloneSigTableOffset(u32);
+pub struct StandAloneSigTableOffset(pub u32);
 
 impl<'a> ReadData<StandAloneSigTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<StandAloneSigTableOffset> {
@@ -230,7 +230,7 @@ impl<'a> ReadData<StandAloneSigTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EventMapTableOffset(u32);
+pub struct EventMapTableOffset(pub u32);
 
 impl<'a> ReadData<EventMapTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<EventMapTableOffset> {
@@ -240,7 +240,7 @@ impl<'a> ReadData<EventMapTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EventPtrTableOffset(u32);
+pub struct EventPtrTableOffset(pub u32);
 
 impl<'a> ReadData<EventPtrTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<EventPtrTableOffset> {
@@ -250,7 +250,7 @@ impl<'a> ReadData<EventPtrTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EventTableOffset(u32);
+pub struct EventTableOffset(pub u32);
 
 impl<'a> ReadData<EventTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<EventTableOffset> {
@@ -260,7 +260,7 @@ impl<'a> ReadData<EventTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PropertyMapTableOffset(u32);
+pub struct PropertyMapTableOffset(pub u32);
 
 impl<'a> ReadData<PropertyMapTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<PropertyMapTableOffset> {
@@ -270,7 +270,7 @@ impl<'a> ReadData<PropertyMapTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PropertyPtrTableOffset(u32);
+pub struct PropertyPtrTableOffset(pub u32);
 
 impl<'a> ReadData<PropertyPtrTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<PropertyPtrTableOffset> {
@@ -280,7 +280,7 @@ impl<'a> ReadData<PropertyPtrTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PropertyTableOffset(u32);
+pub struct PropertyTableOffset(pub u32);
 
 impl<'a> ReadData<PropertyTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<PropertyTableOffset> {
@@ -290,7 +290,7 @@ impl<'a> ReadData<PropertyTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MethodSemanticsTableOffset(u32);
+pub struct MethodSemanticsTableOffset(pub u32);
 
 impl<'a> ReadData<MethodSemanticsTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodSemanticsTableOffset> {
@@ -300,7 +300,7 @@ impl<'a> ReadData<MethodSemanticsTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MethodImplTableOffset(u32);
+pub struct MethodImplTableOffset(pub u32);
 
 impl<'a> ReadData<MethodImplTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodImplTableOffset> {
@@ -310,7 +310,7 @@ impl<'a> ReadData<MethodImplTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ModuleRefTableOffset(u32);
+pub struct ModuleRefTableOffset(pub u32);
 
 impl<'a> ReadData<ModuleRefTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ModuleRefTableOffset> {
@@ -320,7 +320,7 @@ impl<'a> ReadData<ModuleRefTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TypeSpecTableOffset(u32);
+pub struct TypeSpecTableOffset(pub u32);
 
 impl<'a> ReadData<TypeSpecTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<TypeSpecTableOffset> {
@@ -330,7 +330,7 @@ impl<'a> ReadData<TypeSpecTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ImplMapTableOffset(u32);
+pub struct ImplMapTableOffset(pub u32);
 
 impl<'a> ReadData<ImplMapTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ImplMapTableOffset> {
@@ -340,7 +340,7 @@ impl<'a> ReadData<ImplMapTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FieldRVATableOffset(u32);
+pub struct FieldRVATableOffset(pub u32);
 
 impl<'a> ReadData<FieldRVATableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldRVATableOffset> {
@@ -350,7 +350,7 @@ impl<'a> ReadData<FieldRVATableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ENCLogTableOffset(u32);
+pub struct ENCLogTableOffset(pub u32);
 
 impl<'a> ReadData<ENCLogTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ENCLogTableOffset> {
@@ -360,7 +360,7 @@ impl<'a> ReadData<ENCLogTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ENCMapTableOffset(u32);
+pub struct ENCMapTableOffset(pub u32);
 
 impl<'a> ReadData<ENCMapTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ENCMapTableOffset> {
@@ -370,7 +370,7 @@ impl<'a> ReadData<ENCMapTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AssemblyTableOffset(u32);
+pub struct AssemblyTableOffset(pub u32);
 
 impl<'a> ReadData<AssemblyTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyTableOffset> {
@@ -380,7 +380,7 @@ impl<'a> ReadData<AssemblyTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AssemblyProcessorTableOffset(u32);
+pub struct AssemblyProcessorTableOffset(pub u32);
 
 impl<'a> ReadData<AssemblyProcessorTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyProcessorTableOffset> {
@@ -390,7 +390,7 @@ impl<'a> ReadData<AssemblyProcessorTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AssemblyOSTableOffset(u32);
+pub struct AssemblyOSTableOffset(pub u32);
 
 impl<'a> ReadData<AssemblyOSTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyOSTableOffset> {
@@ -400,7 +400,7 @@ impl<'a> ReadData<AssemblyOSTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AssemblyRefTableOffset(u32);
+pub struct AssemblyRefTableOffset(pub u32);
 
 impl<'a> ReadData<AssemblyRefTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyRefTableOffset> {
@@ -410,7 +410,7 @@ impl<'a> ReadData<AssemblyRefTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AssemblyRefProcessorTableOffset(u32);
+pub struct AssemblyRefProcessorTableOffset(pub u32);
 
 impl<'a> ReadData<AssemblyRefProcessorTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyRefProcessorTableOffset> {
@@ -420,7 +420,7 @@ impl<'a> ReadData<AssemblyRefProcessorTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AssemblyRefOSTableOffset(u32);
+pub struct AssemblyRefOSTableOffset(pub u32);
 
 impl<'a> ReadData<AssemblyRefOSTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyRefOSTableOffset> {
@@ -430,7 +430,7 @@ impl<'a> ReadData<AssemblyRefOSTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FileTableOffset(u32);
+pub struct FileTableOffset(pub u32);
 
 impl<'a> ReadData<FileTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FileTableOffset> {
@@ -440,7 +440,7 @@ impl<'a> ReadData<FileTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ExportedTypeTableOffset(u32);
+pub struct ExportedTypeTableOffset(pub u32);
 
 impl<'a> ReadData<ExportedTypeTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ExportedTypeTableOffset> {
@@ -450,7 +450,7 @@ impl<'a> ReadData<ExportedTypeTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ManifestResourceTableOffset(u32);
+pub struct ManifestResourceTableOffset(pub u32);
 
 impl<'a> ReadData<ManifestResourceTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ManifestResourceTableOffset> {
@@ -460,7 +460,7 @@ impl<'a> ReadData<ManifestResourceTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct NestedClassTableOffset(u32);
+pub struct NestedClassTableOffset(pub u32);
 
 impl<'a> ReadData<NestedClassTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<NestedClassTableOffset> {
@@ -470,7 +470,7 @@ impl<'a> ReadData<NestedClassTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct GenericParamTableOffset(u32);
+pub struct GenericParamTableOffset(pub u32);
 
 impl<'a> ReadData<GenericParamTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<GenericParamTableOffset> {
@@ -480,7 +480,7 @@ impl<'a> ReadData<GenericParamTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MethodSpecTableOffset(u32);
+pub struct MethodSpecTableOffset(pub u32);
 
 impl<'a> ReadData<MethodSpecTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodSpecTableOffset> {
@@ -490,7 +490,7 @@ impl<'a> ReadData<MethodSpecTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct GenericParamConstraintTableOffset(u32);
+pub struct GenericParamConstraintTableOffset(pub u32);
 
 impl<'a> ReadData<GenericParamConstraintTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<GenericParamConstraintTableOffset> {
@@ -500,7 +500,7 @@ impl<'a> ReadData<GenericParamConstraintTableOffset> for TablesStreamReader<'a> 
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MethodDebugInformationTableOffset(u32);
+pub struct MethodDebugInformationTableOffset(pub u32);
 
 impl<'a> ReadData<MethodDebugInformationTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodDebugInformationTableOffset> {
@@ -510,7 +510,7 @@ impl<'a> ReadData<MethodDebugInformationTableOffset> for TablesStreamReader<'a> 
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LocalScopeTableOffset(u32);
+pub struct LocalScopeTableOffset(pub u32);
 
 impl<'a> ReadData<LocalScopeTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<LocalScopeTableOffset> {
@@ -520,7 +520,7 @@ impl<'a> ReadData<LocalScopeTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LocalVariableTableOffset(u32);
+pub struct LocalVariableTableOffset(pub u32);
 
 impl<'a> ReadData<LocalVariableTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<LocalVariableTableOffset> {
@@ -530,7 +530,7 @@ impl<'a> ReadData<LocalVariableTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LocalConstantTableOffset(u32);
+pub struct LocalConstantTableOffset(pub u32);
 
 impl<'a> ReadData<LocalConstantTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<LocalConstantTableOffset> {
@@ -540,7 +540,7 @@ impl<'a> ReadData<LocalConstantTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ImportScopeTableOffset(u32);
+pub struct ImportScopeTableOffset(pub u32);
 
 impl<'a> ReadData<ImportScopeTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ImportScopeTableOffset> {
@@ -550,7 +550,7 @@ impl<'a> ReadData<ImportScopeTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct StateMachineMethodTableOffset(u32);
+pub struct StateMachineMethodTableOffset(pub u32);
 
 impl<'a> ReadData<StateMachineMethodTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<StateMachineMethodTableOffset> {
@@ -560,7 +560,7 @@ impl<'a> ReadData<StateMachineMethodTableOffset> for TablesStreamReader<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct CustomDebugInformationTableOffset(u32);
+pub struct CustomDebugInformationTableOffset(pub u32);
 
 impl<'a> ReadData<CustomDebugInformationTableOffset> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<CustomDebugInformationTableOffset> {

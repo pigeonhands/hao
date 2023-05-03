@@ -24,7 +24,7 @@ use super::{
 
 #[derive(Debug, Clone)]
 pub struct TablesValues {
-    pub module: ModulesTable,
+    pub module: Vec<ModulesTableRow>,
     pub type_ref: Vec<TypeRefTableRow>,
     pub type_def: Vec<TypeDefTableRow>,
     pub field_ptr: Vec<FieldPtrTableRow>,
@@ -82,7 +82,7 @@ pub struct TablesValues {
 impl<'a> ReadData<TablesValues> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<TablesValues> {
         Ok(TablesValues {
-            module: self.read()?,
+            module: self.read_rows(self.header.table_rows.module)?,
             type_ref: self.read_rows(self.header.table_rows.type_ref)?,
             type_def: self.read_rows(self.header.table_rows.type_def)?,
             field_ptr: self.read_rows(self.header.table_rows.field_ptr)?,

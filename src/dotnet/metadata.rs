@@ -5,8 +5,7 @@ use crate::error::{HaoError, Result};
 use crate::io::PEImage;
 
 pub struct Metadata<'a> {
-    pub pe_image: PEImage<'a>,
-    pub metadata_streams: MetadataStreams
+    pub metadata_streams: MetadataStreams<'a>,
 }
 
 impl<'a> Metadata<'a> {
@@ -43,7 +42,6 @@ impl<'a> Metadata<'a> {
         )?;
 
         Ok(Self {
-            pe_image,
             metadata_streams,
         })
     }

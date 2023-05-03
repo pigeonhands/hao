@@ -5,7 +5,7 @@ use super::{coded_tokens::*, reader::TablesStreamReader, streams_offsets::*};
 use bitflags::bitflags;
 
 #[derive(Debug, Clone)]
-pub struct ModulesTable {
+pub struct ModulesTableRow {
     pub generation: u16,
     pub name: StringsStreamOffset,
     pub mvid: GuidStreamOffset,
@@ -13,14 +13,14 @@ pub struct ModulesTable {
     pub enc_base_id: GuidStreamOffset,
 }
 
-impl<'a> ReadData<ModulesTable> for TablesStreamReader<'a> {
-    fn read(&mut self) -> Result<ModulesTable> {
+impl<'a> ReadData<ModulesTableRow> for TablesStreamReader<'a> {
+    fn read(&mut self) -> Result<ModulesTableRow> {
         if self.header.table_rows.module != 1 {
             return Err(crate::error::HaoError::BadImageFormat(
                 "Module table should have exactly one entry",
             ));
         }
-        Ok(ModulesTable {
+        Ok(ModulesTableRow {
             generation: self.read()?,
             name: self.read()?,
             mvid: self.read()?,
