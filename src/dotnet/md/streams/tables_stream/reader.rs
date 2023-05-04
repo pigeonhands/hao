@@ -1,12 +1,10 @@
+use std::{fmt::Debug, marker::PhantomData};
 
-
-use std::fmt::Debug;
-
+use super::{TablesStreamsHeader, TableLocation};
 use crate::{
-    error::Result,
+    error::{Result, HaoError},
     io::{DataReader, ReadData},
 };
-use super::TablesStreamsHeader;
 
 pub struct TablesStreamReader<'a> {
     pub reader: DataReader<'a>,
@@ -21,8 +19,8 @@ impl<'a> TablesStreamReader<'a> {
         }
     }
 
-    pub fn read_table_offset(&mut self, target_table_size: u32) -> Result<u32> {
-        if target_table_size > u16::MAX as u32 {
+    pub fn read_table_offset(&mut self, target_table_size: TableLocation) -> Result<u32> {
+        if target_table_size.rows.is_large() {
             self.read()
         } else {
             let small_val: u16 = self.read()?;
@@ -30,13 +28,14 @@ impl<'a> TablesStreamReader<'a> {
         }
     }
 
-    pub fn read_rows<T: Debug>(&mut self, row_count: u32) -> Result<Vec<T>>
+    pub fn read_rows<T: Debug>(&mut self, table_location: TableLocation) -> Result<Vec<T>>
     where
         Self: ReadData<T>,
     {
-        let mut data = Vec::with_capacity(row_count as usize);
+        let row_count = table_location.rows.0 as usize;
+        let mut data = Vec::with_capacity(row_count);
         for _ in 0..row_count {
-            data.push(self.read()?)
+            data.push(self.read()?);
         }
         Ok(data)
     }
@@ -48,5 +47,43 @@ where
 {
     fn read(&mut self) -> Result<T> {
         self.reader.read()
+    }
+}
+
+pub struct TableRowsIterator<'a, T> 
+where TablesStreamReader<'a>: ReadData<T> {
+    reader: TablesStreamReader<'a>,
+    index: usize,
+    rows: usize,
+    _marker: PhantomData<T>
+}
+
+impl<'a, T> TableRowsIterator<'a, T>
+where TablesStreamReader<'a>: ReadData<T> {
+    pub fn new(heap_data: &'a [u8], header: &'a TablesStreamsHeader, location: TableLocation) -> Result<Self> {
+        let length = location.rows.0 as usize * location.row_size;
+        let slice = heap_data.get(location.start_offset..location.start_offset+length).ok_or_else(|| {
+            HaoError::InvalidStreamIndex("#~", location.start_offset + length )
+        })?;
+
+        Ok(Self {
+            reader: TablesStreamReader::new(slice, header),
+            index: 0,
+            rows: location.rows.0 as usize,
+            _marker: PhantomData
+        })
+    }
+}
+
+impl<'a, T> Iterator for TableRowsIterator<'a, T> 
+where TablesStreamReader<'a>: ReadData<T>{
+    type Item = Result<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.rows{
+            return None
+        }
+        self.index += 1;
+        Some(self.reader.read())
     }
 }

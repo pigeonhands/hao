@@ -1,11 +1,11 @@
+mod calculator;
 pub mod image_headers;
 pub mod metadata_header;
 pub mod streams;
+use bitflags::bitflags;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MDToken(u32);
-
-use bitflags::bitflags;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

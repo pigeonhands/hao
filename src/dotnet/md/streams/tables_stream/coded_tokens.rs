@@ -4,19 +4,14 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 
 use crate::{
+    dotnet::md::streams::tables_stream::metadata::TableRowCount,
     error::{HaoError, Result},
     io::ReadData,
 };
 
-use super::{TableRows, TablesStreamReader};
+use super::{TableRows, TablesStreamReader, ValueSize};
 
-#[derive(Debug, Clone, Copy)]
-pub enum CodedTokenSize {
-    Small,
-    Big,
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct CodedToken<T: CodedTokenTarget> {
     pub rid: u32,
     pub target: T,
@@ -28,7 +23,7 @@ impl<T: CodedTokenTarget> CodedToken<T> {
         let target_mask = !offset_mask;
 
         let table_offset = coded_value >> T::BITS;
-        let target = coded_value & target_mask; 
+        let target = coded_value & target_mask;
 
         Ok(CodedToken {
             rid: table_offset,
@@ -42,8 +37,8 @@ impl<T: CodedTokenTarget> CodedToken<T> {
 impl<'a, T: CodedTokenTarget> ReadData<CodedToken<T>> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<CodedToken<T>> {
         let coded_value = match T::token_size(&self.header.coded_token_sizes) {
-            CodedTokenSize::Big => self.read()?,
-            CodedTokenSize::Small => {
+            ValueSize::Big => self.read()?,
+            ValueSize::Small => {
                 let small: u16 = self.read()?;
                 small as u32
             }
@@ -55,30 +50,30 @@ impl<'a, T: CodedTokenTarget> ReadData<CodedToken<T>> for TablesStreamReader<'a>
 
 #[derive(Debug, Clone, Copy)]
 pub struct CodedTokenSizes {
-    pub type_def_or_ref: CodedTokenSize,
-    pub has_constant: CodedTokenSize,
-    pub has_custom_attribute: CodedTokenSize,
-    pub has_field_marshal: CodedTokenSize,
-    pub has_decl_security: CodedTokenSize,
-    pub member_ref_parent: CodedTokenSize,
-    pub has_semantic: CodedTokenSize,
-    pub method_def_or_ref: CodedTokenSize,
-    pub member_forwarded: CodedTokenSize,
-    pub implementation: CodedTokenSize,
-    pub custom_attribute_type: CodedTokenSize,
-    pub resolution_scope: CodedTokenSize,
-    pub type_or_method_def: CodedTokenSize,
-    pub has_custom_debug_information: CodedTokenSize,
+    pub type_def_or_ref: ValueSize,
+    pub has_constant: ValueSize,
+    pub has_custom_attribute: ValueSize,
+    pub has_field_marshal: ValueSize,
+    pub has_decl_security: ValueSize,
+    pub member_ref_parent: ValueSize,
+    pub has_semantic: ValueSize,
+    pub method_def_or_ref: ValueSize,
+    pub member_forwarded: ValueSize,
+    pub implementation: ValueSize,
+    pub custom_attribute_type: ValueSize,
+    pub resolution_scope: ValueSize,
+    pub type_or_method_def: ValueSize,
+    pub has_custom_debug_information: ValueSize,
 }
 
 impl CodedTokenSizes {
     pub fn from_header(rows: &TableRows) -> Self {
-        fn size_from_rows(bits: usize, rows: &[u32]) -> CodedTokenSize {
-            let max_row = rows.iter().max().copied().unwrap_or(0);
+        fn size_from_rows(bits: usize, rows: &[TableRowCount]) -> ValueSize {
+            let max_row = rows.iter().map(|i| i.0).max().unwrap_or(0);
             if (max_row << bits) > u16::MAX as u32 {
-                CodedTokenSize::Big
+                ValueSize::Big
             } else {
-                CodedTokenSize::Small
+                ValueSize::Small
             }
         }
 
@@ -225,10 +220,10 @@ impl CodedTokenSizes {
 
 pub trait CodedTokenTarget: FromPrimitive {
     const BITS: usize;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize;
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize;
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive, PartialEq, Eq)]
 pub enum TypeDefOrRefToken {
     TypeDef,
     TypeRef,
@@ -236,7 +231,7 @@ pub enum TypeDefOrRefToken {
 }
 impl CodedTokenTarget for TypeDefOrRefToken {
     const BITS: usize = 2;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.type_def_or_ref
     }
 }
@@ -249,7 +244,7 @@ pub enum HasConstantToken {
 }
 impl CodedTokenTarget for HasConstantToken {
     const BITS: usize = 2;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_constant
     }
 }
@@ -283,7 +278,7 @@ pub enum HasCustomAttributeToken {
 }
 impl CodedTokenTarget for HasCustomAttributeToken {
     const BITS: usize = 5;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_custom_attribute
     }
 }
@@ -295,7 +290,7 @@ pub enum HasFieldMarshalToken {
 }
 impl CodedTokenTarget for HasFieldMarshalToken {
     const BITS: usize = 1;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_field_marshal
     }
 }
@@ -308,7 +303,7 @@ pub enum HasDeclSecurityToken {
 }
 impl CodedTokenTarget for HasDeclSecurityToken {
     const BITS: usize = 2;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_decl_security
     }
 }
@@ -323,7 +318,7 @@ pub enum MemberRefParentToken {
 }
 impl CodedTokenTarget for MemberRefParentToken {
     const BITS: usize = 3;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.member_ref_parent
     }
 }
@@ -335,7 +330,7 @@ pub enum HasSemanticToken {
 }
 impl CodedTokenTarget for HasSemanticToken {
     const BITS: usize = 1;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_semantic
     }
 }
@@ -347,7 +342,7 @@ pub enum MethodDefOrRefToken {
 }
 impl CodedTokenTarget for MethodDefOrRefToken {
     const BITS: usize = 1;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.method_def_or_ref
     }
 }
@@ -359,7 +354,7 @@ pub enum MemberForwardedToken {
 }
 impl CodedTokenTarget for MemberForwardedToken {
     const BITS: usize = 1;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.member_forwarded
     }
 }
@@ -372,7 +367,7 @@ pub enum ImplementationToken {
 }
 impl CodedTokenTarget for ImplementationToken {
     const BITS: usize = 2;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.implementation
     }
 }
@@ -387,7 +382,7 @@ pub enum CustomAttributeTypeToken {
 }
 impl CodedTokenTarget for CustomAttributeTypeToken {
     const BITS: usize = 3;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.custom_attribute_type
     }
 }
@@ -401,7 +396,8 @@ pub enum ResolutionScopeToken {
 }
 impl CodedTokenTarget for ResolutionScopeToken {
     const BITS: usize = 2;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    #[inline(always)]
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.resolution_scope
     }
 }
@@ -413,7 +409,7 @@ pub enum TypeOrMethodDefToken {
 }
 impl CodedTokenTarget for TypeOrMethodDefToken {
     const BITS: usize = 1;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.type_or_method_def
     }
 }
@@ -450,7 +446,7 @@ pub enum HasCustomDebugInformationToken {
 }
 impl CodedTokenTarget for HasCustomDebugInformationToken {
     const BITS: usize = 5;
-    fn token_size(sizes: &CodedTokenSizes) -> CodedTokenSize {
+    fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_custom_debug_information
     }
 }

@@ -1,14 +1,14 @@
 use crate::{
     dotnet::{
-        entries::{Field, Ptr, RowRange},
+        entries::{Field, Method, Ptr, RowRange},
         md::streams::{
             tables_stream::{
-                BlobStreamOffset, FieldTableOffset, GuidStreamOffset, StringsStreamOffset,
-                TablesValues,
+                BlobStreamOffset, FieldTableOffset, GuidStreamOffset,
+                MethodTableOffset, StringsStreamOffset,
             },
             MetadataStreams, Signature,
         },
-        module::{MaybeUninitEntries, GetEntry},
+        module::{GetEntry, MaybeUninitEntries},
     },
     error::Result,
 };
@@ -28,22 +28,20 @@ impl<'a> EntryReader<'a> {
         streams: &'a MetadataStreams<'a>,
         entries: &'a MaybeUninitEntries,
     ) -> Self {
-        Self { streams, entries }
-    }
-
-    pub fn raw_rows(&self) -> &TablesValues {
-        &self.streams.tables_stream.values
+        Self { streams , entries  }
     }
 }
 
 impl<'a, T> ValueReadable<T> for EntryReader<'a>
-where MaybeUninitEntries: GetEntry<T> {
+where
+    MaybeUninitEntries: GetEntry<T>,
+{
     type EntryValue = <MaybeUninitEntries as GetEntry<T>>::EntryValue;
     fn read(&self, identifier: T) -> Result<Self::EntryValue> {
         self.entries.get_entry(identifier)
     }
 }
-
+ 
 impl<'a> ValueReadable<u16> for EntryReader<'a> {
     type EntryValue = u16;
 
@@ -75,7 +73,10 @@ impl<'a> ValueReadable<BlobStreamOffset> for EntryReader<'a> {
     type EntryValue = Signature;
 
     fn read(&self, identifier: BlobStreamOffset) -> Result<Self::EntryValue> {
-        let reader = self.streams.blob_stream.get_signature_reader(identifier.0, self.entries)?;
+        let reader = self
+            .streams
+            .blob_stream
+            .get_signature_reader(identifier.0, self.entries)?;
         Signature::from_reader(reader)
     }
 }
@@ -85,6 +86,23 @@ impl<'a> ValueReadable<RowRange<FieldTableOffset>> for EntryReader<'a> {
 
     fn read(&self, identifier: RowRange<FieldTableOffset>) -> Result<Self::EntryValue> {
         let target_rows = &self.entries.fields;
+
+        let start = identifier.start.0 as usize;
+        let end = identifier
+            .end
+            .map(|c| c.0 as usize)
+            .unwrap_or(target_rows.len());
+
+        let slice = target_rows.get(start..end).unwrap_or(&target_rows[start..]);
+        Ok(slice.to_vec())
+    }
+}
+
+impl<'a> ValueReadable<RowRange<MethodTableOffset>> for EntryReader<'a> {
+    type EntryValue = Vec<Ptr<Method>>;
+
+    fn read(&self, identifier: RowRange<MethodTableOffset>) -> Result<Self::EntryValue> {
+        let target_rows = &self.entries.methods;
 
         let start = identifier.start.0 as usize;
         let end = identifier

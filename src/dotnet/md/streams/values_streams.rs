@@ -1,7 +1,6 @@
-
 use crate::{
     error::{HaoError, Result},
-    io::{DataReader},
+    io::DataReader,
 };
 
 #[derive(Debug, Clone)]
@@ -55,12 +54,7 @@ impl<'a> GuidStream<'a> {
 
         let position = (offset - 1) as usize * GUID_SIZE;
 
-        uuid::Uuid::from_slice(
-            &self.heap_data[position..],
-        ).map_err(|_| {
-            HaoError::InvalidStreamIndex("#GUID", position)
-        })
-
+        uuid::Uuid::from_slice(&self.heap_data[position..])
+            .map_err(|_| HaoError::InvalidStreamIndex("#GUID", position))
     }
 }
-

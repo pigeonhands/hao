@@ -90,7 +90,7 @@ bitflags! {
 #[derive(Clone, Debug)]
 pub struct Signature {
     pub calling_convention: SignatureCallingConvention,
-    pub flags: SignatureFlags
+    pub flags: SignatureFlags,
 }
 
 impl Signature {
@@ -106,10 +106,13 @@ impl Signature {
 
         let flags = SignatureFlags::from_bits_retain(sig_type & (!CALLING_CONVENTION_MASK));
 
-
-        Ok(Self{
+        Ok(Self {
             flags,
-            calling_convention: SignatureCallingConvention::from_reader(reader, calling_convention, flags)?
+            calling_convention: SignatureCallingConvention::from_reader(
+                reader,
+                calling_convention,
+                flags,
+            )?,
         })
     }
 }
@@ -124,8 +127,11 @@ pub enum SignatureCallingConvention {
 }
 
 impl SignatureCallingConvention {
-    pub fn from_reader(mut reader: SignatureReader, calling_convention: CallingConvention, flags: SignatureFlags) -> Result<Self> {
-        
+    pub fn from_reader(
+        mut reader: SignatureReader,
+        calling_convention: CallingConvention,
+        flags: SignatureFlags,
+    ) -> Result<Self> {
         let sig = match calling_convention {
             CallingConvention::Default
             | CallingConvention::C
@@ -139,7 +145,9 @@ impl SignatureCallingConvention {
             }
             CallingConvention::Field => Self::Field(reader.read()?),
             CallingConvention::LocalSig => Self::LocalSig(reader.read()?),
-            CallingConvention::Property => Self::Property(MethodSig::from_reader(&mut reader, flags)?),
+            CallingConvention::Property => {
+                Self::Property(MethodSig::from_reader(&mut reader, flags)?)
+            }
             CallingConvention::GenericInst => Self::GenericInstMethod(reader.read()?),
         };
 
@@ -438,7 +446,6 @@ impl<'a> ReadData<LocalSig> for SignatureReader<'a> {
         Ok(LocalSig { locals })
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct GenericInstMethodSig {

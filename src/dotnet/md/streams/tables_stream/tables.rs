@@ -1,7 +1,13 @@
-use crate::{dotnet::md::streams::Version, error::Result, io::ReadData};
+use crate::{
+    dotnet::md::{
+        calculator::{CalculateTableSize, SizeCalculator},
+        streams::Version,
+    },
+    error::Result,
+    io::ReadData,
+};
 
 use super::{coded_tokens::*, reader::TablesStreamReader, streams_offsets::*};
-
 use bitflags::bitflags;
 
 #[derive(Debug, Clone)]
@@ -13,9 +19,19 @@ pub struct ModulesTableRow {
     pub enc_base_id: GuidStreamOffset,
 }
 
+impl<'a> CalculateTableSize<ModulesTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u16>()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + GuidStreamOffset::streams_offset_size(self.flags).byte_size()
+            + GuidStreamOffset::streams_offset_size(self.flags).byte_size()
+            + GuidStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<ModulesTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ModulesTableRow> {
-        if self.header.table_rows.module != 1 {
+        if self.header.table_locations.module.rows != 1 {
             return Err(crate::error::HaoError::BadImageFormat(
                 "Module table should have exactly one entry",
             ));
@@ -35,6 +51,14 @@ pub struct TypeRefTableRow {
     pub resolution_scope: CodedToken<ResolutionScopeToken>,
     pub name: StringsStreamOffset,
     pub namespace: StringsStreamOffset,
+}
+
+impl<'a> CalculateTableSize<TypeRefTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        ResolutionScopeToken::token_size(&self.coded_tokens_sizes).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
 }
 
 impl<'a> ReadData<TypeRefTableRow> for TablesStreamReader<'a> {
@@ -102,7 +126,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypeDefTableRow {
     pub flags: TypeAttributes,
     pub name: StringsStreamOffset,
@@ -110,6 +134,17 @@ pub struct TypeDefTableRow {
     pub extends: CodedToken<TypeDefOrRefToken>,
     pub field_list: FieldTableOffset,
     pub method_list: MethodTableOffset,
+}
+
+impl<'a> CalculateTableSize<TypeDefTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<TypeAttributes>()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + TypeDefOrRefToken::token_size(&self.coded_tokens_sizes).byte_size()
+            + FieldTableOffset::table_offset_size(self.rows).byte_size()
+            + MethodTableOffset::table_offset_size(self.rows).byte_size()
+    }
 }
 
 impl<'a> ReadData<TypeDefTableRow> for TablesStreamReader<'a> {
@@ -128,6 +163,12 @@ impl<'a> ReadData<TypeDefTableRow> for TablesStreamReader<'a> {
 #[derive(Debug, Clone)]
 pub struct FieldPtrTableRow {
     pub field: FieldTableOffset,
+}
+
+impl<'a> CalculateTableSize<FieldPtrTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        FieldTableOffset::table_offset_size(self.rows).byte_size()
+    }
 }
 
 impl<'a> ReadData<FieldPtrTableRow> for TablesStreamReader<'a> {
@@ -179,6 +220,14 @@ pub struct FieldTableRow {
     pub signature: BlobStreamOffset,
 }
 
+impl<'a> CalculateTableSize<FieldTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<FieldFlags>()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<FieldTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldTableRow> {
         Ok(FieldTableRow {
@@ -192,6 +241,12 @@ impl<'a> ReadData<FieldTableRow> for TablesStreamReader<'a> {
 #[derive(Debug, Clone)]
 pub struct MethodPtrTableRow {
     pub method: MethodTableOffset,
+}
+
+impl<'a> CalculateTableSize<MethodPtrTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        MethodTableOffset::table_offset_size(self.rows).byte_size()
+    }
 }
 
 impl<'a> ReadData<MethodPtrTableRow> for TablesStreamReader<'a> {
@@ -284,6 +339,17 @@ pub struct MethodTableRow {
     pub param_list: ParamTableOffset,
 }
 
+impl<'a> CalculateTableSize<MethodTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>()
+            + self.size_of_prim::<MethodImplFlags>()
+            + self.size_of_prim::<MethodFlags>()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+            + ParamTableOffset::table_offset_size(self.rows).byte_size()
+    }
+}
+
 impl<'a> ReadData<MethodTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodTableRow> {
         Ok(MethodTableRow {
@@ -302,6 +368,12 @@ pub struct ParamPtrTableRow {
     pub param: ParamPtrTableOffset,
 }
 
+impl<'a> CalculateTableSize<ParamPtrTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        ParamPtrTableOffset::table_offset_size(self.rows).byte_size()
+    }
+}
+
 impl<'a> ReadData<ParamPtrTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ParamPtrTableRow> {
         Ok(ParamPtrTableRow {
@@ -316,12 +388,12 @@ bitflags! {
         const In                        =   0x0001;     // Param is [In]
         const Out                       =   0x0002;     // Param is [out]
         const Optional                  =   0x0010;     // Param is optional
-    
+
         // Reserved flags for Runtime use only.
         const ReservedMask              =   0xf000;
         const HasDefault                =   0x1000;     // Param has default value.
         const HasFieldMarshal           =   0x2000;     // Param has FieldMarshal.
-    
+
         const Unused                    =   0xcfe0;
     }
 }
@@ -331,6 +403,14 @@ pub struct ParamTableRow {
     pub flags: ParamFlags,
     pub sequence: u16,
     pub name: StringsStreamOffset,
+}
+
+impl<'a> CalculateTableSize<ParamTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<ParamFlags>()
+            + self.size_of_prim::<u16>()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
 }
 
 impl<'a> ReadData<ParamTableRow> for TablesStreamReader<'a> {
@@ -349,6 +429,13 @@ pub struct InterfaceImplTableRow {
     pub interface: CodedToken<TypeDefOrRefToken>,
 }
 
+impl<'a> CalculateTableSize<InterfaceImplTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        TypeDefTableOffset::table_offset_size(self.rows).byte_size()
+            + TypeDefOrRefToken::token_size(self.coded_tokens_sizes).byte_size()
+    }
+}
+
 impl<'a> ReadData<InterfaceImplTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<InterfaceImplTableRow> {
         Ok(InterfaceImplTableRow {
@@ -363,6 +450,14 @@ pub struct MemberRefTableRow {
     pub class: CodedToken<MemberRefParentToken>,
     pub name: StringsStreamOffset,
     pub signature: BlobStreamOffset,
+}
+
+impl<'a> CalculateTableSize<MemberRefTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        MemberRefParentToken::token_size(self.coded_tokens_sizes).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
 }
 
 impl<'a> ReadData<MemberRefTableRow> for TablesStreamReader<'a> {
@@ -383,6 +478,15 @@ pub struct ConstantTableRow {
     pub value: BlobStreamOffset,
 }
 
+impl<'a> CalculateTableSize<ConstantTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u8>()
+            + self.size_of_prim::<u8>()
+            + HasConstantToken::token_size(self.coded_tokens_sizes).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<ConstantTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ConstantTableRow> {
         Ok(ConstantTableRow {
@@ -401,6 +505,14 @@ pub struct CustomAttributeTableRow {
     pub value: BlobStreamOffset,
 }
 
+impl<'a> CalculateTableSize<CustomAttributeTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        HasCustomAttributeToken::token_size(self.coded_tokens_sizes).byte_size()
+            + CustomAttributeTypeToken::token_size(self.coded_tokens_sizes).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<CustomAttributeTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<CustomAttributeTableRow> {
         Ok(CustomAttributeTableRow {
@@ -417,6 +529,13 @@ pub struct FieldMarshalTableRow {
     pub native_type: BlobStreamOffset,
 }
 
+impl<'a> CalculateTableSize<FieldMarshalTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        HasFieldMarshalToken::token_size(self.coded_tokens_sizes).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<FieldMarshalTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldMarshalTableRow> {
         Ok(FieldMarshalTableRow {
@@ -431,6 +550,14 @@ pub struct DeclSecurityTableRow {
     pub action: u16,
     pub parent: CodedToken<HasDeclSecurityToken>,
     pub permission_set: BlobStreamOffset,
+}
+
+impl<'a> CalculateTableSize<DeclSecurityTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u16>()
+            + HasDeclSecurityToken::token_size(self.coded_tokens_sizes).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
 }
 
 impl<'a> ReadData<DeclSecurityTableRow> for TablesStreamReader<'a> {
@@ -450,6 +577,14 @@ pub struct ClassLayoutTableRow {
     pub parent: TypeDefTableOffset,
 }
 
+impl<'a> CalculateTableSize<ClassLayoutTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u16>()
+            + self.size_of_prim::<u32>()
+            + TypeDefTableOffset::table_offset_size(self.rows).byte_size()
+    }
+}
+
 impl<'a> ReadData<ClassLayoutTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ClassLayoutTableRow> {
         Ok(ClassLayoutTableRow {
@@ -466,6 +601,12 @@ pub struct FieldLayoutTableRow {
     pub field: FieldTableOffset,
 }
 
+impl<'a> CalculateTableSize<FieldLayoutTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>() + FieldTableOffset::table_offset_size(self.rows).byte_size()
+    }
+}
+
 impl<'a> ReadData<FieldLayoutTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldLayoutTableRow> {
         Ok(FieldLayoutTableRow {
@@ -478,6 +619,12 @@ impl<'a> ReadData<FieldLayoutTableRow> for TablesStreamReader<'a> {
 #[derive(Debug, Clone)]
 pub struct StandAloneSigTableRow {
     pub signature: BlobStreamOffset,
+}
+
+impl<'a> CalculateTableSize<StandAloneSigTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
 }
 
 impl<'a> ReadData<StandAloneSigTableRow> for TablesStreamReader<'a> {
@@ -494,6 +641,13 @@ pub struct EventMapTableRow {
     pub event_list: EventTableOffset,
 }
 
+impl<'a> CalculateTableSize<EventMapTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        TypeDefTableOffset::table_offset_size(self.rows).byte_size()
+            + EventTableOffset::table_offset_size(self.rows).byte_size()
+    }
+}
+
 impl<'a> ReadData<EventMapTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<EventMapTableRow> {
         Ok(EventMapTableRow {
@@ -506,6 +660,12 @@ impl<'a> ReadData<EventMapTableRow> for TablesStreamReader<'a> {
 #[derive(Debug, Clone)]
 pub struct EventPtrTableRow {
     pub event: EventTableOffset,
+}
+
+impl<'a> CalculateTableSize<EventPtrTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        EventTableOffset::table_offset_size(self.rows).byte_size()
+    }
 }
 
 impl<'a> ReadData<EventPtrTableRow> for TablesStreamReader<'a> {
@@ -534,6 +694,14 @@ pub struct EventTableRow {
     pub event_type: CodedToken<TypeDefOrRefToken>,
 }
 
+impl<'a> CalculateTableSize<EventTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<EventFlags>()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + TypeDefOrRefToken::token_size(self.coded_tokens_sizes).byte_size()
+    }
+}
+
 impl<'a> ReadData<EventTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<EventTableRow> {
         Ok(EventTableRow {
@@ -550,6 +718,13 @@ pub struct PropertyMapTableRow {
     pub property_list: PropertyTableOffset,
 }
 
+impl<'a> CalculateTableSize<PropertyMapTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        TypeDefTableOffset::table_offset_size(self.rows).byte_size()
+            + PropertyTableOffset::table_offset_size(self.rows).byte_size()
+    }
+}
+
 impl<'a> ReadData<PropertyMapTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<PropertyMapTableRow> {
         Ok(PropertyMapTableRow {
@@ -564,6 +739,12 @@ pub struct PropertyPtrTableRow {
     pub property: PropertyTableOffset,
 }
 
+impl<'a> CalculateTableSize<PropertyPtrTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        PropertyTableOffset::table_offset_size(self.rows).byte_size()
+    }
+}
+
 impl<'a> ReadData<PropertyPtrTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<PropertyPtrTableRow> {
         Ok(PropertyPtrTableRow {
@@ -571,7 +752,6 @@ impl<'a> ReadData<PropertyPtrTableRow> for TablesStreamReader<'a> {
         })
     }
 }
-
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -593,6 +773,14 @@ pub struct PropertyTableRow {
     pub name: StringsStreamOffset,
     // indexes the signature in the Blob heap of the Property
     pub ty: BlobStreamOffset,
+}
+
+impl<'a> CalculateTableSize<PropertyTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<PropertyFlags>()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
 }
 
 impl<'a> ReadData<PropertyTableRow> for TablesStreamReader<'a> {
@@ -617,12 +805,19 @@ bitflags! {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct MethodSemanticsTableRow {
     pub semantic: MethodSemanticsFlags,
     pub method: MethodTableOffset,
     pub association: CodedToken<HasSemanticToken>,
+}
+
+impl<'a> CalculateTableSize<MethodSemanticsTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<MethodSemanticsFlags>()
+            + MethodTableOffset::table_offset_size(self.rows).byte_size()
+            + HasSemanticToken::token_size(self.coded_tokens_sizes).byte_size()
+    }
 }
 
 impl<'a> ReadData<MethodSemanticsTableRow> for TablesStreamReader<'a> {
@@ -642,6 +837,14 @@ pub struct MethodImplTableRow {
     pub method_declaration: CodedToken<MethodDefOrRefToken>,
 }
 
+impl<'a> CalculateTableSize<MethodImplTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        TypeDefTableOffset::table_offset_size(self.rows).byte_size()
+            + MethodDefOrRefToken::token_size(self.coded_tokens_sizes).byte_size()
+            + MethodDefOrRefToken::token_size(self.coded_tokens_sizes).byte_size()
+    }
+}
+
 impl<'a> ReadData<MethodImplTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodImplTableRow> {
         Ok(MethodImplTableRow {
@@ -657,6 +860,12 @@ pub struct ModuleRefTableRow {
     pub name: StringsStreamOffset,
 }
 
+impl<'a> CalculateTableSize<ModuleRefTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<ModuleRefTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ModuleRefTableRow> {
         Ok(ModuleRefTableRow { name: self.read()? })
@@ -666,6 +875,12 @@ impl<'a> ReadData<ModuleRefTableRow> for TablesStreamReader<'a> {
 #[derive(Debug, Clone)]
 pub struct TypeSpecTableRow {
     pub signature: BlobStreamOffset,
+}
+
+impl<'a> CalculateTableSize<TypeSpecTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
 }
 
 impl<'a> ReadData<TypeSpecTableRow> for TablesStreamReader<'a> {
@@ -687,20 +902,20 @@ bitflags! {
         const CharSetAnsi       = 0x0002;
         const CharSetUnicode    = 0x0004;
         const CharSetAuto       = 0x0006;
-    
-    
+
+
         const BestFitUseAssem   = 0x0000;
         const BestFitEnabled    = 0x0010;
         const BestFitDisabled   = 0x0020;
         const BestFitMask       = 0x0030;
-    
+
         const ThrowOnUnmappableCharUseAssem   = 0x0000;
         const ThrowOnUnmappableCharEnabled    = 0x1000;
         const ThrowOnUnmappableCharDisabled   = 0x2000;
         const ThrowOnUnmappableCharMask       = 0x3000;
-    
+
         const SupportsLastError = 0x0040;   // Information about target function. Not relevant for fields.
-    
+
         // None of the calling convention flags is relevant for fields.
         const CallConvMask      = 0x0700;
         const CallConvWinapi    = 0x0100;   // Pinvoke will use native callconv appropriate to target windows platform.
@@ -708,7 +923,7 @@ bitflags! {
         const CallConvStdcall   = 0x0300;
         const CallConvThiscall  = 0x0400;   // In M9; pinvoke will raise exception.
         const CallConvFastcall  = 0x0500;
-    
+
         const MaxValue          = 0xFFFF;
     }
 }
@@ -719,6 +934,15 @@ pub struct ImplMapTableRow {
     pub member_forwarded: CodedToken<MemberForwardedToken>,
     pub import_name: StringsStreamOffset,
     pub import_scope: ModuleRefTableOffset,
+}
+
+impl<'a> CalculateTableSize<ImplMapTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<PInvokeMapFlags>()
+            + MemberForwardedToken::token_size(self.coded_tokens_sizes).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + ModuleRefTableOffset::table_offset_size(self.rows).byte_size()
+    }
 }
 
 impl<'a> ReadData<ImplMapTableRow> for TablesStreamReader<'a> {
@@ -738,6 +962,12 @@ pub struct FieldRVATableRow {
     pub field: FieldTableOffset,
 }
 
+impl<'a> CalculateTableSize<FieldRVATableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>() + FieldTableOffset::table_offset_size(self.rows).byte_size()
+    }
+}
+
 impl<'a> ReadData<FieldRVATableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FieldRVATableRow> {
         Ok(FieldRVATableRow {
@@ -751,6 +981,12 @@ impl<'a> ReadData<FieldRVATableRow> for TablesStreamReader<'a> {
 pub struct ENCLogTableRow {
     pub token: u32,
     pub func_code: u32,
+}
+
+impl<'a> CalculateTableSize<ENCLogTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>() + self.size_of_prim::<u32>()
+    }
 }
 
 impl<'a> ReadData<ENCLogTableRow> for TablesStreamReader<'a> {
@@ -767,6 +1003,12 @@ pub struct ENCMapTableRow {
     pub token: u32,
 }
 
+impl<'a> CalculateTableSize<ENCMapTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>()
+    }
+}
+
 impl<'a> ReadData<ENCMapTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ENCMapTableRow> {
         Ok(ENCMapTableRow {
@@ -775,12 +1017,11 @@ impl<'a> ReadData<ENCMapTableRow> for TablesStreamReader<'a> {
     }
 }
 
-
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct AssemblyFlags: u32 {
         const PublicKey             =   0x0001;     // The assembly ref holds the full (unhashed) public key.
-   
+
         const PA_None               =   0x0000;     // Processor Architecture unspecified
         const PA_MSIL               =   0x0010;     // Processor Architecture: neutral (PE32)
         const PA_x86                =   0x0020;     // Processor Architecture: x86 (PE32)
@@ -790,15 +1031,14 @@ bitflags! {
         const PA_Mask               =   0x0070;     // Bits describing the processor architecture
         const PA_FullMask           =   0x00F0;     // Bits describing the PA incl. Specified
         const PA_Shift              =   0x0004;     // NOT A FLAG; shift count in PA flags <--> index conversion
-    
+
         const EnableJITcompileTracking  =   0x8000; // From "DebuggableAttribute".
         const DisableJITcompileOptimizer=   0x4000; // From "DebuggableAttribute".
-    
+
         const Retargetable          =   0x0100;     // The assembly can be retargeted (at runtime) to an
                                                 // assembly from a different publisher.
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct AssemblyTableRow {
@@ -813,9 +1053,23 @@ pub struct AssemblyTableRow {
     pub locale: StringsStreamOffset,
 }
 
+impl<'a> CalculateTableSize<AssemblyTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>()
+            + self.size_of_prim::<u16>()
+            + self.size_of_prim::<u16>()
+            + self.size_of_prim::<u16>()
+            + self.size_of_prim::<u16>()
+            + self.size_of_prim::<AssemblyFlags>()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<AssemblyTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyTableRow> {
-        if self.header.table_rows.assembly != 1 {
+        if self.header.table_locations.assembly.rows != 1 {
             return Err(crate::error::HaoError::BadImageFormat(
                 "Assembly table should have exactly one entry",
             ));
@@ -840,6 +1094,12 @@ pub struct AssemblyProcessorTableRow {
     pub processor: u32,
 }
 
+impl<'a> CalculateTableSize<AssemblyProcessorTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>()
+    }
+}
+
 impl<'a> ReadData<AssemblyProcessorTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyProcessorTableRow> {
         Ok(AssemblyProcessorTableRow {
@@ -853,6 +1113,12 @@ pub struct AssemblyOSTableRow {
     pub os_platform_id: u32,
     pub os_major_version: u32,
     pub os_minor_version: u32,
+}
+
+impl<'a> CalculateTableSize<AssemblyOSTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>() + self.size_of_prim::<u32>() + self.size_of_prim::<u32>()
+    }
 }
 
 impl<'a> ReadData<AssemblyOSTableRow> for TablesStreamReader<'a> {
@@ -874,8 +1140,22 @@ pub struct AssemblyRefTableRow {
     pub flags: AssemblyFlags,
     pub public_key_or_token: BlobStreamOffset,
     pub name: StringsStreamOffset,
-    pub locale:StringsStreamOffset,
+    pub locale: StringsStreamOffset,
     pub hash_value: BlobStreamOffset,
+}
+
+impl<'a> CalculateTableSize<AssemblyRefTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u16>()
+            + self.size_of_prim::<u16>()
+            + self.size_of_prim::<u16>()
+            + self.size_of_prim::<u16>()
+            + self.size_of_prim::<AssemblyFlags>()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
 }
 
 impl<'a> ReadData<AssemblyRefTableRow> for TablesStreamReader<'a> {
@@ -900,6 +1180,13 @@ pub struct AssemblyRefProcessorTableRow {
     pub assembly_ref: AssemblyRefTableOffset,
 }
 
+impl<'a> CalculateTableSize<AssemblyRefProcessorTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>()
+            + AssemblyRefTableOffset::table_offset_size(self.rows).byte_size()
+    }
+}
+
 impl<'a> ReadData<AssemblyRefProcessorTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<AssemblyRefProcessorTableRow> {
         Ok(AssemblyRefProcessorTableRow {
@@ -915,6 +1202,15 @@ pub struct AssemblyRefOSTableRow {
     pub os_major_version: u32,
     pub os_minor_version: u32,
     pub assembly_ref: AssemblyRefTableOffset,
+}
+
+impl<'a> CalculateTableSize<AssemblyRefOSTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>()
+            + self.size_of_prim::<u32>()
+            + self.size_of_prim::<u32>()
+            + AssemblyRefTableOffset::table_offset_size(self.rows).byte_size()
+    }
 }
 
 impl<'a> ReadData<AssemblyRefOSTableRow> for TablesStreamReader<'a> {
@@ -943,6 +1239,14 @@ pub struct FileTableRow {
     pub hash_value: BlobStreamOffset,
 }
 
+impl<'a> CalculateTableSize<FileTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<FileFlags>()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<FileTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<FileTableRow> {
         Ok(FileTableRow {
@@ -960,6 +1264,16 @@ pub struct ExportedTypeTableRow {
     pub type_name: StringsStreamOffset,
     pub type_namespace: StringsStreamOffset,
     pub implementation: CodedToken<ImplementationToken>,
+}
+
+impl<'a> CalculateTableSize<ExportedTypeTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<TypeAttributes>()
+            + TypeDefTableOffset::table_offset_size(self.rows).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + ImplementationToken::token_size(self.coded_tokens_sizes).byte_size()
+    }
 }
 
 impl<'a> ReadData<ExportedTypeTableRow> for TablesStreamReader<'a> {
@@ -991,6 +1305,15 @@ pub struct ManifestResourceTableRow {
     pub implementation: CodedToken<ImplementationToken>,
 }
 
+impl<'a> CalculateTableSize<ManifestResourceTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u32>()
+            + self.size_of_prim::<ManifestResourceFlags>()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + ImplementationToken::token_size(self.coded_tokens_sizes).byte_size()
+    }
+}
+
 impl<'a> ReadData<ManifestResourceTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ManifestResourceTableRow> {
         Ok(ManifestResourceTableRow {
@@ -1002,12 +1325,17 @@ impl<'a> ReadData<ManifestResourceTableRow> for TablesStreamReader<'a> {
     }
 }
 
-
-
 #[derive(Debug, Clone)]
 pub struct NestedClassTableRow {
     pub nested_class: TypeDefTableOffset,
     pub enclosing_class: TypeDefTableOffset,
+}
+
+impl<'a> CalculateTableSize<NestedClassTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        TypeDefTableOffset::table_offset_size(self.rows).byte_size()
+            + TypeDefTableOffset::table_offset_size(self.rows).byte_size()
+    }
 }
 
 impl<'a> ReadData<NestedClassTableRow> for TablesStreamReader<'a> {
@@ -1018,7 +1346,6 @@ impl<'a> ReadData<NestedClassTableRow> for TablesStreamReader<'a> {
         })
     }
 }
-
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1032,7 +1359,7 @@ bitflags! {
 
         // Special constraints; applicable to any type parameters
         const SpecialConstraintMask =  0x001C;
-        const NoSpecialConstraint   =   0x0000;     
+        const NoSpecialConstraint   =   0x0000;
         const ReferenceTypeConstraint = 0x0004;      // type argument must be a reference type
         const NotNullableValueTypeConstraint   =   0x0008; // type argument must be a value type but not Nullable
         const DefaultConstructorConstraint = 0x0010; // type argument must have a public default constructor
@@ -1047,6 +1374,20 @@ pub struct GenericParamTableRow {
     pub name: StringsStreamOffset,
     // Kind is only in assemblies of version 1.1
     pub kind: Option<CodedToken<TypeDefOrRefToken>>,
+}
+
+impl<'a> CalculateTableSize<GenericParamTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        self.size_of_prim::<u16>()
+            + self.size_of_prim::<GenericParamFlags>()
+            + TypeOrMethodDefToken::token_size(self.coded_tokens_sizes).byte_size()
+            + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
+            + if self.version == Version(1, 1) {
+                TypeDefOrRefToken::token_size(self.coded_tokens_sizes).byte_size()
+            } else {
+                0
+            }
+    }
 }
 
 impl<'a> ReadData<GenericParamTableRow> for TablesStreamReader<'a> {
@@ -1069,6 +1410,13 @@ pub struct MethodSpecTableRow {
     pub instantiation: BlobStreamOffset,
 }
 
+impl<'a> CalculateTableSize<MethodSpecTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        MethodDefOrRefToken::token_size(self.coded_tokens_sizes).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<MethodSpecTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<MethodSpecTableRow> {
         Ok(MethodSpecTableRow {
@@ -1082,6 +1430,13 @@ impl<'a> ReadData<MethodSpecTableRow> for TablesStreamReader<'a> {
 pub struct GenericParamConstraintTableRow {
     pub owner: GenericParamTableOffset,
     pub constraint: CodedToken<TypeDefOrRefToken>,
+}
+
+impl<'a> CalculateTableSize<GenericParamConstraintTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        GenericParamTableOffset::table_offset_size(self.rows).byte_size()
+            + TypeDefOrRefToken::token_size(self.coded_tokens_sizes).byte_size()
+    }
 }
 
 impl<'a> ReadData<GenericParamConstraintTableRow> for TablesStreamReader<'a> {
@@ -1101,6 +1456,15 @@ pub struct DocumentTableRow {
     pub language: GuidStreamOffset,
 }
 
+impl<'a> CalculateTableSize<DocumentTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+            + GuidStreamOffset::streams_offset_size(self.flags).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+            + GuidStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
+}
+
 impl<'a> ReadData<DocumentTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<DocumentTableRow> {
         Ok(DocumentTableRow {
@@ -1114,8 +1478,15 @@ impl<'a> ReadData<DocumentTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct MethodDebugInformationTableRow {
-    pub document: DocumentTableRow,
+    pub document: DocumentTableRowOffset,
     pub sequence_points: BlobStreamOffset,
+}
+
+impl<'a> CalculateTableSize<MethodDebugInformationTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        DocumentTableRowOffset::table_offset_size(self.rows).byte_size()
+            + BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+    }
 }
 
 impl<'a> ReadData<MethodDebugInformationTableRow> for TablesStreamReader<'a> {
@@ -1135,6 +1506,16 @@ pub struct LocalScopeTableRow {
     pub constant_list: LocalConstantTableOffset,
     pub start_offset: u32,
     pub length: u32,
+}
+
+impl<'a> CalculateTableSize<LocalScopeTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        MethodTableOffset::table_offset_size(self.rows).byte_size()
+            + ImportScopeTableOffset::table_offset_size(self.rows).byte_size()
+            + LocalConstantTableOffset::table_offset_size(self.rows).byte_size()
+            + self.size_of_prim::<u32>()
+            + self.size_of_prim::<u32>()
+    }
 }
 
 impl<'a> ReadData<LocalScopeTableRow> for TablesStreamReader<'a> {
@@ -1157,6 +1538,12 @@ pub struct LocalVariableTableRow {
     pub name: (),
 }
 
+impl<'a> CalculateTableSize<LocalVariableTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        0
+    }
+}
+
 impl<'a> ReadData<LocalVariableTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<LocalVariableTableRow> {
         Ok(LocalVariableTableRow {
@@ -1171,6 +1558,12 @@ impl<'a> ReadData<LocalVariableTableRow> for TablesStreamReader<'a> {
 pub struct LocalConstantTableRow {
     pub name: (),
     pub signature: (),
+}
+
+impl<'a> CalculateTableSize<LocalConstantTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        0
+    }
 }
 
 impl<'a> ReadData<LocalConstantTableRow> for TablesStreamReader<'a> {
@@ -1188,6 +1581,12 @@ pub struct ImportScopeTableRow {
     pub imports: (),
 }
 
+impl<'a> CalculateTableSize<ImportScopeTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        0
+    }
+}
+
 impl<'a> ReadData<ImportScopeTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ImportScopeTableRow> {
         Ok(ImportScopeTableRow {
@@ -1201,6 +1600,12 @@ impl<'a> ReadData<ImportScopeTableRow> for TablesStreamReader<'a> {
 pub struct StateMachineMethodTableRow {
     pub move_next_method: (),
     pub kickoff_method: (),
+}
+
+impl<'a> CalculateTableSize<StateMachineMethodTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        0
+    }
 }
 
 impl<'a> ReadData<StateMachineMethodTableRow> for TablesStreamReader<'a> {
@@ -1217,6 +1622,12 @@ pub struct CustomDebugInformationTableRow {
     pub parent: (),
     pub kind: (),
     pub value: (),
+}
+
+impl<'a> CalculateTableSize<CustomDebugInformationTableRow> for SizeCalculator<'a> {
+    fn calculate_table_size_bytes(&self) -> usize {
+        0
+    }
 }
 
 impl<'a> ReadData<CustomDebugInformationTableRow> for TablesStreamReader<'a> {

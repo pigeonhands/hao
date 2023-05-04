@@ -1,8 +1,14 @@
-use super::{md::streams::{tables_stream::{
-    coded_tokens::{CodedToken, ResolutionScopeToken, TypeDefOrRefToken},
-    FieldFlags, FieldTableRow, ModulesTableRow, TypeAttributes, TypeDefTableRow,
-    TypeRefTableRow,
-}, Signature}, module::{MaybeUninitEntries, GetEntry}};
+use super::{
+    md::streams::{
+        tables_stream::{
+            coded_tokens::{CodedToken, ResolutionScopeToken, TypeDefOrRefToken},
+            FieldFlags, FieldTableRow, MethodFlags, MethodImplFlags, MethodTableRow,
+            ModulesTableRow, TypeAttributes, TypeDefTableRow, TypeRefTableRow, ParamTableOffset,
+        },
+        Signature,
+    },
+    module::{GetEntry, MaybeUninitEntries},
+};
 use crate::{
     error::{HaoError, Result},
     io::{EntryReader, ValueReadable},
@@ -19,6 +25,7 @@ impl<T> RowRange<T> {
     pub fn new(start: T, end: Option<T>) -> Self {
         Self { start, end }
     }
+
 }
 
 #[derive(Clone)]
@@ -37,7 +44,7 @@ impl<T: Debug> Debug for Ptr<T> {
 
 pub trait ReadEntry<T>: Sized {
     type RawRow;
-    fn from_row(&self, index: usize, row: &Self::RawRow) -> Result<T>;
+    fn from_row(&self, index: usize, row: &Self::RawRow, next_row: Option<&Self::RawRow>) -> Result<T>;
 }
 
 impl<T> Ptr<T> {
@@ -65,7 +72,7 @@ pub struct ModuleDef {
 
 impl<'a> ReadEntry<ModuleDef> for EntryReader<'a> {
     type RawRow = ModulesTableRow;
-    fn from_row(&self, _: usize, row: &Self::RawRow) -> Result<ModuleDef> {
+    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<ModuleDef> {
         Ok(ModuleDef {
             generation: self.read(row.generation)?,
             name: self.read(row.name)?,
@@ -116,7 +123,7 @@ pub struct TypeRef {
 
 impl<'a> ReadEntry<TypeRef> for EntryReader<'a> {
     type RawRow = TypeRefTableRow;
-    fn from_row(&self, _: usize, row: &Self::RawRow) -> Result<TypeRef> {
+    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<TypeRef> {
         Ok(TypeRef {
             resolution_scope: self.read(row.resolution_scope)?,
             name: self.read(row.name)?,
@@ -167,27 +174,19 @@ pub struct TypeDef {
     pub namespace: String,
     pub extends: TypeDefOrRef,
     pub field_list: Vec<Ptr<Field>>,
-    //pub method_list: (),
+    pub method_list: Vec<Ptr<Method>>,
 }
 
 impl<'a> ReadEntry<TypeDef> for EntryReader<'a> {
     type RawRow = TypeDefTableRow;
-    fn from_row(&self, index: usize, row: &Self::RawRow) -> Result<TypeDef> {
-        let fields_list = RowRange::new(
-            row.field_list,
-            self.raw_rows()
-                .type_def
-                .get(index + 1)
-                .map(|i| i.field_list),
-        );
-
+    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<TypeDef> {
         Ok(TypeDef {
             flags: row.flags,
             name: self.read(row.name)?,
             namespace: self.read(row.namespace)?,
             extends: self.read(row.extends)?,
-            field_list: self.read(fields_list)?,
-            //method_list: todo!("method_list")
+            field_list: self.read(RowRange::new(row.field_list, _next.map(|x| x.field_list)))?,
+            method_list: self.read(RowRange::new(row.method_list, _next.map(|x| x.method_list)))?,
         })
     }
 }
@@ -201,11 +200,35 @@ pub struct Field {
 
 impl<'a> ReadEntry<Field> for EntryReader<'a> {
     type RawRow = FieldTableRow;
-    fn from_row(&self, _: usize, row: &Self::RawRow) -> Result<Field> {
+    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<Field> {
         Ok(Field {
             flags: row.flags,
             name: self.read(row.name)?,
             signature: self.read(row.signature)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Method {
+    pub rva: u32,
+    pub impl_flags: MethodImplFlags,
+    pub flags: MethodFlags,
+    pub name: String,
+    pub signature: Signature,
+    pub param_list: ParamTableOffset,
+}
+
+impl<'a> ReadEntry<Method> for EntryReader<'a> {
+    type RawRow = MethodTableRow;
+    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<Method> {
+        Ok(Method {
+            rva: row.rva,
+            impl_flags: row.impl_flags,
+            flags: row.flags,
+            name: self.read(row.name)?,
+            signature: self.read(row.signature)?,
+            param_list: row.param_list
         })
     }
 }

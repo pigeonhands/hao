@@ -41,8 +41,6 @@ impl<'a> Metadata<'a> {
             cor20_header.metadata.virtual_address,
         )?;
 
-        Ok(Self {
-            metadata_streams,
-        })
+        Ok(Self { metadata_streams })
     }
 }

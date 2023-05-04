@@ -11,7 +11,9 @@ pub trait Readable: Sized {
 }
 
 impl<'a, T> ReadData<T> for DataReader<'a>
-where T: Readable {
+where
+    T: Readable,
+{
     fn read(&mut self) -> Result<T> {
         T::from_reader(self)
     }
@@ -31,7 +33,6 @@ impl<'a> DataReader<'a> {
     pub fn position(&self) -> usize {
         self.index
     }
-    
 
     pub fn remaning(&self) -> usize {
         self.buffer.len() - self.position()
@@ -59,14 +60,11 @@ impl<'a> DataReader<'a> {
 
     pub fn view_range(&self, range: Range<usize>) -> Result<&'a [u8]> {
         if self.buffer.len() < range.end {
-            return Err(HaoError::NotEnoughDataLeft(
-                range.end - self.buffer.len(),
-            ));
+            return Err(HaoError::NotEnoughDataLeft(range.end - self.buffer.len()));
         }
 
         Ok(&self.buffer[range])
     }
-    
 
     pub fn read_slice(&mut self, len: usize) -> Result<&'a [u8]> {
         let s = self.view_slice(len)?;
@@ -84,7 +82,6 @@ impl ReadData<()> for DataReader<'_> {
         Ok(())
     }
 }
-
 
 macro_rules! impl_read_data {
     ($($t:ty),+) => {

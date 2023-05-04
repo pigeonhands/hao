@@ -1,8 +1,8 @@
+mod blob_stream;
 pub mod tables_stream;
 mod values_streams;
-mod blob_stream;
-pub use values_streams::*;
 pub use blob_stream::*;
+pub use values_streams::*;
 
 use super::metadata_header::StreamHeader;
 use crate::{
@@ -21,7 +21,7 @@ impl Version {
 
 #[derive(Debug, Clone)]
 pub struct MetadataStreams<'a> {
-    pub tables_stream: TablesStreams,
+    pub tables_stream: TablesStreams<'a>,
     pub strings_stream: StringsStream<'a>,
     pub guid_stream: GuidStream<'a>,
     pub blob_stream: BlobStream<'a>,
@@ -62,8 +62,8 @@ impl<'a> MetadataStreams<'a> {
                 .ok_or_else(|| HaoError::BadImageFormat("No strings stream (#Strings)"))?,
             guid_stream: guid_stream
                 .ok_or_else(|| HaoError::BadImageFormat("No guid stream (#GUID)"))?,
-                blob_stream: blob_stream
-                    .ok_or_else(|| HaoError::BadImageFormat("No blob stream (#Blob)"))?,
+            blob_stream: blob_stream
+                .ok_or_else(|| HaoError::BadImageFormat("No blob stream (#Blob)"))?,
         })
     }
 }
