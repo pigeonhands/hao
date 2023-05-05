@@ -108,11 +108,27 @@ where
 pub struct SignatureReader<'a> {
     pub reader: BlobStream<'a>,
     pub entries: &'a MaybeUninitEntries,
+    pub recursion_count: usize
 }
 
 impl<'a> SignatureReader<'a> {
+    const RECURSTION_LIMIT : usize = 120;
     pub fn new(reader: BlobStream<'a>, entries: &'a MaybeUninitEntries) -> Self {
-        Self { reader, entries }
+        Self { reader, entries, recursion_count:0 }
+    }
+
+    pub (crate) fn recursion_inc(&mut self) -> Result<()> {
+        self.recursion_count += 1;
+        if self.recursion_count > Self::RECURSTION_LIMIT {
+            return Err(
+                HaoError::RecursionLimitReached
+            )
+        }else{
+            Ok(())
+        }
+    }
+    pub (crate) fn recursion_dec(&mut self) {
+        self.recursion_count = self.recursion_count.saturating_sub(1);
     }
 }
 

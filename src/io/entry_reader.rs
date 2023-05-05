@@ -13,6 +13,8 @@ use crate::{
     error::Result,
 };
 
+use super::ReadData;
+
 pub trait ValueReadable<T> {
     type EntryValue;
     fn read(&self, identifier: T) -> Result<Self::EntryValue>;
@@ -73,11 +75,11 @@ impl<'a> ValueReadable<BlobStreamOffset> for EntryReader<'a> {
     type EntryValue = Signature;
 
     fn read(&self, identifier: BlobStreamOffset) -> Result<Self::EntryValue> {
-        let reader = self
+        let mut reader = self
             .streams
             .blob_stream
             .get_signature_reader(identifier.0, self.entries)?;
-        Signature::from_reader(reader)
+        reader.read()
     }
 }
 

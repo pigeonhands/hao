@@ -57,7 +57,7 @@ impl<'a> TablePositionCalculator<'a> {
 
         TableLocation {
             start_offset,
-            rows: TableRowCount(rows.0),
+            rows,
             row_size,
         }
     }

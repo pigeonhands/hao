@@ -28,6 +28,8 @@ pub enum HaoError {
     InvalidSignatureCallingConvention(u8),
     #[error("Invalid signature element type ({0}) at position ({0}).")]
     InvalidSignatureElementType(u8, usize),
+    #[error("Recursion limit reached.")]
+    RecursionLimitReached,
     #[error("unknown error")]
     Unknown,
 }

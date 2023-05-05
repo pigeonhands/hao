@@ -2,6 +2,8 @@
 name = "hao"
 version = "0.0.1-prerelease"
 edition = "2021"
+description = ".net binary reader"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

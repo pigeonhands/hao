@@ -105,6 +105,7 @@ impl ModuleDefMD {
             maybe_entries
         };
 
+
         Ok(Self {
             modules: entries.modules,
             type_refs: entries.type_refs,

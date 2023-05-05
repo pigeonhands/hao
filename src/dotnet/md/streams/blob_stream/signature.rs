@@ -92,12 +92,13 @@ pub struct Signature {
     pub calling_convention: SignatureCallingConvention,
     pub flags: SignatureFlags,
 }
+impl<'a> ReadData<Signature> for SignatureReader<'a> {
+    fn read(&mut self) -> Result<Signature> {
+        self.recursion_inc()?;
 
-impl Signature {
-    pub fn from_reader(mut reader: SignatureReader) -> Result<Self> {
         const CALLING_CONVENTION_MASK: u8 = 0x0F;
 
-        let sig_type: u8 = reader.read()?;
+        let sig_type: u8 = self.read()?;
 
         let calling_convention = CallingConvention::from_u8(sig_type & CALLING_CONVENTION_MASK)
             .ok_or_else(|| {
@@ -105,14 +106,16 @@ impl Signature {
             })?;
 
         let flags = SignatureFlags::from_bits_retain(sig_type & (!CALLING_CONVENTION_MASK));
-
-        Ok(Self {
+        let calling_convention =  SignatureCallingConvention::from_reader(
+            self,
+            calling_convention,
             flags,
-            calling_convention: SignatureCallingConvention::from_reader(
-                reader,
-                calling_convention,
-                flags,
-            )?,
+        )?;
+
+        self.recursion_dec();
+        Ok(Signature {
+            flags,
+            calling_convention,
         })
     }
 }
@@ -128,7 +131,7 @@ pub enum SignatureCallingConvention {
 
 impl SignatureCallingConvention {
     pub fn from_reader(
-        mut reader: SignatureReader,
+        reader: &mut SignatureReader,
         calling_convention: CallingConvention,
         flags: SignatureFlags,
     ) -> Result<Self> {
@@ -141,12 +144,12 @@ impl SignatureCallingConvention {
             | CallingConvention::VarArg
             | CallingConvention::Unmanaged
             | CallingConvention::NativeVarArg => {
-                Self::Method(MethodSig::from_reader(&mut reader, flags)?)
+                Self::Method(MethodSig::from_reader(reader, flags)?)
             }
             CallingConvention::Field => Self::Field(reader.read()?),
             CallingConvention::LocalSig => Self::LocalSig(reader.read()?),
             CallingConvention::Property => {
-                Self::Property(MethodSig::from_reader(&mut reader, flags)?)
+                Self::Property(MethodSig::from_reader(reader, flags)?)
             }
             CallingConvention::GenericInst => Self::GenericInstMethod(reader.read()?),
         };
@@ -174,19 +177,20 @@ impl DerefMut for TypeDefOrRefSig {
 
 // This is to stop infinite reccursion when debug printing
 impl Debug for TypeDefOrRefSig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {     
         match &self.0 {
             TypeDefOrRef::None => write!(f, "None"),
-            TypeDefOrRef::TypeRef(tref) => match tref.value().as_ref() {
-                Some(v) => write!(f, "TypeRef(Ptr(\"{}.{}\"))", v.namespace, v.name),
-                None => write!(f, "TypeRef(Invalid)"),
+            TypeDefOrRef::TypeDef(tref) => match tref.is_set() {
+                true =>  write!(f, "TypeRef(Ptr(\"{}.{}\"))", tref.value().namespace, tref.value().name),
+                false => write!(f, "TypeRef(Invalid)")
             },
-            TypeDefOrRef::TypeDef(tdef) => match tdef.value().as_ref() {
-                Some(v) => write!(f, "TypeDef(Ptr(\"{}.{}\"))", v.namespace, v.name),
-                None => write!(f, "TypeDef(Invalid)"),
+            TypeDefOrRef::TypeRef(tdef) => match tdef.is_set() {
+                true => write!(f, "TypeRef(Ptr(\"{}.{}\"))", tdef.value().namespace, tdef.value().name),
+                false => write!(f, "TypeRef(Invalid)"),
             },
             n => write!(f, "{:?}", n),
-        }
+        }   
+
     }
 }
 
@@ -231,7 +235,7 @@ pub enum TypeSig {
     ByRef(Box<TypeSig>),
     ValueType(TypeDefOrRefSig),
     Class(TypeDefOrRefSig),
-    //FnPtr(Box<TypeSig>),
+    FnPtr(Box<Signature>),
     SZArray(Box<TypeSig>),
     CModReq(TypeDefOrRefSig),
     CModOpt(TypeDefOrRefSig),
@@ -298,7 +302,7 @@ impl<'a> ReadData<TypeSig> for SignatureReader<'a> {
                 TypeSig::Class(self.entries.get_entry(token)?.into())
             }
             ElementType::FnPtr => {
-                todo!()
+                TypeSig::FnPtr(Box::new(self.read()?))
             }
             ElementType::SZArray => TypeSig::SZArray(Box::new(self.read()?)),
             ElementType::CModReqd => {
