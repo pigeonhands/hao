@@ -7,7 +7,7 @@ pub mod values;
 
 use self::{
     coded_tokens::CodedTokenSizes,
-    metadata::{TableExistsFlags, TableLocations, TableRows, TableRowCount},
+    metadata::{TableExistsFlags, TableLocations, TableRowCount, TableRows},
 };
 use super::Version;
 use crate::{
@@ -65,11 +65,12 @@ impl Readable for TablesStreamsHeader {
         if flags.contains(MDStreamFlags::ExtraData) {
             let _extra: u32 = reader.read()?;
         }
-        let version =  Version(major_version, minor_version);
+        let version = Version(major_version, minor_version);
         let table_rows = TableRows::from_reader(reader, valid_tables)?;
         let coded_token_sizes = CodedTokenSizes::from_header(&table_rows);
 
-        let table_lcoations = TableLocations::from_metadata(&table_rows, &coded_token_sizes, flags, version);
+        let table_lcoations =
+            TableLocations::from_metadata(&table_rows, &coded_token_sizes, flags, version);
 
         Ok(Self {
             valid_tables,
@@ -82,12 +83,11 @@ impl Readable for TablesStreamsHeader {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct TablesStreams<'a> {
     pub header: TablesStreamsHeader,
     //pub values: TablesValues,
-    heap_data: &'a [u8]
+    heap_data: &'a [u8],
 }
 
 impl<'a> TablesStreams<'a> {
@@ -101,16 +101,17 @@ impl<'a> TablesStreams<'a> {
         //     tables_reader.read()?
         // };
 
-
         Ok(Self { header, heap_data })
     }
 
-    pub (crate) fn row_iter<T>(&'a self, location: TableLocation) -> Result<TableRowsIterator<'a, T>>
-    where TablesStreamReader<'a>: ReadData<T> {
+    pub(crate) fn row_iter<T>(&'a self, location: TableLocation) -> Result<TableRowsIterator<'a, T>>
+    where
+        TablesStreamReader<'a>: ReadData<T>,
+    {
         TableRowsIterator::new(self.heap_data, &self.header, location)
     }
 
-    pub fn modules(&'a self) -> Result<impl Iterator<Item=Result<ModulesTableRow>> + 'a> {
+    pub fn modules(&'a self) -> Result<impl Iterator<Item = Result<ModulesTableRow>> + 'a> {
         self.row_iter(self.header.table_locations.module)
     }
 }

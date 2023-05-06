@@ -1,8 +1,8 @@
 use std::{fmt::Debug, marker::PhantomData};
 
-use super::{TablesStreamsHeader, TableLocation};
+use super::{TableLocation, TablesStreamsHeader};
 use crate::{
-    error::{Result, HaoError},
+    error::{HaoError, Result},
     io::{DataReader, ReadData},
 };
 
@@ -50,38 +50,48 @@ where
     }
 }
 
-pub struct TableRowsIterator<'a, T> 
-where TablesStreamReader<'a>: ReadData<T> {
+pub struct TableRowsIterator<'a, T>
+where
+    TablesStreamReader<'a>: ReadData<T>,
+{
     reader: TablesStreamReader<'a>,
     index: usize,
     rows: usize,
-    _marker: PhantomData<T>
+    _marker: PhantomData<T>,
 }
 
 impl<'a, T> TableRowsIterator<'a, T>
-where TablesStreamReader<'a>: ReadData<T> {
-    pub fn new(heap_data: &'a [u8], header: &'a TablesStreamsHeader, location: TableLocation) -> Result<Self> {
+where
+    TablesStreamReader<'a>: ReadData<T>,
+{
+    pub fn new(
+        heap_data: &'a [u8],
+        header: &'a TablesStreamsHeader,
+        location: TableLocation,
+    ) -> Result<Self> {
         let length = location.rows.0 as usize * location.row_size;
-        let slice = heap_data.get(location.start_offset..location.start_offset+length).ok_or_else(|| {
-            HaoError::InvalidStreamIndex("#~", location.start_offset + length )
-        })?;
+        let slice = heap_data
+            .get(location.start_offset..location.start_offset + length)
+            .ok_or_else(|| HaoError::InvalidStreamIndex("#~", location.start_offset + length))?;
 
         Ok(Self {
             reader: TablesStreamReader::new(slice, header),
             index: 0,
             rows: location.rows.0 as usize,
-            _marker: PhantomData
+            _marker: PhantomData,
         })
     }
 }
 
-impl<'a, T> Iterator for TableRowsIterator<'a, T> 
-where TablesStreamReader<'a>: ReadData<T>{
+impl<'a, T> Iterator for TableRowsIterator<'a, T>
+where
+    TablesStreamReader<'a>: ReadData<T>,
+{
     type Item = Result<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.rows{
-            return None
+        if self.index >= self.rows {
+            return None;
         }
         self.index += 1;
         Some(self.reader.read())

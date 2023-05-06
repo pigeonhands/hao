@@ -9,16 +9,19 @@ fn main() {
 
     let module = ModuleDefMD::from_metadada(&md).unwrap();
 
-    for ty in module.types() {
-        println!("{}.{}", ty.namespace, ty.name);
-    }
+    //for ty in module.types() {
+    //    println!("{}.{}", ty.namespace, ty.name);
+    //}
 
     for ty in module.methods.iter().filter(|x| !x.is_refrenced()) {
         let ty = ty.value();
-        println!("methods  {}", ty.name);
+        println!("methods  {} | {:?}", ty.name, ty.flags);
     }
 
-    println!("non refrenced methods: {}", module.methods.iter().filter(|x| !x.is_refrenced()).count());
+    println!(
+        "non refrenced methods: {} ",
+        module.methods.iter().filter(|x| !x.is_refrenced()).count()
+    );
 
     println!("loaded");
 }

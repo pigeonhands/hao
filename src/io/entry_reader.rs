@@ -1,14 +1,17 @@
 use crate::{
     dotnet::{
-        entries::{RowRange, Ptr, values::{Field, Method}},
+        entries::{
+            values::{Field, Method},
+            Ptr, RowRange,
+        },
+        entries::{GetEntryField, MaybeUninitEntries},
         md::streams::{
             tables_stream::{
-                BlobStreamOffset, FieldTableOffset, GuidStreamOffset,
-                MethodTableOffset, StringsStreamOffset,
+                BlobStreamOffset, FieldTableOffset, GuidStreamOffset, MethodTableOffset,
+                StringsStreamOffset,
             },
             MetadataStreams, Signature,
         },
-        entries::{GetEntryField, MaybeUninitEntries},
     },
     error::Result,
 };
@@ -20,7 +23,7 @@ pub trait ValueReadable<T> {
     fn read(&self, identifier: T) -> Result<Self::EntryValue>;
 }
 
-pub (crate) struct EntryReader<'a> {
+pub(crate) struct EntryReader<'a> {
     pub(crate) streams: &'a MetadataStreams<'a>,
     pub(crate) entries: &'a MaybeUninitEntries,
 }
@@ -30,7 +33,7 @@ impl<'a> EntryReader<'a> {
         streams: &'a MetadataStreams<'a>,
         entries: &'a MaybeUninitEntries,
     ) -> Self {
-        Self { streams , entries  }
+        Self { streams, entries }
     }
 }
 
@@ -43,7 +46,7 @@ where
         self.entries.get_entry_field(identifier)
     }
 }
- 
+
 impl<'a> ValueReadable<u16> for EntryReader<'a> {
     type EntryValue = u16;
 

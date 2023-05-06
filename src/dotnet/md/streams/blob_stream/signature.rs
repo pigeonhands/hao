@@ -7,8 +7,8 @@ use num_traits::FromPrimitive;
 
 use super::reader::{BlobStream, SignatureReader};
 use crate::dotnet::entries::values::*;
-use crate::dotnet::md::streams::tables_stream::coded_tokens::{CodedToken, TypeDefOrRefToken};
 use crate::dotnet::entries::GetEntryField;
+use crate::dotnet::md::streams::tables_stream::coded_tokens::{CodedToken, TypeDefOrRefToken};
 use crate::error::{HaoError, Result};
 use crate::io::ReadData;
 
@@ -106,11 +106,8 @@ impl<'a> ReadData<Signature> for SignatureReader<'a> {
             })?;
 
         let flags = SignatureFlags::from_bits_retain(sig_type & (!CALLING_CONVENTION_MASK));
-        let calling_convention =  SignatureCallingConvention::from_reader(
-            self,
-            calling_convention,
-            flags,
-        )?;
+        let calling_convention =
+            SignatureCallingConvention::from_reader(self, calling_convention, flags)?;
 
         self.recursion_dec();
         Ok(Signature {
@@ -148,9 +145,7 @@ impl SignatureCallingConvention {
             }
             CallingConvention::Field => Self::Field(reader.read()?),
             CallingConvention::LocalSig => Self::LocalSig(reader.read()?),
-            CallingConvention::Property => {
-                Self::Property(MethodSig::from_reader(reader, flags)?)
-            }
+            CallingConvention::Property => Self::Property(MethodSig::from_reader(reader, flags)?),
             CallingConvention::GenericInst => Self::GenericInstMethod(reader.read()?),
         };
 
@@ -177,20 +172,29 @@ impl DerefMut for TypeDefOrRefSig {
 
 // This is to stop infinite reccursion when debug printing
 impl Debug for TypeDefOrRefSig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {     
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             TypeDefOrRef::None => write!(f, "None"),
             TypeDefOrRef::TypeDef(tref) => match tref.is_set() {
-                true =>  write!(f, "TypeRef(Ptr(\"{}.{}\"))", tref.value().namespace, tref.value().name),
-                false => write!(f, "TypeRef(Invalid)")
+                true => write!(
+                    f,
+                    "TypeRef(Ptr(\"{}.{}\"))",
+                    tref.value().namespace,
+                    tref.value().name
+                ),
+                false => write!(f, "TypeRef(Invalid)"),
             },
             TypeDefOrRef::TypeRef(tdef) => match tdef.is_set() {
-                true => write!(f, "TypeRef(Ptr(\"{}.{}\"))", tdef.value().namespace, tdef.value().name),
+                true => write!(
+                    f,
+                    "TypeRef(Ptr(\"{}.{}\"))",
+                    tdef.value().namespace,
+                    tdef.value().name
+                ),
                 false => write!(f, "TypeRef(Invalid)"),
             },
             n => write!(f, "{:?}", n),
-        }   
-
+        }
     }
 }
 
@@ -301,9 +305,7 @@ impl<'a> ReadData<TypeSig> for SignatureReader<'a> {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;
                 TypeSig::Class(self.entries.get_entry_field(token)?.into())
             }
-            ElementType::FnPtr => {
-                TypeSig::FnPtr(Box::new(self.read()?))
-            }
+            ElementType::FnPtr => TypeSig::FnPtr(Box::new(self.read()?)),
             ElementType::SZArray => TypeSig::SZArray(Box::new(self.read()?)),
             ElementType::CModReqd => {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;

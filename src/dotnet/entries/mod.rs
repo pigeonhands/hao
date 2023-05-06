@@ -1,13 +1,15 @@
-pub mod values;
 mod containers;
+pub mod values;
 use std::cell::Ref;
 
-pub use containers::*;
-use crate::{
-    error::{Result}, dotnet::md::streams::tables_stream::{TablesStreamReader, TableLocation}, io::{EntryReader, ReadData},
-};
-use values::*;
 use super::md::streams::tables_stream::metadata::TableLocations;
+use crate::{
+    dotnet::md::streams::tables_stream::{TableLocation, TablesStreamReader},
+    error::Result,
+    io::{EntryReader, ReadData},
+};
+pub use containers::*;
+use values::*;
 
 #[derive(Copy, Clone, Debug)]
 pub struct RowRange<T> {
@@ -19,12 +21,16 @@ impl<T> RowRange<T> {
     pub fn new(start: T, end: Option<T>) -> Self {
         Self { start, end }
     }
-
 }
 
 pub trait ReadEntry<T>: Sized {
     type RawRow;
-    fn from_row(&self, index: usize, row: &Self::RawRow, next_row: Option<&Self::RawRow>) -> Result<T>;
+    fn from_row(
+        &self,
+        index: usize,
+        row: &Self::RawRow,
+        next_row: Option<&Self::RawRow>,
+    ) -> Result<T>;
 }
 
 pub trait GetEntryField<T> {
@@ -38,7 +44,7 @@ pub struct EntryIterator<'a, T> {
 }
 
 impl<'a, T> EntryIterator<'a, T> {
-    pub (crate) fn new(rows: &'a [Ptr<T>]) -> Self {
+    pub(crate) fn new(rows: &'a [Ptr<T>]) -> Self {
         Self { rows, position: 0 }
     }
 }
@@ -55,7 +61,7 @@ impl<'a, T> Iterator for EntryIterator<'a, T> {
     }
 }
 
-pub (crate) struct MaybeUninitEntries {
+pub(crate) struct MaybeUninitEntries {
     pub modules: EntList<ModuleDef>,
     pub type_refs: EntList<TypeRef>,
     pub type_defs: EntList<TypeDef>,

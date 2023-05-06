@@ -2,8 +2,8 @@ use std::ops::Range;
 
 use crate::{
     dotnet::{
-        md::streams::tables_stream::coded_tokens::{CodedToken, CodedTokenTarget},
         entries::MaybeUninitEntries,
+        md::streams::tables_stream::coded_tokens::{CodedToken, CodedTokenTarget},
     },
     error::{HaoError, Result},
     io::{DataReader, ReadData},
@@ -42,7 +42,7 @@ impl<'a> BlobStream<'a> {
         })
     }
 
-    pub (crate) fn get_signature_reader(
+    pub(crate) fn get_signature_reader(
         &self,
         offset: u32,
         entries: &'a MaybeUninitEntries,
@@ -108,26 +108,28 @@ where
 pub struct SignatureReader<'a> {
     pub reader: BlobStream<'a>,
     pub(crate) entries: &'a MaybeUninitEntries,
-    pub recursion_count: usize
+    pub recursion_count: usize,
 }
 
 impl<'a> SignatureReader<'a> {
-    const RECURSTION_LIMIT : usize = 120;
-    pub (crate) fn new(reader: BlobStream<'a>, entries: &'a MaybeUninitEntries) -> Self {
-        Self { reader, entries, recursion_count:0 }
+    const RECURSTION_LIMIT: usize = 120;
+    pub(crate) fn new(reader: BlobStream<'a>, entries: &'a MaybeUninitEntries) -> Self {
+        Self {
+            reader,
+            entries,
+            recursion_count: 0,
+        }
     }
 
-    pub (crate) fn recursion_inc(&mut self) -> Result<()> {
+    pub(crate) fn recursion_inc(&mut self) -> Result<()> {
         self.recursion_count += 1;
         if self.recursion_count > Self::RECURSTION_LIMIT {
-            return Err(
-                HaoError::RecursionLimitReached
-            )
-        }else{
+            return Err(HaoError::RecursionLimitReached);
+        } else {
             Ok(())
         }
     }
-    pub (crate) fn recursion_dec(&mut self) {
+    pub(crate) fn recursion_dec(&mut self) {
         self.recursion_count = self.recursion_count.saturating_sub(1);
     }
 }

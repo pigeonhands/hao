@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
+use super::entries::{EntryIterator, MaybeUninitEntries};
 use crate::dotnet::entries::{values::*, EntList};
-use super::entries::{MaybeUninitEntries, EntryIterator};
 use crate::{error::Result, io::EntryReader, Metadata};
 
 #[derive(Debug, Clone)]
@@ -37,10 +37,7 @@ impl ModuleDefMD {
         })
     }
 
-
     pub fn types(&self) -> EntryIterator<TypeDef> {
         EntryIterator::new(&self.type_defs)
     }
-
-    
 }

@@ -114,7 +114,8 @@ impl<'a> ReadData<TablesValues> for TablesStreamReader<'a> {
             local_variable: self.read_rows(self.header.table_locations.local_variable)?,
             local_constant: self.read_rows(self.header.table_locations.local_constant)?,
             import_scope: self.read_rows(self.header.table_locations.import_scope)?,
-            state_machine_method: self.read_rows(self.header.table_locations.state_machine_method)?,
+            state_machine_method: self
+                .read_rows(self.header.table_locations.state_machine_method)?,
             custom_debug_information: self
                 .read_rows(self.header.table_locations.custom_debug_information)?,
         })

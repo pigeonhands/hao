@@ -1,16 +1,22 @@
-use std::{fmt::Debug, cell::{RefCell, Ref}, rc::Rc, ops::{DerefMut, Deref}, mem::MaybeUninit};
+use std::{
+    cell::{Ref, RefCell},
+    fmt::Debug,
+    mem::MaybeUninit,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
 #[derive(Debug)]
-pub (crate) struct MaybeUnsetEntry<T:Sized> {
+pub(crate) struct MaybeUnsetEntry<T: Sized> {
     value: MaybeUninit<T>,
-    is_set: bool
+    is_set: bool,
 }
 
-impl<T:Sized> MaybeUnsetEntry<T> {
+impl<T: Sized> MaybeUnsetEntry<T> {
     pub fn new_unset() -> Self {
         Self {
             value: MaybeUninit::uninit(),
-            is_set: false
+            is_set: false,
         }
     }
 
@@ -20,18 +26,21 @@ impl<T:Sized> MaybeUnsetEntry<T> {
 
     pub fn set_value(&mut self, value: T) {
         if self.is_set() {
-            unsafe{ self.value.assume_init_drop(); }
+            unsafe {
+                self.value.assume_init_drop();
+            }
         }
         self.value.write(value);
         self.is_set = true;
     }
-
 }
 
-impl<T:Sized> Drop for MaybeUnsetEntry<T> {
+impl<T: Sized> Drop for MaybeUnsetEntry<T> {
     fn drop(&mut self) {
         if self.is_set() {
-            unsafe { self.value.assume_init_drop(); }
+            unsafe {
+                self.value.assume_init_drop();
+            }
         }
     }
 }
@@ -50,7 +59,7 @@ impl<T> AsMut<T> for MaybeUnsetEntry<T> {
     }
 }
 
-impl<T:Sized> Deref for MaybeUnsetEntry<T> {
+impl<T: Sized> Deref for MaybeUnsetEntry<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -58,17 +67,16 @@ impl<T:Sized> Deref for MaybeUnsetEntry<T> {
     }
 }
 
-impl<T:Sized> DerefMut for MaybeUnsetEntry<T> {
+impl<T: Sized> DerefMut for MaybeUnsetEntry<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_mut()
     }
 }
 
-
 #[derive(Debug, Copy, Clone)]
 pub struct RowEntry<T> {
     value: T,
-    row: u32
+    row: u32,
 }
 
 impl<T> RowEntry<T> {
@@ -88,15 +96,11 @@ impl<T> Deref for RowEntry<T> {
     }
 }
 
-
 impl<T> DerefMut for RowEntry<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
     }
 }
-
-
-
 
 #[derive(Clone)]
 pub struct Ptr<T>(Rc<RefCell<RowEntry<MaybeUnsetEntry<T>>>>);
@@ -104,7 +108,10 @@ pub(crate) type EntList<T> = Vec<Ptr<T>>;
 
 impl<T> Ptr<T> {
     pub fn new_unset(row: u32) -> Self {
-        Self(Rc::new(RefCell::new(RowEntry::new(MaybeUnsetEntry::new_unset(), row))))
+        Self(Rc::new(RefCell::new(RowEntry::new(
+            MaybeUnsetEntry::new_unset(),
+            row,
+        ))))
     }
 
     pub fn is_set(&self) -> bool {
@@ -125,8 +132,10 @@ impl<T> Ptr<T> {
         Ref::map(r, |x| x.value.as_ref())
     }
 
-    pub fn clone_value(&self) -> T 
-    where T: Clone {
+    pub fn clone_value(&self) -> T
+    where
+        T: Clone,
+    {
         self.0.borrow().value.clone()
     }
 }
@@ -136,7 +145,7 @@ impl<T: Debug> Debug for Ptr<T> {
         let v = self.0.as_ref().borrow();
         if v.value.is_set() {
             v.value.as_ref().fmt(f)
-        }else{
+        } else {
             write!(f, "Ptr::new_unset()")
         }
     }

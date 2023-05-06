@@ -3,18 +3,18 @@ use super::{
         tables_stream::{
             coded_tokens::{CodedToken, ResolutionScopeToken, TypeDefOrRefToken},
             FieldFlags, FieldTableRow, MethodFlags, MethodImplFlags, MethodTableRow,
-            ModulesTableRow, TypeAttributes, TypeDefTableRow, TypeRefTableRow, ParamTableOffset,
+            ModulesTableRow, ParamTableOffset, TypeAttributes, TypeDefTableRow, TypeRefTableRow,
         },
         Signature,
     },
-    {ReadEntry, RowRange, Ptr},
+    {Ptr, ReadEntry, RowRange},
 };
 use crate::{
+    dotnet::entries::{GetEntryField, MaybeUninitEntries},
     error::{HaoError, Result},
-    io::{EntryReader, ValueReadable}, dotnet::entries::{MaybeUninitEntries, GetEntryField},
+    io::{EntryReader, ValueReadable},
 };
 use std::fmt::Debug;
-
 
 #[derive(Debug, Clone)]
 pub struct ModuleDef {
@@ -27,7 +27,12 @@ pub struct ModuleDef {
 
 impl<'a> ReadEntry<ModuleDef> for EntryReader<'a> {
     type RawRow = ModulesTableRow;
-    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<ModuleDef> {
+    fn from_row(
+        &self,
+        _: usize,
+        row: &Self::RawRow,
+        _next: Option<&Self::RawRow>,
+    ) -> Result<ModuleDef> {
         Ok(ModuleDef {
             generation: self.read(row.generation)?,
             name: self.read(row.name)?,
@@ -51,7 +56,10 @@ pub enum ResolutionScope {
 impl<'a> GetEntryField<CodedToken<ResolutionScopeToken>> for MaybeUninitEntries {
     type EntryFieldValue = ResolutionScope;
 
-    fn get_entry_field(&self, identifier: CodedToken<ResolutionScopeToken>) -> Result<Self::EntryFieldValue> {
+    fn get_entry_field(
+        &self,
+        identifier: CodedToken<ResolutionScopeToken>,
+    ) -> Result<Self::EntryFieldValue> {
         let index = match (identifier.rid as usize).checked_sub(1) {
             Some(v) => v,
             None => return Ok(ResolutionScope::None),
@@ -78,7 +86,12 @@ pub struct TypeRef {
 
 impl<'a> ReadEntry<TypeRef> for EntryReader<'a> {
     type RawRow = TypeRefTableRow;
-    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<TypeRef> {
+    fn from_row(
+        &self,
+        _: usize,
+        row: &Self::RawRow,
+        _next: Option<&Self::RawRow>,
+    ) -> Result<TypeRef> {
         Ok(TypeRef {
             resolution_scope: self.read(row.resolution_scope)?,
             name: self.read(row.name)?,
@@ -99,7 +112,10 @@ pub enum TypeDefOrRef {
 impl GetEntryField<CodedToken<TypeDefOrRefToken>> for MaybeUninitEntries {
     type EntryFieldValue = TypeDefOrRef;
 
-    fn get_entry_field(&self, identifier: CodedToken<TypeDefOrRefToken>) -> Result<Self::EntryFieldValue> {
+    fn get_entry_field(
+        &self,
+        identifier: CodedToken<TypeDefOrRefToken>,
+    ) -> Result<Self::EntryFieldValue> {
         let index = match (identifier.rid as usize).checked_sub(1) {
             Some(v) => v,
             None => return Ok(TypeDefOrRef::None),
@@ -134,7 +150,12 @@ pub struct TypeDef {
 
 impl<'a> ReadEntry<TypeDef> for EntryReader<'a> {
     type RawRow = TypeDefTableRow;
-    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<TypeDef> {
+    fn from_row(
+        &self,
+        _: usize,
+        row: &Self::RawRow,
+        _next: Option<&Self::RawRow>,
+    ) -> Result<TypeDef> {
         Ok(TypeDef {
             flags: row.flags,
             name: self.read(row.name)?,
@@ -155,7 +176,12 @@ pub struct Field {
 
 impl<'a> ReadEntry<Field> for EntryReader<'a> {
     type RawRow = FieldTableRow;
-    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<Field> {
+    fn from_row(
+        &self,
+        _: usize,
+        row: &Self::RawRow,
+        _next: Option<&Self::RawRow>,
+    ) -> Result<Field> {
         Ok(Field {
             flags: row.flags,
             name: self.read(row.name)?,
@@ -176,14 +202,19 @@ pub struct Method {
 
 impl<'a> ReadEntry<Method> for EntryReader<'a> {
     type RawRow = MethodTableRow;
-    fn from_row(&self, _: usize, row: &Self::RawRow, _next: Option<&Self::RawRow>) -> Result<Method> {
+    fn from_row(
+        &self,
+        _: usize,
+        row: &Self::RawRow,
+        _next: Option<&Self::RawRow>,
+    ) -> Result<Method> {
         Ok(Method {
             rva: row.rva,
             impl_flags: row.impl_flags,
             flags: row.flags,
             name: self.read(row.name)?,
             signature: self.read(row.signature)?,
-            param_list: row.param_list
+            param_list: row.param_list,
         })
     }
 }
