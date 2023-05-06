@@ -6,9 +6,9 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 
 use super::reader::{BlobStream, SignatureReader};
-use crate::dotnet::entries::TypeDefOrRef;
+use crate::dotnet::entries::values::*;
 use crate::dotnet::md::streams::tables_stream::coded_tokens::{CodedToken, TypeDefOrRefToken};
-use crate::dotnet::module::GetEntry;
+use crate::dotnet::entries::GetEntryField;
 use crate::error::{HaoError, Result};
 use crate::io::ReadData;
 
@@ -295,11 +295,11 @@ impl<'a> ReadData<TypeSig> for SignatureReader<'a> {
             ElementType::ByRef => TypeSig::ByRef(Box::new(self.read()?)),
             ElementType::ValueType => {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;
-                TypeSig::ValueType(self.entries.get_entry(token)?.into())
+                TypeSig::ValueType(self.entries.get_entry_field(token)?.into())
             }
             ElementType::Class => {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;
-                TypeSig::Class(self.entries.get_entry(token)?.into())
+                TypeSig::Class(self.entries.get_entry_field(token)?.into())
             }
             ElementType::FnPtr => {
                 TypeSig::FnPtr(Box::new(self.read()?))
@@ -307,11 +307,11 @@ impl<'a> ReadData<TypeSig> for SignatureReader<'a> {
             ElementType::SZArray => TypeSig::SZArray(Box::new(self.read()?)),
             ElementType::CModReqd => {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;
-                TypeSig::CModReq(self.entries.get_entry(token)?.into())
+                TypeSig::CModReq(self.entries.get_entry_field(token)?.into())
             }
             ElementType::CModOpt => {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;
-                TypeSig::CModOpt(self.entries.get_entry(token)?.into())
+                TypeSig::CModOpt(self.entries.get_entry_field(token)?.into())
             }
             ElementType::Sentinel => TypeSig::Sentinel,
             ElementType::Pinned => TypeSig::Pinned(Box::new(self.read()?)),

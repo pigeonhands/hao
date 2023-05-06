@@ -3,7 +3,7 @@ use std::ops::Range;
 use crate::{
     dotnet::{
         md::streams::tables_stream::coded_tokens::{CodedToken, CodedTokenTarget},
-        module::MaybeUninitEntries,
+        entries::MaybeUninitEntries,
     },
     error::{HaoError, Result},
     io::{DataReader, ReadData},
@@ -42,7 +42,7 @@ impl<'a> BlobStream<'a> {
         })
     }
 
-    pub fn get_signature_reader(
+    pub (crate) fn get_signature_reader(
         &self,
         offset: u32,
         entries: &'a MaybeUninitEntries,
@@ -107,13 +107,13 @@ where
 
 pub struct SignatureReader<'a> {
     pub reader: BlobStream<'a>,
-    pub entries: &'a MaybeUninitEntries,
+    pub(crate) entries: &'a MaybeUninitEntries,
     pub recursion_count: usize
 }
 
 impl<'a> SignatureReader<'a> {
     const RECURSTION_LIMIT : usize = 120;
-    pub fn new(reader: BlobStream<'a>, entries: &'a MaybeUninitEntries) -> Self {
+    pub (crate) fn new(reader: BlobStream<'a>, entries: &'a MaybeUninitEntries) -> Self {
         Self { reader, entries, recursion_count:0 }
     }
 
