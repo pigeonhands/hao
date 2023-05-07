@@ -25,9 +25,4 @@ fn main() {
 
         println!("}}");
     }
-      
-
-      for asm in module.assembly_ref().values() {
-        println!("{}", asm.name());
-      }
 }

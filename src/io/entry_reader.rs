@@ -1,5 +1,3 @@
-use num_traits::Zero;
-
 use crate::{
     dotnet::{
         entries::{values::TypeDef, GetEntryField, MaybeUninitEntries},
@@ -10,8 +8,8 @@ use crate::{
         md::streams::{
             tables_stream::{
                 coded_tokens::{CodedToken, CodedTokenTarget},
-                BlobStreamOffset, FieldTableOffset, GuidStreamOffset, MethodTableOffset,
-                StringsStreamOffset, TypeDefTableOffset, ParamTableOffset, BlobStreamOffsetTypeSpec,
+                BlobStreamOffset, BlobStreamOffsetTypeSpec, FieldTableOffset, GuidStreamOffset,
+                MethodTableOffset, ParamTableOffset, StringsStreamOffset, TypeDefTableOffset,
             },
             MetadataStreams, SignatureDef, TypeSigDef,
         },
@@ -90,21 +88,19 @@ where
 
         let end = end.unwrap_or(target_rows.len());
 
-        if start==end {
-            return Ok(Vec::new())
-        }else {
+        if start == end {
+            return Ok(Vec::new());
+        } else {
             if start >= target_rows.len() {
                 return Err(HaoError::InvalidEntryRefrence(
                     std::any::type_name::<Self::EntryValue>(),
                     start,
                 ));
             }
-    
+
             let slice = target_rows.get(start..end).unwrap_or(&target_rows[start..]);
             Ok(slice.to_vec())
         }
-
-       
     }
 }
 

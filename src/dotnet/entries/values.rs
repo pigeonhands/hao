@@ -8,19 +8,25 @@ use super::{
         SignatureDef,
     },
     signature::{FieldSignature, ResolutionScope, TypeDefOrRef, TypeSignature, ValueType},
+    well_known::{WellKnown, SystemType},
     EntryCollection, EntryView, {Ptr, ReadEntry, RowRange},
 };
 use crate::{
     dotnet::{
         entries::{GetEntryField, MaybeUninitEntries},
-        md::streams::{
-            tables_stream::{InterfaceImplTableRow, ParamFlags, ParamTableRow, TypeSpecTableRow, ModuleRefTableRow, AssemblyRefTableRow, AssemblyFlags},
-        }, 
+        md::streams::tables_stream::{
+            AssemblyFlags, AssemblyRefTableRow, InterfaceImplTableRow, ModuleRefTableRow,
+            ParamFlags, ParamTableRow, TypeSpecTableRow,
+        },
     },
     error::{HaoError, Result},
-    io::{EntryReader, ValueReadable}, Module,
+    io::{EntryReader, ValueReadable},
+    Module,
 };
-use std::{fmt::{Debug, Display}, rc::Rc};
+use std::{
+    fmt::{Debug, Display},
+    rc::Rc,
+};
 
 #[derive(Debug, Clone)]
 pub struct ModuleDef {
@@ -58,10 +64,9 @@ impl<'a> ReadEntry<ModuleDef> for EntryReader<'a> {
 #[derive(Debug, Clone)]
 pub(crate) enum ResolutionScopePtr {
     Module(Ptr<ModuleDef>),
-    //ModuleRef,
-    //AssemblyRef,
+    ModuleRef(Ptr<ModuleRef>),
+    AssemblyRef(Ptr<AssemblyRef>),
     TypeRef(Ptr<TypeRef>),
-    NotImplimented,
     None,
 }
 
@@ -83,12 +88,21 @@ impl<'a> GetEntryField<CodedToken<ResolutionScopeToken>> for MaybeUninitEntries 
                 .get(index)
                 .cloned()
                 .map(ResolutionScopePtr::Module),
+            ResolutionScopeToken::ModuleRef => self
+                .module_ref
+                .get(index)
+                .cloned()
+                .map(ResolutionScopePtr::ModuleRef),
+            ResolutionScopeToken::AssemblyRef => self
+                .assembly_ref
+                .get(index)
+                .cloned()
+                .map(ResolutionScopePtr::AssemblyRef),
             ResolutionScopeToken::TypeRef => self
                 .type_refs
                 .get(index)
                 .cloned()
                 .map(ResolutionScopePtr::TypeRef),
-            _ => Some(ResolutionScopePtr::NotImplimented),
         };
         val.ok_or_else(|| HaoError::InvalidCodedTokenOffset(identifier.rid, "ResolutionScopeToken"))
     }
@@ -111,24 +125,35 @@ impl TypeRef {
     pub fn namespace(&self) -> &str {
         &self.namespace
     }
+
+    pub fn well_known(&self) -> Option<WellKnown> {
+        match self.resolution_scope() {
+            ResolutionScope::AssemblyRef(r)  if r.value().is_corlib() => {
+                WellKnown::from_full_name(self.namespace(), self.name())
+            },
+            _ => return None,
+        }
+    }
+
     pub fn full_name_is(&self, namespace: &str, name: &str) -> bool {
         self.namespace() == namespace && self.name() == name
     }
     pub fn is_system_type(&self) -> bool {
-        // todo - check resolution scope is corlib
-        self.is_system_object() || self.is_system_value_type() || self.is_system_enum()
+        match self.resolution_scope() {
+            ResolutionScope::AssemblyRef(r)  if r.value().is_corlib() => {
+                self.is_system_object() || self.is_system_value_type() || self.is_system_enum()
+            },
+            _ => false,
+        }
     }
     pub fn is_system_enum(&self) -> bool {
-        // todo - check resolution scope is corlib
-        self.full_name_is("System", "Enum")
+        self.well_known() == Some(WellKnown::System(SystemType::Enum))
     }
     pub fn is_system_object(&self) -> bool {
-        // todo - check resolution scope is corlib
-        self.full_name_is("System", "Object")
+        self.well_known() == Some(WellKnown::System(SystemType::Object))
     }
     pub fn is_system_value_type(&self) -> bool {
-        // todo - check resolution scope is corlib
-        self.full_name_is("System", "ValueType")
+        self.well_known() == Some(WellKnown::System(SystemType::ValueType))
     }
 }
 
@@ -145,6 +170,16 @@ impl<'a> ReadEntry<TypeRef> for EntryReader<'a> {
             name: self.read(row.name)?,
             namespace: self.read(row.namespace)?,
         })
+    }
+}
+
+impl Display for TypeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(well_known) = self.well_known() {
+            write!(f, "{}", well_known.type_name())
+        }else{
+            write!(f, "{}", self.name())
+        }
     }
 }
 
@@ -313,21 +348,21 @@ impl Display for TypeDef {
         }
 
         if self.is_static() {
-            write!(f, "static ")?;
-        }
-
-        if self.is_interface() {
-            write!(f, "interface ")?;
-        } else if self.is_struct() {
-            if self.flags.contains(TypeAttributes::Sealed) {
-                write!(f, "readonly ")?;
+            write!(f, "static class ")?;
+        }else{
+            if self.is_interface() {
+                write!(f, "interface ")?;
+            } else if self.is_struct() {
+                if self.flags.contains(TypeAttributes::Sealed) {
+                    write!(f, "readonly ")?;
+                }
+                write!(f, "struct ")?;
+            } else {
+                if self.flags.contains(TypeAttributes::Sealed) {
+                    write!(f, "sealed ")?;
+                }
+                write!(f, "class ")?;
             }
-            write!(f, "struct ")?;
-        } else {
-            if self.flags.contains(TypeAttributes::Sealed) {
-                write!(f, "sealed ")?;
-            }
-            write!(f, "class ")?;
         }
 
         if !self.namespace().is_empty() {
@@ -528,7 +563,6 @@ impl<'a> ReadEntry<InterfaceImpl> for EntryReader<'a> {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct ModuleRef {
     pub(crate) name: String,
@@ -549,11 +583,10 @@ impl<'a> ReadEntry<ModuleRef> for EntryReader<'a> {
         _next: Option<&Self::RawRow>,
     ) -> Result<ModuleRef> {
         Ok(ModuleRef {
-            name:self.read(row.name)?,
+            name: self.read(row.name)?,
         })
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct TypeSpec {
@@ -580,26 +613,51 @@ impl<'a> ReadEntry<TypeSpec> for EntryReader<'a> {
     }
 }
 
-
-
 #[derive(Debug, Clone)]
 pub struct AssemblyRef {
-    pub major_version: u16,
-    pub minor_version: u16,
-    pub build_number: u16,
-    pub revision_number: u16,
-    pub flags: AssemblyFlags,
+    pub(crate) major_version: u16,
+    pub(crate) minor_version: u16,
+    pub(crate) build_number: u16,
+    pub(crate) revision_number: u16,
+    pub(crate) flags: AssemblyFlags,
     //pub public_key_or_token: Vec<u8>,
-    pub name: String,
-    pub locale: String,
+    pub(crate) name: String,
+    pub(crate) locale: String,
     //pub hash_value: Vec<u8>,
-
-    pub refrenced_assembly: Option<Rc<Module>>,
+    pub(crate) refrenced_assembly: Option<Rc<Module>>,
 }
 
 impl AssemblyRef {
     pub fn name(&self) -> &str {
         &self.name
+    }
+    pub fn version(&self) -> (u16, u16, u16, u16) {
+        (
+            self.major_version,
+            self.minor_version,
+            self.build_number,
+            self.revision_number,
+        )
+    }
+    pub fn flags(&self) -> AssemblyFlags {
+        self.flags
+    }
+    pub fn locale(&self) -> &str {
+        &self.locale
+    }
+
+    pub fn is_corlib(&self) -> bool {
+        const KNOWN_CORLIB_NAMES: &[&'static str] = &[
+            "mscorlib",
+            "System.Runtime",
+            "System.Private.CoreLib",
+            "netstandard",
+            "corefx",
+        ];
+
+        KNOWN_CORLIB_NAMES
+            .iter()
+            .any(|s| self.name.eq_ignore_ascii_case(s))
     }
 }
 
@@ -620,8 +678,7 @@ impl<'a> ReadEntry<AssemblyRef> for EntryReader<'a> {
             name: self.read(row.name)?,
             locale: self.read(row.locale)?,
 
-            refrenced_assembly: None
+            refrenced_assembly: None,
         })
     }
 }
-

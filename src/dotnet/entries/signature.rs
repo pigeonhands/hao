@@ -7,25 +7,26 @@ use crate::{
 };
 
 use super::{
-    values::{ModuleDef, ResolutionScopePtr, TypeDef, TypeDefOrRefPtr, TypeRef, TypeSpec},
+    values::{ModuleDef, ResolutionScopePtr, TypeDef, TypeDefOrRefPtr, TypeRef, TypeSpec, ModuleRef, AssemblyRef},
     Entry, RowEntry,
 };
 
 #[derive(Debug, Clone)]
 pub enum ResolutionScope {
     Module(Entry<ModuleDef>),
-    //ModuleRef,
-    //AssemblyRef,
+    ModuleRef(Entry<ModuleRef>),
+    AssemblyRef(Entry<AssemblyRef>),
     TypeRef(Entry<TypeRef>),
-    NotImplimented,
 }
 
 impl ResolutionScope {
     pub(crate) fn from_ent_pointer(ptr: ResolutionScopePtr) -> Option<Self> {
         match ptr {
             ResolutionScopePtr::Module(d) => Some(Self::Module(Entry(d))),
+            ResolutionScopePtr::ModuleRef(d) => Some(Self::ModuleRef(Entry(d))),
+            ResolutionScopePtr::AssemblyRef(d) => Some(Self::AssemblyRef(Entry(d))),
             ResolutionScopePtr::TypeRef(d) => Some(Self::TypeRef(Entry(d))),
-            _ => Some(Self::NotImplimented),
+            ResolutionScopePtr::None => None,
         }
     }
     pub(crate) fn from_ent_ptr_must(ptr: ResolutionScopePtr) -> Result<Self> {
@@ -37,9 +38,10 @@ impl ResolutionScope {
 impl Display for ResolutionScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Module(e) => write!(f, "<Module>({})", e.value().name),
+            Self::Module(e) => write!(f, "{}", e.value().name),
+            Self::ModuleRef(e) => write!(f, "{}", e.value().name),
+            Self::AssemblyRef(e) => write!(f, "{}", e.value().name),
             Self::TypeRef(e) => write!(f, "{}", e.value().name),
-            Self::NotImplimented => write!(f, "NotImplimented"),
         }
     }
 }
@@ -105,7 +107,7 @@ impl Display for TypeDefOrRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TypeDef(e) => write!(f, "{}", e.value().name()),
-            Self::TypeRef(e) => write!(f, "{}", e.value().name()),
+            Self::TypeRef(e) =>  write!(f, "{}", e.value()),
             Self::TypeSpec(s) => write!(f, "{}", s.value().signature()),
         }
     }
@@ -240,11 +242,10 @@ impl Display for ValueType {
             Self::ValueType(val) => write!(f, "{}", val),
             Self::SZArray(ty) => write!(f, "{}[]", ty),
             Self::CModReq(ty) => {
-                //write!(f, "CMOD({})", ty)
                 match ty {
-                    TypeDefOrRef::TypeDef(d) => write!(f, "CMOD(Def({:?}))", d),
-                    TypeDefOrRef::TypeRef(d) => write!(f, "CMOD(Ref({:?}))", d),
-                    TypeDefOrRef::TypeSpec(d) => write!(f, "CMOD(Spec({:?}))", d),
+                    TypeDefOrRef::TypeDef(d) => write!(f, "CMOD(Def({:?}))", d.value().name()),
+                    TypeDefOrRef::TypeRef(d) => write!(f, "CMOD(Ref({}))", d.value()),
+                    TypeDefOrRef::TypeSpec(d) => write!(f, "CMOD(Spec({:?}))", d.value()),
                 }
             }
             Self::Class(val) => write!(f, "{}", val),
