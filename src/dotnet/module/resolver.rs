@@ -25,8 +25,7 @@ pub struct PathAssemblyResolver {
 
 impl PathAssemblyResolver {
     pub fn new(path: &std::path::Path) -> Self {
-        let mut base_path = path.to_owned();
-        base_path.pop();
+        let base_path = path.to_owned();
         Self {
             base_path: base_path,
             assembly_list: Vec::new(),
@@ -67,7 +66,7 @@ impl AssemblyResolver for PathAssemblyResolver {
         }
 
         if let Some(found_path) = self.find_path_for(assembly_name) {
-            let loaded_asm = Rc::new(Module::from_path_no_resolve(found_path).map_err(|err| err)?);
+            let loaded_asm = Rc::new(Module::from_path_no_resolve(found_path)?);
             self.assembly_list
                 .push((assembly_name.into(), loaded_asm.clone()));
             loaded_asm.load_dependancies(self)?;

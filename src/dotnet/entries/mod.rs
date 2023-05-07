@@ -83,6 +83,7 @@ impl<'a, T> Entry<T> {
     ///
     /// This has the same semantics as borrowing
     /// from [`std::cell::RefCell::borrow()`] for this entry.
+    #[inline(always)]
     pub fn value(&self) -> Ref<RowEntry<T>> {
         self.0.value()
     }
@@ -91,18 +92,22 @@ impl<'a, T> Entry<T> {
     ///
     /// This has the same semantics as borrowing
     /// from (RefCell::borrow_mut)[`std::cell::RefCell::borrow_mut`] for this entry.
+    #[inline(always)]
     pub fn value_mut(&self) -> RefMut<T> {
         self.0.value_mut()
     }
 
+    #[inline(always)]
     pub fn try_value(&self) -> Option<Ref<RowEntry<T>>> {
         self.0.try_value()
     }
 
+    #[inline(always)]
     pub fn try_value_mut(&self) -> Option<RefMut<T>> {
         self.0.try_value_mut()
     }
 
+    #[inline(always)]
     pub fn map<E, F: FnOnce(Ref<RowEntry<T>>) -> E>(&self, func: F) -> E {
         func(self.value())
     }
@@ -121,6 +126,7 @@ impl<'a, T> EntryCollection<'a, T> {
     /// Borrows each item in the iterator.
     /// This has the same semantics as calling
     /// [`EntryView::value`] for each entry.
+    #[inline(always)]
     pub fn values(&self) -> EntryIteratorValue<'a, T> {
         EntryIteratorValue::new(&self.rows[self.position..])
     }
@@ -128,6 +134,7 @@ impl<'a, T> EntryCollection<'a, T> {
     /// Borrows each item in the iterator mutabily.
     /// This has the same semantics as calling
     /// [`EntryView::value_mut`] for each entry.
+    #[inline(always)]
     pub fn values_mut(&self) -> EntryIteratorValueMut<'a, T> {
         EntryIteratorValueMut::new(&self.rows[self.position..])
     }
@@ -136,10 +143,12 @@ impl<'a, T> EntryCollection<'a, T> {
     ///
     /// If you want to get the item at the .net rid, you need to use
     /// `rid - 1` as .net row id's start at 1, with 0 representing no value.
+    #[inline(always)]
     pub fn get_index(&self, index: usize) -> Option<Entry<T>> {
         self.rows.get(index).map(|v| Entry(v.clone()))
     }
 
+    #[inline(always)]
     pub fn find(&self, func: impl Fn(EntryView<'a, T>) -> bool) -> Option<Entry<T>> {
         self.rows
             .iter()

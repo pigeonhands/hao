@@ -127,6 +127,7 @@ impl<T> Ptr<T> {
         Self(Rc::new(RefCell::new(MaybeUnsetEntry::new_unset())))
     }
 
+    #[inline(always)]
     pub fn is_set(&self) -> bool {
         self.0.borrow().is_set()
     }
@@ -135,26 +136,31 @@ impl<T> Ptr<T> {
         Rc::strong_count(&self.0) > 1
     }
 
+    #[inline(always)]
     pub fn set_value(&self, index: u32, value: T) {
         let mut val_ref = self.0.borrow_mut();
         val_ref.set_value(index, value);
     }
 
+    #[inline(always)]
     pub fn value(&self) -> Ref<RowEntry<T>> {
         let r = self.0.borrow();
         Ref::map(r, |x| x.as_ref())
     }
 
+    #[inline(always)]
     pub fn value_mut(&self) -> RefMut<T> {
         let r = self.0.borrow_mut();
         RefMut::map(r, |x| &mut x.as_mut().value)
     }
 
+    #[inline(always)]
     pub fn try_value(&self) -> Option<Ref<RowEntry<T>>> {
         let r = self.0.try_borrow();
         r.ok().map(|r| Ref::map(r, |x| x.as_ref()))
     }
 
+    #[inline(always)]
     pub fn try_value_mut(&self) -> Option<RefMut<T>> {
         let r = self.0.try_borrow_mut();
         r.ok().map(|r| RefMut::map(r, |x| &mut x.as_mut().value))

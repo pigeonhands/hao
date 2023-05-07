@@ -46,10 +46,12 @@ impl Module {
     /// let module = Module::from_path(r#"Example.Net.dll"#)?;
     /// ```
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self> {
-        let data = std::fs::read(path.as_ref()).map_err(HaoError::IoError)?;
+        let mut exec_path = path.as_ref().to_owned();
+        let data = std::fs::read(&exec_path).map_err(HaoError::IoError)?;
         let md = Metadata::parse(&data)?;
         let asm = Self::from_metadata(&md)?;
-        let mut resolver: PathAssemblyResolver = PathAssemblyResolver::new(path.as_ref());
+        exec_path.pop();
+        let mut resolver: PathAssemblyResolver = PathAssemblyResolver::new(&exec_path);
         asm.load_dependancies(&mut resolver)?;
         Ok(asm)
     }
@@ -127,12 +129,14 @@ impl Module {
     }
 
     /// Returns the module infomation of the current module as a [`EntryView`].
+    #[inline(always)]
     pub fn module(&self) -> EntryView<ModuleDef> {
         EntryView(&self.modules[0])
     }
 
     /// Returns an [`EntryCollection`] of [`TypeRef`] with  all the type refrences
     /// inside the current module.
+    #[inline(always)]
     pub fn type_refs(&self) -> EntryCollection<TypeRef> {
         EntryCollection::new(&self.type_refs)
     }
@@ -147,6 +151,7 @@ impl Module {
     ///     println!("{}", ty);
     /// }
     /// ```
+    #[inline(always)]
     pub fn types(&self) -> EntryCollection<TypeDef> {
         EntryCollection::new(&self.type_defs)
     }
@@ -162,6 +167,7 @@ impl Module {
     ///     println!("{} {}", field.signature(), field.name());
     /// }
     /// ```
+    #[inline(always)]
     pub fn all_fields(&self) -> EntryCollection<Field> {
         EntryCollection::new(&self.fields)
     }
@@ -177,6 +183,7 @@ impl Module {
     ///    println!("{}", method.name());
     /// }
     /// ```
+    #[inline(always)]
     pub fn all_methods(&self) -> EntryCollection<Method> {
         EntryCollection::new(&self.methods)
     }
@@ -192,21 +199,25 @@ impl Module {
     ///     println!("{}", param.name());
     /// }
     /// ```
+    #[inline(always)]
     pub fn all_params(&self) -> EntryCollection<Param> {
         EntryCollection::new(&self.params)
     }
 
     /// Returns all the type specs  defined in the module.
+    #[inline(always)]
     pub fn all_type_specs(&self) -> EntryCollection<TypeSpec> {
         EntryCollection::new(&self.type_specs)
     }
 
     /// Returns all the modules refrenced in the module.
+    #[inline(always)]
     pub fn module_ref(&self) -> EntryCollection<ModuleRef> {
         EntryCollection::new(&self.module_ref)
     }
 
     /// Returns all the assemblies  refrenced in the module.
+    #[inline(always)]
     pub fn assembly_ref(&self) -> EntryCollection<AssemblyRef> {
         EntryCollection::new(&self.assembly_ref)
     }

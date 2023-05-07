@@ -20,7 +20,7 @@ hao
 [crates-hao-badge]: https://img.shields.io/crates/v/hao.svg?style=for-the-badge&color=fc8d62&logo=rust
 [crates-hao]: https://crates.io/crates/hao
 [docs-hao-badge]: https://img.shields.io/badge/docs.rs-hao-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs
-[docs-hao]: https://docs.rs/crates/hao
+[docs-hao]: https://docs.rs/hao
 
 
 -----

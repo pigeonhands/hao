@@ -144,12 +144,7 @@ impl TypeRef {
     }
 
     pub fn is_system_type(&self) -> bool {
-        match self.resolution_scope() {
-            ResolutionScope::AssemblyRef(r) if r.value().is_corlib() => {
-                self.is_system_object() || self.is_system_value_type() || self.is_system_enum()
-            }
-            _ => false,
-        }
+        SystemType::from_full_name(self.namespace(), self.name()).is_some()
     }
 
     pub fn is_corlib(&self) -> bool {
@@ -163,17 +158,6 @@ impl TypeRef {
         SystemType::from_full_name(self.namespace(), self.name()) == Some(system_type)
     }
 
-    pub fn is_system_enum(&self) -> bool {
-        self.is_system_type_instance(SystemType::Enum)
-    }
-
-    pub fn is_system_object(&self) -> bool {
-        self.is_system_type_instance(SystemType::Object)
-    }
-
-    pub fn is_system_value_type(&self) -> bool {
-        self.is_system_type_instance(SystemType::ValueType)
-    }
 }
 
 impl<'a> ReadEntry<TypeRef> for EntryReader<'a> {
@@ -302,22 +286,23 @@ impl TypeDef {
     pub fn methods(&self) -> EntryCollection<Method> {
         EntryCollection::new(&self.method_list)
     }
+
+    pub fn extends_system_type(&self, system_type: SystemType) -> bool {
+        match self.extends() {
+            Some(TypeDefOrRef::TypeRef(tref)) => tref.value().is_system_type_instance(system_type),
+            _ => false,
+        }
+    }
     pub fn full_name_is(&self, namespace: &str, name: &str) -> bool {
         (namespace, name) == (self.namespace(), self.name())
     }
+    
     pub fn is_static(&self) -> bool {
         self.flags.contains(TypeAttributes::AutoLayout)
             && self.flags.contains(TypeAttributes::Class)
             && self.flags.contains(TypeAttributes::Abstract)
             && self.flags.contains(TypeAttributes::Sealed)
-            && self
-                .extends
-                .as_ref()
-                .map(|c| match c {
-                    TypeDefOrRef::TypeRef(r) => r.value().is_system_object(),
-                    _ => false,
-                })
-                .unwrap_or(false)
+            && self.extends_system_type(SystemType::Object)
     }
 
     pub fn is_enum(&self) -> bool {
@@ -326,14 +311,7 @@ impl TypeDef {
             && flags.contains(TypeAttributes::AutoLayout)
             && flags.contains(TypeAttributes::Class)
             && flags.contains(TypeAttributes::Sealed)
-            && self
-                .extends
-                .as_ref()
-                .map(|c| match c {
-                    TypeDefOrRef::TypeRef(r) => r.value().is_system_enum(),
-                    _ => false,
-                })
-                .unwrap_or(false)
+            && self.extends_system_type(SystemType::Enum)
     }
     pub fn is_interface(&self) -> bool {
         self.extends().is_none()
@@ -341,25 +319,18 @@ impl TypeDef {
             && self.flags.contains(TypeAttributes::Interface)
     }
     pub fn is_struct(&self) -> bool {
-        match &self.extends {
-            Some(exent) => {
-                if exent.is_type_ref_and(|r| {
-                    r.is_system_value_type()
-                }) {}
-            }
-            _ => return false,
-        };
         self.flags.contains(TypeAttributes::Class)
             && self.flags.contains(TypeAttributes::Sealed)
             && !self.flags.contains(TypeAttributes::Abstract)
+            && self.extends_system_type(SystemType::ValueType)
     }
     pub fn is_delegate(&self) -> bool {
-        // base is "System", "MulticastDelegate"
         let flags = self.flags;
         !flags.contains(TypeAttributes::AutoLayout)
             && !flags.contains(TypeAttributes::Abstract)
             && flags.contains(TypeAttributes::Class)
             && flags.contains(TypeAttributes::Sealed)
+            && self.extends_system_type(SystemType::MulticastDelegate)
     }
 }
 

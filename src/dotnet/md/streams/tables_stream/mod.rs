@@ -96,11 +96,6 @@ impl<'a> TablesStreams<'a> {
 
         let heap_data = reader.remaning_slice();
 
-        // let values: TablesValues = {
-        //     let mut tables_reader = TablesStreamReader::new(heap_data, &header);
-        //     tables_reader.read()?
-        // };
-
         Ok(Self { header, heap_data })
     }
 
