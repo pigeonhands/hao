@@ -4,7 +4,7 @@ authors = ["Sam M."]
 categories = ["parsing"]
 keywords = [".net", "managed", "c#", "mono.cecil", "dnlib"]
 
-version = "0.0.1-prerelease"
+version = "0.0.2-prerelease"
 edition = "2021"
 description = ".net binary reader"
 license = "MIT"
