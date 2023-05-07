@@ -38,13 +38,13 @@ impl<T: Sized> MaybeUnsetEntry<T> {
         self.is_set
     }
 
-    pub fn set_value(&mut self, row: u32, value: T) {
+    pub fn set_value(&mut self, index: u32, value: T) {
         if self.is_set() {
             unsafe {
                 self.value.assume_init_drop();
             }
         }
-        self.value.write(RowEntry::new(value, row));
+        self.value.write(RowEntry::new(value, index));
         self.is_set = true;
     }
 }
@@ -117,13 +117,14 @@ impl<T> DerefMut for RowEntry<T> {
 }
 
 impl<T> Display for RowEntry<T>
-where T: Display {
+where
+    T: Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)
     }
 }
 
-#[derive(Clone)]
 // Ptr should only ever be used as an internal type
 pub(crate) struct Ptr<T>(pub Rc<RefCell<MaybeUnsetEntry<T>>>);
 pub(crate) type EntList<T> = Vec<Ptr<T>>;
@@ -141,9 +142,9 @@ impl<T> Ptr<T> {
         Rc::strong_count(&self.0) > 1
     }
 
-    pub fn set_value(&self, row: u32, value: T) {
+    pub fn set_value(&self, index: u32, value: T) {
         let mut val_ref = self.0.borrow_mut();
-        val_ref.set_value(row, value);
+        val_ref.set_value(index, value);
     }
 
     pub fn value(&self) -> Ref<RowEntry<T>> {
@@ -164,6 +165,12 @@ impl<T> Ptr<T> {
     pub fn try_value_mut(&self) -> Option<RefMut<T>> {
         let r = self.0.try_borrow_mut();
         r.ok().map(|r| RefMut::map(r, |x| &mut x.as_mut().value))
+    }
+}
+
+impl<T> Clone for Ptr<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
     }
 }
 

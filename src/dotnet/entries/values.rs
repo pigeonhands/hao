@@ -7,20 +7,20 @@ use super::{
         },
         SignatureDef,
     },
-    signature::{FieldSignature, ResolutionScope, TypeDefOrRef, ValueType, TypeSignature},
+    signature::{FieldSignature, ResolutionScope, TypeDefOrRef, TypeSignature, ValueType},
     EntryCollection, EntryView, {Ptr, ReadEntry, RowRange},
 };
 use crate::{
     dotnet::{
         entries::{GetEntryField, MaybeUninitEntries},
-        md::streams::{tables_stream::{
-            InterfaceImplTableRow, ParamFlags, ParamTableRow, TypeSpecTableRow,
-        }, TypeSigDef},
+        md::streams::{
+            tables_stream::{InterfaceImplTableRow, ParamFlags, ParamTableRow, TypeSpecTableRow, ModuleRefTableRow, AssemblyRefTableRow, AssemblyFlags},
+        }, 
     },
     error::{HaoError, Result},
-    io::{EntryReader, ValueReadable},
+    io::{EntryReader, ValueReadable}, Module,
 };
-use std::fmt::{Debug, Display};
+use std::{fmt::{Debug, Display}, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub struct ModuleDef {
@@ -29,6 +29,12 @@ pub struct ModuleDef {
     pub mvid: uuid::Uuid,
     pub enc_id: uuid::Uuid,
     pub enc_base_id: uuid::Uuid,
+}
+
+impl ModuleDef {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl<'a> ReadEntry<ModuleDef> for EntryReader<'a> {
@@ -522,6 +528,33 @@ impl<'a> ReadEntry<InterfaceImpl> for EntryReader<'a> {
     }
 }
 
+
+#[derive(Debug, Clone)]
+pub struct ModuleRef {
+    pub(crate) name: String,
+}
+
+impl ModuleRef {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl<'a> ReadEntry<ModuleRef> for EntryReader<'a> {
+    type RawRow = ModuleRefTableRow;
+    fn from_row(
+        &self,
+        _: usize,
+        row: &Self::RawRow,
+        _next: Option<&Self::RawRow>,
+    ) -> Result<ModuleRef> {
+        Ok(ModuleRef {
+            name:self.read(row.name)?,
+        })
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub struct TypeSpec {
     pub(crate) signature: TypeSignature,
@@ -546,3 +579,49 @@ impl<'a> ReadEntry<TypeSpec> for EntryReader<'a> {
         })
     }
 }
+
+
+
+#[derive(Debug, Clone)]
+pub struct AssemblyRef {
+    pub major_version: u16,
+    pub minor_version: u16,
+    pub build_number: u16,
+    pub revision_number: u16,
+    pub flags: AssemblyFlags,
+    //pub public_key_or_token: Vec<u8>,
+    pub name: String,
+    pub locale: String,
+    //pub hash_value: Vec<u8>,
+
+    pub refrenced_assembly: Option<Rc<Module>>,
+}
+
+impl AssemblyRef {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl<'a> ReadEntry<AssemblyRef> for EntryReader<'a> {
+    type RawRow = AssemblyRefTableRow;
+    fn from_row(
+        &self,
+        _: usize,
+        row: &Self::RawRow,
+        _next: Option<&Self::RawRow>,
+    ) -> Result<AssemblyRef> {
+        Ok(AssemblyRef {
+            major_version: row.major_version,
+            minor_version: row.minor_version,
+            build_number: row.build_number,
+            revision_number: row.revision_number,
+            flags: row.flags,
+            name: self.read(row.name)?,
+            locale: self.read(row.locale)?,
+
+            refrenced_assembly: None
+        })
+    }
+}
+

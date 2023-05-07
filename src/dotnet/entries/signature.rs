@@ -29,7 +29,8 @@ impl ResolutionScope {
         }
     }
     pub(crate) fn from_ent_ptr_must(ptr: ResolutionScopePtr) -> Result<Self> {
-        Self::from_ent_pointer(ptr).ok_or_else(|| HaoError::InvalidSignatureForEntry(std::any::type_name::<Self>()))
+        Self::from_ent_pointer(ptr)
+            .ok_or_else(|| HaoError::InvalidSignatureForEntry(std::any::type_name::<Self>()))
     }
 }
 
@@ -60,7 +61,8 @@ impl TypeDefOrRef {
         }
     }
     pub(crate) fn from_ent_ptr_must(ptr: TypeDefOrRefPtr) -> Result<Self> {
-        Self::from_ent_pointer(ptr).ok_or_else(|| HaoError::InvalidSignatureForEntry(std::any::type_name::<Self>()))
+        Self::from_ent_pointer(ptr)
+            .ok_or_else(|| HaoError::InvalidSignatureForEntry(std::any::type_name::<Self>()))
     }
 
     pub fn is_type_ref_and(&self, func: impl FnOnce(Ref<RowEntry<TypeRef>>) -> bool) -> bool {
@@ -136,7 +138,7 @@ pub enum ValueType {
     Class(TypeDefOrRef),
     //FnPtr(Box<SignatureDef>),
     SZArray(Box<ValueType>),
-    // CModReq(TypeDefOrRefSig),
+    CModReq(TypeDefOrRef),
     // CModOpt(TypeDefOrRefSig),
     //Pinned(Box<SignatureType>),
     Var {
@@ -185,7 +187,12 @@ impl ValueType {
 
             TypeSigDef::ValueType(ptr) => Self::ValueType(TypeDefOrRef::from_ent_ptr_must(ptr.0)?),
             TypeSigDef::SZArray(ty) => Self::SZArray(Box::new(Self::from_type_sig(*ty)?)),
-            TypeSigDef::Var { generic_param_index } => Self::Var { generic_param_index },
+            TypeSigDef::CModReq(ty) => Self::CModReq(TypeDefOrRef::from_ent_ptr_must(ty.0)?),
+            TypeSigDef::Var {
+                generic_param_index,
+            } => Self::Var {
+                generic_param_index,
+            },
             TypeSigDef::Class(ptr) => Self::Class(TypeDefOrRef::from_ent_ptr_must(ptr.0)?),
             TypeSigDef::ValueArray { len, next_sig: ty } => Self::ValueArray {
                 len,
@@ -202,7 +209,7 @@ impl ValueType {
                 ty: Box::new(Self::from_type_sig(*ty)?),
                 size,
             },
-            
+
             t => Self::NotDone(t), // return Err(HaoError::InvalidSignatureForEntry),
         };
         Ok(sig)
@@ -232,10 +239,22 @@ impl Display for ValueType {
             Self::Object => write!(f, "object"),
             Self::ValueType(val) => write!(f, "{}", val),
             Self::SZArray(ty) => write!(f, "{}[]", ty),
+            Self::CModReq(ty) => {
+                //write!(f, "CMOD({})", ty)
+                match ty {
+                    TypeDefOrRef::TypeDef(d) => write!(f, "CMOD(Def({:?}))", d),
+                    TypeDefOrRef::TypeRef(d) => write!(f, "CMOD(Ref({:?}))", d),
+                    TypeDefOrRef::TypeSpec(d) => write!(f, "CMOD(Spec({:?}))", d),
+                }
+            }
             Self::Class(val) => write!(f, "{}", val),
             Self::ValueArray { .. } => panic!("valuearray?"),
-            Self::Var { generic_param_index: generic_params } => write!(f, "T{}", generic_params),
-            Self::MVar { generic_param_index: generic_params } => write!(f, "M{}", generic_params),
+            Self::Var {
+                generic_param_index: generic_params,
+            } => write!(f, "T{}", generic_params),
+            Self::MVar {
+                generic_param_index: generic_params,
+            } => write!(f, "M{}", generic_params),
             Self::GenericInst { ty, generic_args } => {
                 write!(f, "{}", ty)?;
                 write!(f, "<")?;
@@ -246,7 +265,7 @@ impl Display for ValueType {
                     write!(f, "{}", ty)?;
                 }
                 write!(f, ">")
-            },
+            }
             Self::Array { ty, size } => match size {
                 ArraySize::SingleDimention => write!(f, "{}[]", ty),
                 ArraySize::MultiDimention { sizes, .. } => {
@@ -255,7 +274,7 @@ impl Display for ValueType {
             },
             Self::Module(_, _) => write!(f, "ValueType(Module)"),
             Self::NotDone(x) => write!(f, "{:?}", x),
-          // _ => write!(f, "ValueType(Other)"),
+            // _ => write!(f, "ValueType(Other)"),
         }
     }
 }
@@ -267,7 +286,11 @@ impl FieldSignature {
     pub fn from_sig_def(sig: SignatureDef) -> Result<Self> {
         let field_sig = match sig.calling_convention {
             SignatureCallingConvention::Field(field) => field,
-            _ => return Err(HaoError::InvalidSignatureForEntry(std::any::type_name::<Self>())),
+            _ => {
+                return Err(HaoError::InvalidSignatureForEntry(std::any::type_name::<
+                    Self,
+                >()))
+            }
         };
 
         Ok(Self(ValueType::from_type_sig(field_sig)?))
@@ -277,6 +300,71 @@ impl FieldSignature {
 impl Display for FieldSignature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+#[derive(Clone, Debug)]
+pub struct MethodSignature {
+    pub return_type: Box<TypeSignature>,
+    pub generic_params: Option<u32>,
+    pub parameters: Vec<TypeSignature>,
+    pub params_after_sentinel: Option<Vec<TypeSignature>>,
+}
+
+
+impl MethodSignature {
+    pub fn from_sig_def(sig: SignatureDef) -> Result<Self> {
+        let method_sig = match sig.calling_convention {
+            SignatureCallingConvention::Method(method) => method,
+            _ => {
+                return Err(HaoError::InvalidSignatureForEntry(std::any::type_name::<
+                    Self,
+                >()))
+            }
+        };
+
+        Ok(Self {
+            return_type: Box::from(TypeSignature::from_sig_def(*method_sig.return_type)?),
+            generic_params: method_sig.generic_params,
+            parameters: method_sig
+                .parameters
+                .into_iter()
+                .map(|sig| TypeSignature::from_sig_def(sig))
+                .collect::<Result<_>>()?,
+            params_after_sentinel: method_sig
+                .params_after_sentinel
+                .map(|params| {
+                    params
+                        .into_iter()
+                        .map(|sig| TypeSignature::from_sig_def(sig))
+                        .collect::<Result<Vec<_>>>()
+                })
+                .transpose()?,
+        })
+    }
+}
+
+impl Display for MethodSignature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "fn(")?;
+        for (index,param) in self.parameters.iter().enumerate() {
+            if index > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", param)?;
+        }
+
+        if let Some(generic_params) = self.generic_params {
+            write!(f, "<")?;
+            for index in 0..generic_params {
+                if index > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "T{}", index)?;
+            }
+            write!(f, ">")?;
+        }
+        write!(f, ") -> {}", self.return_type)?;
+        Ok(())
     }
 }
 
@@ -289,11 +377,20 @@ impl Deref for FieldSignature {
 }
 
 #[derive(Clone, Debug)]
-pub enum TypeSignature{
-    GenericInst{ ty: ValueType, generic_args: Vec<ValueType> },
-    ClassVariable { generic_param_index: u32 },
-    MethodVariable { generic_param_index: u32 },
-    SZArray(ValueType)
+pub enum TypeSignature {
+    GenericInst {
+        ty: ValueType,
+        generic_args: Vec<ValueType>,
+    },
+    ClassVariable {
+        generic_param_index: u32,
+    },
+    MethodVariable {
+        generic_param_index: u32,
+    },
+    SZArray(ValueType),
+    FnPtr(MethodSignature),
+    Other(TypeSigDef),
 }
 
 impl TypeSignature {
@@ -306,10 +403,24 @@ impl TypeSignature {
                     .map(ValueType::from_type_sig)
                     .collect::<Result<_>>()?,
             }),
-            TypeSigDef::Var { generic_param_index } => Ok(Self::ClassVariable { generic_param_index }),
-            TypeSigDef::MVar { generic_param_index } => Ok(Self::MethodVariable { generic_param_index }),
+            TypeSigDef::Var {
+                generic_param_index,
+            } => Ok(Self::ClassVariable {
+                generic_param_index,
+            }),
+            TypeSigDef::MVar {
+                generic_param_index,
+            } => Ok(Self::MethodVariable {
+                generic_param_index,
+            }),
             TypeSigDef::SZArray(ty) => Ok(Self::SZArray(ValueType::from_type_sig(*ty)?)),
-            n => return Err(HaoError::InvalidSignatureForEntry(std::any::type_name::<Self>())),
+            TypeSigDef::FnPtr(fn_ptr) => Ok(Self::FnPtr(MethodSignature::from_sig_def(*fn_ptr)?)),
+            e => {
+                Ok(Self::Other(e))
+                // /return Err(HaoError::InvalidSignatureForEntry(std::any::type_name::<
+                // /    Self,
+                // />()));
+            }
         }
     }
 }
@@ -327,11 +438,16 @@ impl Display for TypeSignature {
                     write!(f, "{}", ty)?;
                 }
                 write!(f, ">")
-            },
-            Self::ClassVariable { generic_param_index } => write!(f, "GenericVar({})", generic_param_index),
-            Self::MethodVariable { generic_param_index } => write!(f, "GenericMethodVar({})", generic_param_index),
-            Self::SZArray(ty) => write!(f, "{}[]", ty)
+            }
+            Self::ClassVariable {
+                generic_param_index,
+            } => write!(f, "GenericVar({})", generic_param_index),
+            Self::MethodVariable {
+                generic_param_index,
+            } => write!(f, "GenericMethodVar({})", generic_param_index),
+            Self::SZArray(ty) => write!(f, "{}[]", ty),
+            Self::FnPtr(fnptr) => write!(f, "&{}", fnptr),
+            Self::Other(t) => write!(f, "{:?}", t)
         }
-       
     }
 }

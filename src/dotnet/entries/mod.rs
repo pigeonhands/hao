@@ -2,13 +2,15 @@ mod containers;
 pub mod signature;
 pub mod values;
 pub mod well_known;
-use std::{
-    cell::{Ref, RefMut, RefCell},
-};
+use std::cell::{Ref, RefCell, RefMut};
 
-use super::md::streams::tables_stream::metadata::TableLocations;
+use super::{
+    md::streams::tables_stream::metadata::TableLocations,
+};
 use crate::{
-    dotnet::md::streams::tables_stream::{TableLocation, TablesStreamReader},
+    dotnet::md::streams::tables_stream::{
+        TableLocation, TablesStreamReader,
+    },
     error::Result,
     io::{EntryReader, ReadData},
 };
@@ -43,12 +45,13 @@ pub trait GetEntryField<T> {
 }
 
 #[derive(Debug)]
-pub struct EntryView<'a, T>(pub (crate) &'a Ptr<T>);
+pub struct EntryView<'a, T>(pub(crate) &'a Ptr<T>);
 
 impl<'a, T> EntryView<'a, T> {
     pub fn value(&self) -> Ref<RowEntry<T>> {
         self.0.value()
     }
+
     pub fn value_mut(&self) -> RefMut<T> {
         self.0.value_mut()
     }
@@ -67,7 +70,7 @@ impl<'a, T> EntryView<'a, T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Entry<T>(pub (crate) Ptr<T>);
+pub struct Entry<T>(pub(crate) Ptr<T>);
 
 impl<'a, T> Entry<T> {
     pub fn value(&self) -> Ref<RowEntry<T>> {
@@ -108,18 +111,12 @@ impl<'a, T> EntryCollection<'a, T> {
         EntryIteratorValueMut::new(&self.rows[self.position..])
     }
 
-    pub fn get_rid(&self, rid: usize) -> Option<Ref<'a, RowEntry<T>>> {
-        rid.checked_sub(1)
-            .map(|rid| self.rows.get(rid))
-            .flatten()
-            .map(|v| v.value())
-    }
-
-    pub fn get_rid_mut(&self, rid: usize) -> Option<RefMut<'a, T>> {
-        rid.checked_sub(1)
-            .map(|rid| self.rows.get(rid))
-            .flatten()
-            .map(|v| v.value_mut())
+    /// Gets the item in the current collection at `index` position.
+    ///
+    /// If you want to get the item at the .net rid, you need to use
+    /// `rid - 1` as .net row id's start at 1, with 0 representing no value.
+    pub fn get_index(&self, index: usize) -> Option<Entry<T>> {
+        self.rows.get(index).map(|v| Entry(v.clone()))
     }
 }
 
@@ -190,8 +187,11 @@ pub(crate) struct MaybeUninitEntries {
     pub params: EntList<Param>,
     pub interface_impls: Vec<RefCell<MaybeUnsetEntry<InterfaceImpl>>>,
 
+    pub module_ref: EntList<ModuleRef>,
+    pub type_specs: EntList<TypeSpec>,
 
-    pub(crate) type_specs: EntList<TypeSpec>,
+
+    pub assembly_ref: EntList<AssemblyRef>,
 }
 
 impl MaybeUninitEntries {
@@ -219,28 +219,28 @@ impl MaybeUninitEntries {
             params: init_ent_list(locations.param),
             interface_impls: init_metadata_list(locations.interface_impl),
 
-
-
+            module_ref: init_ent_list(locations.module_ref),
             type_specs: init_ent_list(locations.type_spec),
+
+            assembly_ref: init_ent_list(locations.assembly_ref),
         }
     }
 
     pub fn init_rows(&self, locations: &TableLocations, reader: &EntryReader) -> Result<()> {
-
         fn write_ent<V>(entry: &Ptr<V>, value: V, index: usize) {
             let row = (index + 1) as u32; // // 0 = none. Row id's start at 1.
             entry.set_value(row, value);
         }
         fn write_metadata<V>(entry: &RefCell<MaybeUnsetEntry<V>>, value: V, index: usize) {
-            let row = (index + 1) as u32; // // 0 = none. Row id's start at 1.        
+            let row = (index + 1) as u32; // // 0 = none. Row id's start at 1.
             entry.borrow_mut().set_value(row, value);
         }
-        
+
         fn init_ent_list<'a, T, V>(
             uninit_rows: &Vec<T>,
             location: &TableLocation,
             reader: &EntryReader<'a>,
-            write_value: fn(entry: &T, V, usize)
+            write_value: fn(entry: &T, V, usize),
         ) -> Result<()>
         where
             EntryReader<'a>: ReadEntry<V>,
@@ -260,9 +260,9 @@ impl MaybeUninitEntries {
                     Some((_, Ok(v))) => Some(v),
                     _ => None,
                 };
-                
-                let entry = &uninit_rows[index];
+
                 let val = reader.from_row(index, &row, next)?;
+                let entry = &uninit_rows[index];
                 write_value(entry, val, index);
             }
 
@@ -275,11 +275,21 @@ impl MaybeUninitEntries {
         init_ent_list(&self.fields, &locations.field, reader, write_ent)?;
         init_ent_list(&self.methods, &locations.method, reader, write_ent)?;
         init_ent_list(&self.params, &locations.param, reader, write_ent)?;
-        init_ent_list(&self.interface_impls, &locations.interface_impl, reader, write_metadata)?;
-
-
+        init_ent_list(
+            &self.interface_impls,
+            &locations.interface_impl,
+            reader,
+            write_metadata,
+        )?;
+        init_ent_list(&self.module_ref, &locations.module_ref, reader, write_ent)?;
         init_ent_list(&self.type_specs, &locations.type_spec, reader, write_ent)?;
 
+        init_ent_list(
+            &self.assembly_ref,
+            &locations.assembly_ref,
+            reader,
+            write_ent,
+        )?;
         Ok(())
     }
 }

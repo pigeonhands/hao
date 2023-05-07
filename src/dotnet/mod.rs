@@ -3,4 +3,5 @@ pub mod md;
 pub mod metadata;
 pub(crate) mod module;
 
-pub use module::Module;
+pub use module::{Module};
+

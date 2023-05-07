@@ -1,3 +1,5 @@
+use num_traits::Zero;
+
 use crate::{
     dotnet::{
         entries::{values::TypeDef, GetEntryField, MaybeUninitEntries},
@@ -86,17 +88,23 @@ where
         let start = self.to_index(identifier.start)?;
         let end = identifier.end.map(|v| self.to_index(v)).transpose()?;
 
-        if start >= target_rows.len() {
-            return Err(HaoError::InvalidEntryRefrence(
-                std::any::type_name::<Self::EntryValue>(),
-                start,
-            ));
-        }
-
         let end = end.unwrap_or(target_rows.len());
 
-        let slice = target_rows.get(start..end).unwrap_or(&target_rows[start..]);
-        Ok(slice.to_vec())
+        if start==end {
+            return Ok(Vec::new())
+        }else {
+            if start >= target_rows.len() {
+                return Err(HaoError::InvalidEntryRefrence(
+                    std::any::type_name::<Self::EntryValue>(),
+                    start,
+                ));
+            }
+    
+            let slice = target_rows.get(start..end).unwrap_or(&target_rows[start..]);
+            Ok(slice.to_vec())
+        }
+
+       
     }
 }
 

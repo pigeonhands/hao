@@ -153,7 +153,7 @@ impl SignatureCallingConvention {
 }
 
 #[derive(Clone)]
-pub struct TypeDefOrRefSig(pub (crate)TypeDefOrRefPtr);
+pub struct TypeDefOrRefSig(pub(crate) TypeDefOrRefPtr);
 
 // This is to stop infinite reccursion when debug printing
 impl Debug for TypeDefOrRefSig {
@@ -397,13 +397,12 @@ impl MethodSig {
                 generic_params: None,
                 parameters: Vec::new(),
                 params_after_sentinel: None,
-                return_type
-            })
+                return_type,
+            });
         }
-        
+
         let mut parameters = Vec::with_capacity(num_params as usize);
         let mut params_after_sentinel: Option<Vec<TypeSigDef>> = None;
-
 
         for _ in 0..num_params {
             let ty = reader.read()?;
