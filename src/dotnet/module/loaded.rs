@@ -41,7 +41,7 @@ pub struct Module {
 impl Module {
     /// Load a .net assembly from the given path and resolve its dependancies
     /// with the default [`PathAssemblyResolver`] resolver.
-    /// 
+    ///
     /// ```no_run
     /// let module = Module::from_path(r#"Example.Net.dll"#)?;
     /// ```
@@ -49,21 +49,13 @@ impl Module {
         let data = std::fs::read(path.as_ref()).map_err(HaoError::IoError)?;
         let md = Metadata::parse(&data)?;
         let asm = Self::from_metadata(&md)?;
-
-        dbg!(
-            &md.metadata_streams
-                .tables_stream
-                .header
-                .table_locations
-                .field
-        );
         let mut resolver: PathAssemblyResolver = PathAssemblyResolver::new(path.as_ref());
         asm.load_dependancies(&mut resolver)?;
         Ok(asm)
     }
 
-    /// Load a .net assembly from the given path and but do not reolve its dependancies.
-    /// 
+    /// Load a .net assembly from the given path but do not reolve its dependancies.
+    ///
     /// ```no_run
     /// let module = Module::from_path_no_resolve(r#"Example.Net.dll"#)?;
     /// ```
@@ -119,10 +111,10 @@ impl Module {
     }
 
     /// Attempts to load the refrenced assemblies using the given resolver.
-    /// This will panic if there is a refrence holding any of the [`AssemblyRef`] in this module. 
+    /// This will panic if there is a refrence holding any of the [`AssemblyRef`] in this module.
     pub fn load_dependancies(&self, resolver: &mut impl AssemblyResolver) -> Result<()> {
         for asm in self.assembly_ref.iter() {
-            let mut asm = asm.value_mut();
+            let mut asm: std::cell::RefMut<AssemblyRef> = asm.value_mut();
             if asm.refrenced_assembly.is_some() {
                 continue;
             }
@@ -145,13 +137,12 @@ impl Module {
         EntryCollection::new(&self.type_refs)
     }
 
-    /// Returns an [`EntryCollection`] of [`TypeDef`] with all the type refrences
-    /// inside the current module.
-    /// 
+    /// Returns all the type refrences inside the current module.
+    ///
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// 
+    ///
     /// for ty in module.types().values() {
     ///     println!("{}", ty);
     /// }
@@ -166,7 +157,7 @@ impl Module {
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// 
+    ///
     /// for field in module.all_fields().values() {
     ///     println!("{} {}", field.signature(), field.name());
     /// }
@@ -181,7 +172,7 @@ impl Module {
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// 
+    ///
     /// for method in module.all_methods().values() {
     ///    println!("{}", method.name());
     /// }
@@ -196,7 +187,7 @@ impl Module {
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// 
+    ///
     /// for param in module.all_params().values() {
     ///     println!("{}", param.name());
     /// }

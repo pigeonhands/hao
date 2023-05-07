@@ -419,7 +419,9 @@ impl TypeSignature {
             TypeSigDef::SZArray(ty) => Ok(Self::SZArray(ValueType::from_type_sig(*ty)?)),
             TypeSigDef::FnPtr(fn_ptr) => Ok(Self::FnPtr(MethodSignature::from_sig_def(*fn_ptr)?)),
             TypeSigDef::Class(class) => Ok(Self::Class(TypeDefOrRef::from_ent_ptr_must(class.0)?)),
-            TypeSigDef::ValueType(valtype) => Ok(Self::ValueType(TypeDefOrRef::from_ent_ptr_must(valtype.0)?)),
+            TypeSigDef::ValueType(valtype) => {
+                Ok(Self::ValueType(TypeDefOrRef::from_ent_ptr_must(valtype.0)?))
+            }
             e => {
                 Ok(Self::Other(e))
                 // /return Err(HaoError::InvalidSignatureForEntry(std::any::type_name::<

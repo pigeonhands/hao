@@ -20,13 +20,6 @@ impl<T: Sized> MaybeUnsetEntry<T> {
         }
     }
 
-    pub fn _assume_init(&mut self) -> RowEntry<T> {
-        assert!(self.is_set());
-        self.is_set = false;
-        let value = std::mem::replace(&mut self.value, MaybeUninit::uninit());
-        unsafe { value.assume_init() }
-    }
-
     pub fn assume_init_value(mut self) -> T {
         assert!(self.is_set());
         self.is_set = false;

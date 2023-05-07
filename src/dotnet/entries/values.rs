@@ -9,7 +9,9 @@ use super::{
         },
         SignatureDef,
     },
-    signature::{FieldSignature, ResolutionScope, TypeDefOrRef, TypeSignature, ValueType, MethodSignature},
+    signature::{
+        FieldSignature, MethodSignature, ResolutionScope, TypeDefOrRef, TypeSignature, ValueType,
+    },
     well_known::{SystemType, WellKnown},
     EntryCollection, EntryView, {Ptr, ReadEntry, RowRange},
 };
@@ -138,7 +140,7 @@ impl TypeRef {
     }
 
     pub fn full_name_is(&self, namespace: &str, name: &str) -> bool {
-        self.namespace() == namespace && self.name() == name
+        (namespace, name) == (self.namespace(), self.name())
     }
 
     pub fn is_system_type(&self) -> bool {
@@ -150,16 +152,27 @@ impl TypeRef {
         }
     }
 
+    pub fn is_corlib(&self) -> bool {
+        match self.resolution_scope() {
+            ResolutionScope::AssemblyRef(r) if r.value().is_corlib() => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_system_type_instance(&self, system_type: SystemType) -> bool {
+        SystemType::from_full_name(self.namespace(), self.name()) == Some(system_type)
+    }
+
     pub fn is_system_enum(&self) -> bool {
-        self.well_known() == Some(WellKnown::System(SystemType::Enum))
+        self.is_system_type_instance(SystemType::Enum)
     }
 
     pub fn is_system_object(&self) -> bool {
-        self.well_known() == Some(WellKnown::System(SystemType::Object))
+        self.is_system_type_instance(SystemType::Object)
     }
 
     pub fn is_system_value_type(&self) -> bool {
-        self.well_known() == Some(WellKnown::System(SystemType::ValueType))
+        self.is_system_type_instance(SystemType::ValueType)
     }
 }
 
@@ -262,7 +275,7 @@ impl TypeDef {
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// 
+    ///
     /// for ty in module.types().values() {
     ///    for field in ty.fields().values() {
     ///        println!("{} {}", field.signature(), field.name());
@@ -272,12 +285,12 @@ impl TypeDef {
     pub fn fields(&self) -> EntryCollection<Field> {
         EntryCollection::new(&self.field_list)
     }
-    
+
     /// Return the methods associated with this entity.
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// 
+    ///
     /// for ty in module.types().values() {
     ///    for method in ty.methods().values() {
     ///        for param in method.params().values() {
@@ -290,7 +303,7 @@ impl TypeDef {
         EntryCollection::new(&self.method_list)
     }
     pub fn full_name_is(&self, namespace: &str, name: &str) -> bool {
-        self.namespace() == namespace && self.name() == name
+        (namespace, name) == (self.namespace(), self.name())
     }
     pub fn is_static(&self) -> bool {
         self.flags.contains(TypeAttributes::AutoLayout)
@@ -323,16 +336,22 @@ impl TypeDef {
                 .unwrap_or(false)
     }
     pub fn is_interface(&self) -> bool {
-        // Has no base sig
-        let flags = self.flags;
-        flags.contains(TypeAttributes::AutoLayout) && flags.contains(TypeAttributes::Interface)
+        self.extends().is_none()
+            && self.flags.contains(TypeAttributes::AutoLayout)
+            && self.flags.contains(TypeAttributes::Interface)
     }
     pub fn is_struct(&self) -> bool {
-        // "System", "ValueType" base
-        let flags = self.flags;
-        flags.contains(TypeAttributes::Class)
-            && flags.contains(TypeAttributes::Sealed)
-            && !flags.contains(TypeAttributes::Abstract)
+        match &self.extends {
+            Some(exent) => {
+                if exent.is_type_ref_and(|r| {
+                    r.is_system_value_type()
+                }) {}
+            }
+            _ => return false,
+        };
+        self.flags.contains(TypeAttributes::Class)
+            && self.flags.contains(TypeAttributes::Sealed)
+            && !self.flags.contains(TypeAttributes::Abstract)
     }
     pub fn is_delegate(&self) -> bool {
         // base is "System", "MulticastDelegate"
@@ -513,20 +532,18 @@ impl Method {
     }
 
     pub fn is_ctor(&self) -> bool {
-        self.flags.contains(MethodFlags::SpecialName) &&    
-           self.name == ".ctor"
+        self.flags.contains(MethodFlags::SpecialName) && self.name == ".ctor"
     }
 
-    pub fn is_cctor(&self)-> bool  {
-        self.flags.contains(MethodFlags::SpecialName) &&    
-           self.name == ".cctor"
+    pub fn is_cctor(&self) -> bool {
+        self.flags.contains(MethodFlags::SpecialName) && self.name == ".cctor"
     }
 
     /// Returns the parameters associated with this method.
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// 
+    ///
     /// for ty in module.types().values() {
     ///    for method in ty.methods().values() {
     ///        for param in method.params().values() {
@@ -559,11 +576,11 @@ impl<'a> ReadEntry<Method> for EntryReader<'a> {
     }
 }
 
-impl Display for Method  {
+impl Display for Method {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.flags.contains(MethodFlags::Private) {
             write!(f, "private ")?;
-        }else if self.flags.contains(MethodFlags::Public) {
+        } else if self.flags.contains(MethodFlags::Public) {
             write!(f, "public ")?;
         }
 
@@ -726,6 +743,14 @@ pub struct AssemblyRef {
 }
 
 impl AssemblyRef {
+    const KNOWN_CORLIB_NAMES: &[&'static str] = &[
+        "System.Private.CoreLib",
+        "netstandard",
+        "mscorlib",
+        "corefx",
+        "System.Runtime",
+    ];
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -745,15 +770,7 @@ impl AssemblyRef {
     }
 
     pub fn is_corlib(&self) -> bool {
-        const KNOWN_CORLIB_NAMES: &[&'static str] = &[
-            "mscorlib",
-            "netstandard",
-            "corefx",
-            "System.Runtime",
-            "System.Private.CoreLib",
-        ];
-
-        KNOWN_CORLIB_NAMES
+        Self::KNOWN_CORLIB_NAMES
             .iter()
             .any(|s| self.name.eq_ignore_ascii_case(s))
     }

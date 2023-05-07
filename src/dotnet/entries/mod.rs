@@ -70,9 +70,9 @@ impl<'a, T> EntryView<'a, T> {
 }
 
 /// Represents an owned copy of an entry.
-/// 
-/// Internally, this is a [`std::rc::Rc`]. The strong 
-/// count of an entry is used to determine what will go 
+///
+/// Internally, this is a [`std::rc::Rc`]. The strong
+/// count of an entry is used to determine what will go
 /// into the written assembly. So, if you want to force something
 /// into the final output binary, you can use [`std::mem::forget()`].
 #[derive(Debug, Clone)]
@@ -80,7 +80,7 @@ pub struct Entry<T>(pub(crate) Ptr<T>);
 
 impl<'a, T> Entry<T> {
     /// Borrows the entry for viewing its values.
-    /// 
+    ///
     /// This has the same semantics as borrowing
     /// from [`std::cell::RefCell::borrow()`] for this entry.
     pub fn value(&self) -> Ref<RowEntry<T>> {
@@ -88,7 +88,7 @@ impl<'a, T> Entry<T> {
     }
 
     /// Borrows the entry mutably for modifying its values.
-    /// 
+    ///
     /// This has the same semantics as borrowing
     /// from (RefCell::borrow_mut)[`std::cell::RefCell::borrow_mut`] for this entry.
     pub fn value_mut(&self) -> RefMut<T> {
@@ -126,7 +126,7 @@ impl<'a, T> EntryCollection<'a, T> {
     }
 
     /// Borrows each item in the iterator mutabily.
-    /// This has the same semantics as calling 
+    /// This has the same semantics as calling
     /// [`EntryView::value_mut`] for each entry.
     pub fn values_mut(&self) -> EntryIteratorValueMut<'a, T> {
         EntryIteratorValueMut::new(&self.rows[self.position..])

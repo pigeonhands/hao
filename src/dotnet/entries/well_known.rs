@@ -407,6 +407,12 @@ impl SystemType {
         SYSTEM.get(name).copied()
     }
 
+    pub fn from_full_name(namespace: &str, name: &str) -> Option<Self> {
+        if namespace != "System" {
+            return None;
+        }
+        Self::from_type_name(name)
+    }
     pub fn name(&self) -> &'static str {
         match self {
             Self::Object => "Object",
@@ -463,14 +469,14 @@ impl SystemType {
             Self::Func_7 => "Func",
             Self::Func_8 => "Func",
             Self::Func_9 => "Func",
-            Self::Func_10 => "Func`10",
-            Self::Func_11 => "Func`11",
-            Self::Func_12 => "Func`12",
-            Self::Func_13 => "Func`13",
-            Self::Func_14 => "Func`14",
-            Self::Func_15 => "Func`15",
-            Self::Func_16 => "Func`16",
-            Self::Func_17 => "Func`17",
+            Self::Func_10 => "Func",
+            Self::Func_11 => "Func",
+            Self::Func_12 => "Func",
+            Self::Func_13 => "Func",
+            Self::Func_14 => "Func",
+            Self::Func_15 => "Func",
+            Self::Func_16 => "Func",
+            Self::Func_17 => "Func",
             Self::Action => "Action",
             Self::Action_1 => "Action",
             Self::Action_2 => "Action",
@@ -481,13 +487,13 @@ impl SystemType {
             Self::Action_7 => "Action",
             Self::Action_8 => "Action",
             Self::Action_9 => "Action",
-            Self::Action_10 => "Action`10",
-            Self::Action_11 => "Action`11",
-            Self::Action_12 => "Action`12",
-            Self::Action_13 => "Action`13",
-            Self::Action_14 => "Action`14",
-            Self::Action_15 => "Action`15",
-            Self::Action_16 => "Action`16",
+            Self::Action_10 => "Action",
+            Self::Action_11 => "Action",
+            Self::Action_12 => "Action",
+            Self::Action_13 => "Action",
+            Self::Action_14 => "Action",
+            Self::Action_15 => "Action",
+            Self::Action_16 => "Action",
             Self::Activator => "Activator",
             Self::AttributeUsageAttribute => "AttributeUsageAttribute",
             Self::ParamArrayAttribute => "ParamArrayAttribute",
@@ -746,7 +752,7 @@ impl SystemCollectionsType {
 
 static SYSTEM_COLLECTIONS_OBJECTMODEL: phf::Map<&'static str, SystemCollectionsObjectModelType> = phf_map! {
     "Collection`1" => SystemCollectionsObjectModelType::Collection_1,
-"ReadOnlyCollection`1" => SystemCollectionsObjectModelType::ReadOnlyCollection_1,
+    "ReadOnlyCollection`1" => SystemCollectionsObjectModelType::ReadOnlyCollection_1,
 };
 
 #[allow(non_camel_case_types)]
@@ -793,15 +799,15 @@ impl SystemCollectionsSpecializedType {
 
 static SYSTEM_REFLECTION: phf::Map<&'static str, SystemReflectionType> = phf_map! {
     "MethodInfo" => SystemReflectionType::MethodInfo,
-"ConstructorInfo" => SystemReflectionType::ConstructorInfo,
-"MethodBase" => SystemReflectionType::MethodBase,
-"FieldInfo" => SystemReflectionType::FieldInfo,
-"MemberInfo" => SystemReflectionType::MemberInfo,
-"Missing" => SystemReflectionType::Missing,
-"AssemblyKeyFileAttribute" => SystemReflectionType::AssemblyKeyFileAttribute,
-"AssemblyKeyNameAttribute" => SystemReflectionType::AssemblyKeyNameAttribute,
-"DefaultMemberAttribute" => SystemReflectionType::DefaultMemberAttribute,
-"Assembly" => SystemReflectionType::Assembly,
+    "ConstructorInfo" => SystemReflectionType::ConstructorInfo,
+    "MethodBase" => SystemReflectionType::MethodBase,
+    "FieldInfo" => SystemReflectionType::FieldInfo,
+    "MemberInfo" => SystemReflectionType::MemberInfo,
+    "Missing" => SystemReflectionType::Missing,
+    "AssemblyKeyFileAttribute" => SystemReflectionType::AssemblyKeyFileAttribute,
+    "AssemblyKeyNameAttribute" => SystemReflectionType::AssemblyKeyNameAttribute,
+    "DefaultMemberAttribute" => SystemReflectionType::DefaultMemberAttribute,
+    "Assembly" => SystemReflectionType::Assembly,
 };
 
 #[allow(non_camel_case_types)]
@@ -842,14 +848,14 @@ impl SystemReflectionType {
 
 static SYSTEM_DIAGNOSTICS: phf::Map<&'static str, SystemDiagnosticsType> = phf_map! {
     "DebuggerTypeProxyAttribute" => SystemDiagnosticsType::DebuggerTypeProxyAttribute,
-"Debugger" => SystemDiagnosticsType::Debugger,
-"DebuggerDisplayAttribute" => SystemDiagnosticsType::DebuggerDisplayAttribute,
-"DebuggerNonUserCodeAttribute" => SystemDiagnosticsType::DebuggerNonUserCodeAttribute,
-"DebuggerHiddenAttribute" => SystemDiagnosticsType::DebuggerHiddenAttribute,
-"DebuggerBrowsableAttribute" => SystemDiagnosticsType::DebuggerBrowsableAttribute,
-"DebuggerStepThroughAttribute" => SystemDiagnosticsType::DebuggerStepThroughAttribute,
-"DebuggerBrowsableState" => SystemDiagnosticsType::DebuggerBrowsableState,
-"DebuggableAttribute" => SystemDiagnosticsType::DebuggableAttribute,
+    "Debugger" => SystemDiagnosticsType::Debugger,
+    "DebuggerDisplayAttribute" => SystemDiagnosticsType::DebuggerDisplayAttribute,
+    "DebuggerNonUserCodeAttribute" => SystemDiagnosticsType::DebuggerNonUserCodeAttribute,
+    "DebuggerHiddenAttribute" => SystemDiagnosticsType::DebuggerHiddenAttribute,
+    "DebuggerBrowsableAttribute" => SystemDiagnosticsType::DebuggerBrowsableAttribute,
+    "DebuggerStepThroughAttribute" => SystemDiagnosticsType::DebuggerStepThroughAttribute,
+    "DebuggerBrowsableState" => SystemDiagnosticsType::DebuggerBrowsableState,
+    "DebuggableAttribute" => SystemDiagnosticsType::DebuggableAttribute,
 };
 
 #[allow(non_camel_case_types)]
@@ -1031,9 +1037,9 @@ impl SystemRuntimeInteropServicesType {
 
 static SYSTEM_THREADING_TASKS: phf::Map<&'static str, SystemThreadingTasksType> = phf_map! {
     "Task" => SystemThreadingTasksType::Task,
-"Task`1" => SystemThreadingTasksType::Task_1,
-"ValueTask`1" => SystemThreadingTasksType::ValueTask_1,
-"ValueTask" => SystemThreadingTasksType::ValueTask,
+    "Task`1" => SystemThreadingTasksType::Task_1,
+    "ValueTask`1" => SystemThreadingTasksType::ValueTask_1,
+    "ValueTask" => SystemThreadingTasksType::ValueTask,
 };
 
 #[allow(non_camel_case_types)]
@@ -1062,9 +1068,9 @@ impl SystemThreadingTasksType {
 
 static SYSTEM_THREADING: phf::Map<&'static str, SystemThreadingType> = phf_map! {
     "Interlocked" => SystemThreadingType::Interlocked,
-"Monitor" => SystemThreadingType::Monitor,
-"Thread" => SystemThreadingType::Thread,
-"CancellationToken" => SystemThreadingType::CancellationToken,
+    "Monitor" => SystemThreadingType::Monitor,
+    "Thread" => SystemThreadingType::Thread,
+    "CancellationToken" => SystemThreadingType::CancellationToken,
 };
 
 #[allow(non_camel_case_types)]
@@ -1093,9 +1099,9 @@ impl SystemThreadingType {
 
 static MICROSOFT_CSHARP_RUNTIMEBINDER: phf::Map<&'static str, MicrosoftCSharpRuntimeBinderType> = phf_map! {
     "Binder" => MicrosoftCSharpRuntimeBinderType::Binder,
-"CSharpArgumentInfo" => MicrosoftCSharpRuntimeBinderType::CSharpArgumentInfo,
-"CSharpArgumentInfoFlags" => MicrosoftCSharpRuntimeBinderType::CSharpArgumentInfoFlags,
-"CSharpBinderFlags" => MicrosoftCSharpRuntimeBinderType::CSharpBinderFlags,
+    "CSharpArgumentInfo" => MicrosoftCSharpRuntimeBinderType::CSharpArgumentInfo,
+    "CSharpArgumentInfoFlags" => MicrosoftCSharpRuntimeBinderType::CSharpArgumentInfoFlags,
+    "CSharpBinderFlags" => MicrosoftCSharpRuntimeBinderType::CSharpBinderFlags,
 };
 
 #[allow(non_camel_case_types)]
@@ -1124,14 +1130,14 @@ impl MicrosoftCSharpRuntimeBinderType {
 
 static MICROSOFT_VISUALBASIC: phf::Map<&'static str, MicrosoftVisualBasicType> = phf_map! {
     "CallType" => MicrosoftVisualBasicType::CallType,
-"Embedded" => MicrosoftVisualBasicType::Embedded,
-"CompareMethod" => MicrosoftVisualBasicType::CompareMethod,
-"Strings" => MicrosoftVisualBasicType::Strings,
-"ErrObject" => MicrosoftVisualBasicType::ErrObject,
-"FileSystem" => MicrosoftVisualBasicType::FileSystem,
-"Information" => MicrosoftVisualBasicType::Information,
-"Interaction" => MicrosoftVisualBasicType::Interaction,
-"Conversion" => MicrosoftVisualBasicType::Conversion,
+    "Embedded" => MicrosoftVisualBasicType::Embedded,
+    "CompareMethod" => MicrosoftVisualBasicType::CompareMethod,
+    "Strings" => MicrosoftVisualBasicType::Strings,
+    "ErrObject" => MicrosoftVisualBasicType::ErrObject,
+    "FileSystem" => MicrosoftVisualBasicType::FileSystem,
+    "Information" => MicrosoftVisualBasicType::Information,
+    "Interaction" => MicrosoftVisualBasicType::Interaction,
+    "Conversion" => MicrosoftVisualBasicType::Conversion,
 };
 
 #[allow(non_camel_case_types)]
@@ -1173,18 +1179,18 @@ static MICROSOFT_VISUALBASIC_COMPILERSERVICES: phf::Map<
     MicrosoftVisualBasicCompilerServicesType,
 > = phf_map! {
     "Conversions" => MicrosoftVisualBasicCompilerServicesType::Conversions,
-"Operators" => MicrosoftVisualBasicCompilerServicesType::Operators,
-"NewLateBinding" => MicrosoftVisualBasicCompilerServicesType::NewLateBinding,
-"EmbeddedOperators" => MicrosoftVisualBasicCompilerServicesType::EmbeddedOperators,
-"StandardModuleAttribute" => MicrosoftVisualBasicCompilerServicesType::StandardModuleAttribute,
-"Utils" => MicrosoftVisualBasicCompilerServicesType::Utils,
-"LikeOperator" => MicrosoftVisualBasicCompilerServicesType::LikeOperator,
-"ProjectData" => MicrosoftVisualBasicCompilerServicesType::ProjectData,
-"ObjectFlowControl" => MicrosoftVisualBasicCompilerServicesType::ObjectFlowControl,
-"StaticLocalInitFlag" => MicrosoftVisualBasicCompilerServicesType::StaticLocalInitFlag,
-"StringType" => MicrosoftVisualBasicCompilerServicesType::StringType,
-"IncompleteInitialization" => MicrosoftVisualBasicCompilerServicesType::IncompleteInitialization,
-"Versioned" => MicrosoftVisualBasicCompilerServicesType::Versioned,
+    "Operators" => MicrosoftVisualBasicCompilerServicesType::Operators,
+    "NewLateBinding" => MicrosoftVisualBasicCompilerServicesType::NewLateBinding,
+    "EmbeddedOperators" => MicrosoftVisualBasicCompilerServicesType::EmbeddedOperators,
+    "StandardModuleAttribute" => MicrosoftVisualBasicCompilerServicesType::StandardModuleAttribute,
+    "Utils" => MicrosoftVisualBasicCompilerServicesType::Utils,
+    "LikeOperator" => MicrosoftVisualBasicCompilerServicesType::LikeOperator,
+    "ProjectData" => MicrosoftVisualBasicCompilerServicesType::ProjectData,
+    "ObjectFlowControl" => MicrosoftVisualBasicCompilerServicesType::ObjectFlowControl,
+    "StaticLocalInitFlag" => MicrosoftVisualBasicCompilerServicesType::StaticLocalInitFlag,
+    "StringType" => MicrosoftVisualBasicCompilerServicesType::StringType,
+    "IncompleteInitialization" => MicrosoftVisualBasicCompilerServicesType::IncompleteInitialization,
+    "Versioned" => MicrosoftVisualBasicCompilerServicesType::Versioned,
 };
 
 #[allow(non_camel_case_types)]
@@ -1234,7 +1240,7 @@ static MICROSOFT_VISUALBASIC_APPLICATIONSERVICES: phf::Map<
     MicrosoftVisualBasicApplicationServicesType,
 > = phf_map! {
     "ApplicationBase" => MicrosoftVisualBasicApplicationServicesType::ApplicationBase,
-"WindowsFormsApplicationBase" => MicrosoftVisualBasicApplicationServicesType::WindowsFormsApplicationBase,
+    "WindowsFormsApplicationBase" => MicrosoftVisualBasicApplicationServicesType::WindowsFormsApplicationBase,
 };
 
 #[allow(non_camel_case_types)]
@@ -1262,9 +1268,9 @@ static SYSTEM_RUNTIME_INTEROPSERVICES_WINDOWSRUNTIME: phf::Map<
     SystemRuntimeInteropServicesWindowsRuntimeType,
 > = phf_map! {
     "EventRegistrationToken" => SystemRuntimeInteropServicesWindowsRuntimeType::EventRegistrationToken,
-"EventRegistrationTokenTable`1" => SystemRuntimeInteropServicesWindowsRuntimeType::EventRegistrationTokenTable_1,
-"WindowsRuntimeMarshal" => SystemRuntimeInteropServicesWindowsRuntimeType::WindowsRuntimeMarshal,
-"RuntimeClass" => SystemRuntimeInteropServicesWindowsRuntimeType::RuntimeClass,
+    "EventRegistrationTokenTable`1" => SystemRuntimeInteropServicesWindowsRuntimeType::EventRegistrationTokenTable_1,
+    "WindowsRuntimeMarshal" => SystemRuntimeInteropServicesWindowsRuntimeType::WindowsRuntimeMarshal,
+    "RuntimeClass" => SystemRuntimeInteropServicesWindowsRuntimeType::RuntimeClass,
 };
 
 #[allow(non_camel_case_types)]
@@ -1295,9 +1301,9 @@ impl SystemRuntimeInteropServicesWindowsRuntimeType {
 
 static WINDOWS_FOUNDATION: phf::Map<&'static str, WindowsFoundationType> = phf_map! {
     "IAsyncAction" => WindowsFoundationType::IAsyncAction,
-"IAsyncActionWithProgress`1" => WindowsFoundationType::IAsyncActionWithProgress_1,
-"IAsyncOperation`1" => WindowsFoundationType::IAsyncOperation_1,
-"IAsyncOperationWithProgress`2" => WindowsFoundationType::IAsyncOperationWithProgress_2,
+    "IAsyncActionWithProgress`1" => WindowsFoundationType::IAsyncActionWithProgress_1,
+    "IAsyncOperation`1" => WindowsFoundationType::IAsyncOperation_1,
+    "IAsyncOperationWithProgress`2" => WindowsFoundationType::IAsyncOperationWithProgress_2,
 };
 
 #[allow(non_camel_case_types)]
@@ -1326,9 +1332,9 @@ impl WindowsFoundationType {
 
 static SYSTEM_COMPONENTMODEL: phf::Map<&'static str, SystemComponentModelType> = phf_map! {
     "DesignerSerializationVisibilityAttribute" => SystemComponentModelType::DesignerSerializationVisibilityAttribute,
-"INotifyPropertyChanged" => SystemComponentModelType::INotifyPropertyChanged,
-"EditorBrowsableAttribute" => SystemComponentModelType::EditorBrowsableAttribute,
-"EditorBrowsableState" => SystemComponentModelType::EditorBrowsableState,
+    "INotifyPropertyChanged" => SystemComponentModelType::INotifyPropertyChanged,
+    "EditorBrowsableAttribute" => SystemComponentModelType::EditorBrowsableAttribute,
+    "EditorBrowsableState" => SystemComponentModelType::EditorBrowsableState,
 };
 
 #[allow(non_camel_case_types)]
@@ -1359,10 +1365,10 @@ impl SystemComponentModelType {
 
 static SYSTEM_LINQ: phf::Map<&'static str, SystemLinqType> = phf_map! {
     "Enumerable" => SystemLinqType::Enumerable,
-"IQueryable" => SystemLinqType::IQueryable,
-"IQueryable`1" => SystemLinqType::IQueryable_1,
-"SystemCore_EnumerableDebugView" => SystemLinqType::SystemCore_EnumerableDebugView,
-"SystemCore_EnumerableDebugView`1" => SystemLinqType::SystemCore_EnumerableDebugView_1,
+    "IQueryable" => SystemLinqType::IQueryable,
+    "IQueryable`1" => SystemLinqType::IQueryable_1,
+    "SystemCore_EnumerableDebugView" => SystemLinqType::SystemCore_EnumerableDebugView,
+    "SystemCore_EnumerableDebugView`1" => SystemLinqType::SystemCore_EnumerableDebugView_1,
 };
 
 #[allow(non_camel_case_types)]
@@ -1393,11 +1399,11 @@ impl SystemLinqType {
 
 static SYSTEM_LINQ_EXPRESSIONS: phf::Map<&'static str, SystemLinqExpressionsType> = phf_map! {
     "Expression" => SystemLinqExpressionsType::Expression,
-"Expression`1" => SystemLinqExpressionsType::Expression_1,
-"ParameterExpression" => SystemLinqExpressionsType::ParameterExpression,
-"ElementInit" => SystemLinqExpressionsType::ElementInit,
-"MemberBinding" => SystemLinqExpressionsType::MemberBinding,
-"ExpressionType" => SystemLinqExpressionsType::ExpressionType,
+    "Expression`1" => SystemLinqExpressionsType::Expression_1,
+    "ParameterExpression" => SystemLinqExpressionsType::ParameterExpression,
+    "ElementInit" => SystemLinqExpressionsType::ElementInit,
+    "MemberBinding" => SystemLinqExpressionsType::MemberBinding,
+    "ExpressionType" => SystemLinqExpressionsType::ExpressionType,
 };
 
 #[allow(non_camel_case_types)]
@@ -1430,17 +1436,17 @@ impl SystemLinqExpressionsType {
 
 static SYSTEM_XML_LINQ: phf::Map<&'static str, SystemXmlLinqType> = phf_map! {
     "Extensions" => SystemXmlLinqType::Extensions,
-"XAttribute" => SystemXmlLinqType::XAttribute,
-"XCData" => SystemXmlLinqType::XCData,
-"XComment" => SystemXmlLinqType::XComment,
-"XContainer" => SystemXmlLinqType::XContainer,
-"XDeclaration" => SystemXmlLinqType::XDeclaration,
-"XDocument" => SystemXmlLinqType::XDocument,
-"XElement" => SystemXmlLinqType::XElement,
-"XName" => SystemXmlLinqType::XName,
-"XNamespace" => SystemXmlLinqType::XNamespace,
-"XObject" => SystemXmlLinqType::XObject,
-"XProcessingInstruction" => SystemXmlLinqType::XProcessingInstruction,
+    "XAttribute" => SystemXmlLinqType::XAttribute,
+    "XCData" => SystemXmlLinqType::XCData,
+    "XComment" => SystemXmlLinqType::XComment,
+    "XContainer" => SystemXmlLinqType::XContainer,
+    "XDeclaration" => SystemXmlLinqType::XDeclaration,
+    "XDocument" => SystemXmlLinqType::XDocument,
+    "XElement" => SystemXmlLinqType::XElement,
+    "XName" => SystemXmlLinqType::XName,
+    "XNamespace" => SystemXmlLinqType::XNamespace,
+    "XObject" => SystemXmlLinqType::XObject,
+    "XProcessingInstruction" => SystemXmlLinqType::XProcessingInstruction,
 };
 
 #[allow(non_camel_case_types)]
@@ -1538,7 +1544,7 @@ impl SystemSecurityPermissionsType {
 
 static SYSTEM_WINDOWS_FORMS: phf::Map<&'static str, SystemWindowsFormsType> = phf_map! {
     "Form" => SystemWindowsFormsType::Form,
-"Application" => SystemWindowsFormsType::Application,
+    "Application" => SystemWindowsFormsType::Application,
 };
 
 #[allow(non_camel_case_types)]
@@ -1607,10 +1613,10 @@ impl SystemTextType {
 
 static SYSTEM_THREADING_TASKS_SOURCES: phf::Map<&'static str, SystemThreadingTasksSourcesType> = phf_map! {
     "ManualResetValueTaskSourceCore`1" => SystemThreadingTasksSourcesType::ManualResetValueTaskSourceCore_1,
-"ValueTaskSourceStatus" => SystemThreadingTasksSourcesType::ValueTaskSourceStatus,
-"ValueTaskSourceOnCompletedFlags" => SystemThreadingTasksSourcesType::ValueTaskSourceOnCompletedFlags,
-"IValueTaskSource`1" => SystemThreadingTasksSourcesType::IValueTaskSource_1,
-"IValueTaskSource" => SystemThreadingTasksSourcesType::IValueTaskSource,
+    "ValueTaskSourceStatus" => SystemThreadingTasksSourcesType::ValueTaskSourceStatus,
+    "ValueTaskSourceOnCompletedFlags" => SystemThreadingTasksSourcesType::ValueTaskSourceOnCompletedFlags,
+    "IValueTaskSource`1" => SystemThreadingTasksSourcesType::IValueTaskSource_1,
+    "IValueTaskSource" => SystemThreadingTasksSourcesType::IValueTaskSource,
 };
 
 #[allow(non_camel_case_types)]

@@ -20,7 +20,7 @@ pub trait AssemblyResolver: Debug {
 #[derive(Debug, Default)]
 pub struct PathAssemblyResolver {
     base_path: std::path::PathBuf,
-    assembly_list: Vec<(String, Rc<Module>)>,
+    pub(crate) assembly_list: Vec<(String, Rc<Module>)>,
 }
 
 impl PathAssemblyResolver {
