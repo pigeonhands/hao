@@ -45,7 +45,6 @@ impl PathAssemblyResolver {
             for ext in KNOWN_EXTENTIONS {
                 path.set_extension(ext);
                 if path.exists() {
-
                     return Some(path);
                 }
             }
@@ -68,9 +67,7 @@ impl AssemblyResolver for PathAssemblyResolver {
         }
 
         if let Some(found_path) = self.find_path_for(assembly_name) {
-            let loaded_asm = Rc::new(Module::from_path_no_resolve(found_path).map_err(|err| {
-                err
-            })?);
+            let loaded_asm = Rc::new(Module::from_path_no_resolve(found_path).map_err(|err| err)?);
             self.assembly_list
                 .push((assembly_name.into(), loaded_asm.clone()));
             loaded_asm.load_dependancies(self)?;

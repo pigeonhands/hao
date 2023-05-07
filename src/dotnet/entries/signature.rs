@@ -7,7 +7,10 @@ use crate::{
 };
 
 use super::{
-    values::{ModuleDef, ResolutionScopePtr, TypeDef, TypeDefOrRefPtr, TypeRef, TypeSpec, ModuleRef, AssemblyRef},
+    values::{
+        AssemblyRef, ModuleDef, ModuleRef, ResolutionScopePtr, TypeDef, TypeDefOrRefPtr, TypeRef,
+        TypeSpec,
+    },
     Entry, RowEntry,
 };
 
@@ -107,7 +110,7 @@ impl Display for TypeDefOrRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TypeDef(e) => write!(f, "{}", e.value().name()),
-            Self::TypeRef(e) =>  write!(f, "{}", e.value()),
+            Self::TypeRef(e) => write!(f, "{}", e.value()),
             Self::TypeSpec(s) => write!(f, "{}", s.value().signature()),
         }
     }
@@ -241,13 +244,11 @@ impl Display for ValueType {
             Self::Object => write!(f, "object"),
             Self::ValueType(val) => write!(f, "{}", val),
             Self::SZArray(ty) => write!(f, "{}[]", ty),
-            Self::CModReq(ty) => {
-                match ty {
-                    TypeDefOrRef::TypeDef(d) => write!(f, "CMOD(Def({:?}))", d.value().name()),
-                    TypeDefOrRef::TypeRef(d) => write!(f, "CMOD(Ref({}))", d.value()),
-                    TypeDefOrRef::TypeSpec(d) => write!(f, "CMOD(Spec({:?}))", d.value()),
-                }
-            }
+            Self::CModReq(ty) => match ty {
+                TypeDefOrRef::TypeDef(d) => write!(f, "CMOD(Def({:?}))", d.value().name()),
+                TypeDefOrRef::TypeRef(d) => write!(f, "CMOD(Ref({}))", d.value()),
+                TypeDefOrRef::TypeSpec(d) => write!(f, "CMOD(Spec({:?}))", d.value()),
+            },
             Self::Class(val) => write!(f, "{}", val),
             Self::ValueArray { .. } => panic!("valuearray?"),
             Self::Var {
@@ -311,7 +312,6 @@ pub struct MethodSignature {
     pub params_after_sentinel: Option<Vec<TypeSignature>>,
 }
 
-
 impl MethodSignature {
     pub fn from_sig_def(sig: SignatureDef) -> Result<Self> {
         let method_sig = match sig.calling_convention {
@@ -347,7 +347,7 @@ impl MethodSignature {
 impl Display for MethodSignature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "fn(")?;
-        for (index,param) in self.parameters.iter().enumerate() {
+        for (index, param) in self.parameters.iter().enumerate() {
             if index > 0 {
                 write!(f, ", ")?;
             }
@@ -391,6 +391,8 @@ pub enum TypeSignature {
     },
     SZArray(ValueType),
     FnPtr(MethodSignature),
+    Class(TypeDefOrRef),
+    ValueType(TypeDefOrRef),
     Other(TypeSigDef),
 }
 
@@ -416,6 +418,8 @@ impl TypeSignature {
             }),
             TypeSigDef::SZArray(ty) => Ok(Self::SZArray(ValueType::from_type_sig(*ty)?)),
             TypeSigDef::FnPtr(fn_ptr) => Ok(Self::FnPtr(MethodSignature::from_sig_def(*fn_ptr)?)),
+            TypeSigDef::Class(class) => Ok(Self::Class(TypeDefOrRef::from_ent_ptr_must(class.0)?)),
+            TypeSigDef::ValueType(valtype) => Ok(Self::ValueType(TypeDefOrRef::from_ent_ptr_must(valtype.0)?)),
             e => {
                 Ok(Self::Other(e))
                 // /return Err(HaoError::InvalidSignatureForEntry(std::any::type_name::<
@@ -448,7 +452,9 @@ impl Display for TypeSignature {
             } => write!(f, "GenericMethodVar({})", generic_param_index),
             Self::SZArray(ty) => write!(f, "{}[]", ty),
             Self::FnPtr(fnptr) => write!(f, "&{}", fnptr),
-            Self::Other(t) => write!(f, "{:?}", t)
+            Self::Class(class) => write!(f, "{}", class),
+            Self::ValueType(vtype) => write!(f, "{}", vtype),
+            Self::Other(t) => write!(f, "{:?}", t),
         }
     }
 }

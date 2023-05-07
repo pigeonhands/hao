@@ -3,11 +3,11 @@ use phf::phf_map;
 /// Check if a name is a well known one.
 /// the `full_name` and `name` methods will return the name
 /// without the generic tags.
-/// 
+///
 /// e.g
 /// ```
 /// # use hao::dotnet::entries::well_known::{WellKnown, SystemType};
-/// 
+///
 /// let nullable = WellKnown::from_full_name("System", "Nullable`1");
 /// assert_eq!(nullable, Some(WellKnown::System(SystemType::Nullable_1)));
 /// assert_eq!(nullable.unwrap().full_name(), ("System", "Nullable"));
@@ -126,7 +126,7 @@ impl WellKnown {
         };
         Some(ty)
     }
-    
+
     pub fn full_name(&self) -> (&'static str, &'static str) {
         match self {
             Self::System(ty) => ("System", ty.name()),
@@ -717,7 +717,6 @@ static SYSTEM_COLLECTIONS: phf::Map<&'static str, SystemCollectionsType> = phf_m
     "IList" => SystemCollectionsType::IList,
     "ICollection" => SystemCollectionsType::ICollection,
 };
-
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq)]

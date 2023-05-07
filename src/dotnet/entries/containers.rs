@@ -97,7 +97,7 @@ impl<T> RowEntry<T> {
     pub fn new(value: T, index: u32) -> Self {
         Self { value, row: index }
     }
-    pub fn entry_row_id(&self) -> u32 {
+    pub fn entry_index(&self) -> u32 {
         self.row
     }
 }

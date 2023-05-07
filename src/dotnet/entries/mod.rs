@@ -4,13 +4,9 @@ pub mod values;
 pub mod well_known;
 use std::cell::{Ref, RefCell, RefMut};
 
-use super::{
-    md::streams::tables_stream::metadata::TableLocations,
-};
+use super::md::streams::tables_stream::metadata::TableLocations;
 use crate::{
-    dotnet::md::streams::tables_stream::{
-        TableLocation, TablesStreamReader,
-    },
+    dotnet::md::streams::tables_stream::{TableLocation, TablesStreamReader},
     error::Result,
     io::{EntryReader, ReadData},
 };
@@ -48,6 +44,10 @@ pub trait GetEntryField<T> {
 pub struct EntryView<'a, T>(pub(crate) &'a Ptr<T>);
 
 impl<'a, T> EntryView<'a, T> {
+    pub fn into_entry(&self) -> Entry<T> {
+        Entry(self.0.clone())
+    }
+
     pub fn value(&self) -> Ref<RowEntry<T>> {
         self.0.value()
     }
@@ -69,13 +69,28 @@ impl<'a, T> EntryView<'a, T> {
     }
 }
 
+/// Represents an owned copy of an entry.
+/// 
+/// Internally, this is a [`std::rc::Rc`]. The strong 
+/// count of an entry is used to determine what will go 
+/// into the written assembly. So, if you want to force something
+/// into the final output binary, you can use [`std::mem::forget()`].
 #[derive(Debug, Clone)]
 pub struct Entry<T>(pub(crate) Ptr<T>);
 
 impl<'a, T> Entry<T> {
+    /// Borrows the entry for viewing its values.
+    /// 
+    /// This has the same semantics as borrowing
+    /// from [`std::cell::RefCell::borrow()`] for this entry.
     pub fn value(&self) -> Ref<RowEntry<T>> {
         self.0.value()
     }
+
+    /// Borrows the entry mutably for modifying its values.
+    /// 
+    /// This has the same semantics as borrowing
+    /// from (RefCell::borrow_mut)[`std::cell::RefCell::borrow_mut`] for this entry.
     pub fn value_mut(&self) -> RefMut<T> {
         self.0.value_mut()
     }
@@ -103,10 +118,16 @@ impl<'a, T> EntryCollection<'a, T> {
         Self { rows, position: 0 }
     }
 
+    /// Borrows each item in the iterator.
+    /// This has the same semantics as calling
+    /// [`EntryView::value`] for each entry.
     pub fn values(&self) -> EntryIteratorValue<'a, T> {
         EntryIteratorValue::new(&self.rows[self.position..])
     }
 
+    /// Borrows each item in the iterator mutabily.
+    /// This has the same semantics as calling 
+    /// [`EntryView::value_mut`] for each entry.
     pub fn values_mut(&self) -> EntryIteratorValueMut<'a, T> {
         EntryIteratorValueMut::new(&self.rows[self.position..])
     }
@@ -117,6 +138,13 @@ impl<'a, T> EntryCollection<'a, T> {
     /// `rid - 1` as .net row id's start at 1, with 0 representing no value.
     pub fn get_index(&self, index: usize) -> Option<Entry<T>> {
         self.rows.get(index).map(|v| Entry(v.clone()))
+    }
+
+    pub fn find(&self, func: impl Fn(EntryView<'a, T>) -> bool) -> Option<Entry<T>> {
+        self.rows
+            .iter()
+            .find(|e| func(EntryView(e)))
+            .map(|e| Entry(e.clone()))
     }
 }
 
@@ -189,7 +217,6 @@ pub(crate) struct MaybeUninitEntries {
 
     pub module_ref: EntList<ModuleRef>,
     pub type_specs: EntList<TypeSpec>,
-
 
     pub assembly_ref: EntList<AssemblyRef>,
 }

@@ -1,3 +1,5 @@
+use num_traits::Zero;
+
 use super::{
     super::md::streams::{
         tables_stream::{
@@ -7,8 +9,8 @@ use super::{
         },
         SignatureDef,
     },
-    signature::{FieldSignature, ResolutionScope, TypeDefOrRef, TypeSignature, ValueType},
-    well_known::{WellKnown, SystemType},
+    signature::{FieldSignature, ResolutionScope, TypeDefOrRef, TypeSignature, ValueType, MethodSignature},
+    well_known::{SystemType, WellKnown},
     EntryCollection, EntryView, {Ptr, ReadEntry, RowRange},
 };
 use crate::{
@@ -128,9 +130,9 @@ impl TypeRef {
 
     pub fn well_known(&self) -> Option<WellKnown> {
         match self.resolution_scope() {
-            ResolutionScope::AssemblyRef(r)  if r.value().is_corlib() => {
+            ResolutionScope::AssemblyRef(r) if r.value().is_corlib() => {
                 WellKnown::from_full_name(self.namespace(), self.name())
-            },
+            }
             _ => return None,
         }
     }
@@ -138,20 +140,24 @@ impl TypeRef {
     pub fn full_name_is(&self, namespace: &str, name: &str) -> bool {
         self.namespace() == namespace && self.name() == name
     }
+
     pub fn is_system_type(&self) -> bool {
         match self.resolution_scope() {
-            ResolutionScope::AssemblyRef(r)  if r.value().is_corlib() => {
+            ResolutionScope::AssemblyRef(r) if r.value().is_corlib() => {
                 self.is_system_object() || self.is_system_value_type() || self.is_system_enum()
-            },
+            }
             _ => false,
         }
     }
+
     pub fn is_system_enum(&self) -> bool {
         self.well_known() == Some(WellKnown::System(SystemType::Enum))
     }
+
     pub fn is_system_object(&self) -> bool {
         self.well_known() == Some(WellKnown::System(SystemType::Object))
     }
+
     pub fn is_system_value_type(&self) -> bool {
         self.well_known() == Some(WellKnown::System(SystemType::ValueType))
     }
@@ -177,7 +183,7 @@ impl Display for TypeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(well_known) = self.well_known() {
             write!(f, "{}", well_known.type_name())
-        }else{
+        } else {
             write!(f, "{}", self.name())
         }
     }
@@ -249,11 +255,42 @@ impl TypeDef {
     pub fn extends(&self) -> &Option<TypeDefOrRef> {
         &self.extends
     }
+
+    /// Returns an [`EntryCollection`] of [`Field`] with all the fields
+    /// associated with this type.
+    ///
+    /// ```
+    /// # use hao::Module;
+    /// let module = Module::default();
+    /// 
+    /// for ty in module.types().values() {
+    ///    for field in ty.fields().values() {
+    ///        println!("{} {}", field.signature(), field.name());
+    ///    }
+    /// }
+    /// ```
     pub fn fields(&self) -> EntryCollection<Field> {
         EntryCollection::new(&self.field_list)
     }
+    
+    /// Return the methods associated with this entity.
+    /// ```
+    /// # use hao::Module;
+    /// let module = Module::default();
+    /// 
+    /// for ty in module.types().values() {
+    ///    for method in ty.methods().values() {
+    ///        for param in method.params().values() {
+    ///             println!("{}", param.name());
+    ///        }
+    ///    }
+    /// }
+    /// ```
     pub fn methods(&self) -> EntryCollection<Method> {
         EntryCollection::new(&self.method_list)
+    }
+    pub fn full_name_is(&self, namespace: &str, name: &str) -> bool {
+        self.namespace() == namespace && self.name() == name
     }
     pub fn is_static(&self) -> bool {
         self.flags.contains(TypeAttributes::AutoLayout)
@@ -349,7 +386,7 @@ impl Display for TypeDef {
 
         if self.is_static() {
             write!(f, "static class ")?;
-        }else{
+        } else {
             if self.is_interface() {
                 write!(f, "interface ")?;
             } else if self.is_struct() {
@@ -454,7 +491,7 @@ pub struct Method {
     pub(crate) impl_flags: MethodImplFlags,
     pub(crate) flags: MethodFlags,
     pub(crate) name: String,
-    pub(crate) signature: SignatureDef,
+    pub(crate) signature: MethodSignature,
     pub(crate) param_list: Vec<Ptr<Param>>,
 }
 
@@ -471,9 +508,33 @@ impl Method {
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn signature(&self) -> SignatureDef {
-        todo!("{:?}", self.signature)
+    pub fn signature(&self) -> &MethodSignature {
+        &self.signature
     }
+
+    pub fn is_ctor(&self) -> bool {
+        self.flags.contains(MethodFlags::SpecialName) &&    
+           self.name == ".ctor"
+    }
+
+    pub fn is_cctor(&self)-> bool  {
+        self.flags.contains(MethodFlags::SpecialName) &&    
+           self.name == ".cctor"
+    }
+
+    /// Returns the parameters associated with this method.
+    /// ```
+    /// # use hao::Module;
+    /// let module = Module::default();
+    /// 
+    /// for ty in module.types().values() {
+    ///    for method in ty.methods().values() {
+    ///        for param in method.params().values() {
+    ///             println!("{}", param.name());
+    ///        }
+    ///    }
+    /// }
+    /// ```
     pub fn params(&self) -> EntryCollection<Param> {
         EntryCollection::new(self.param_list.as_slice())
     }
@@ -492,9 +553,46 @@ impl<'a> ReadEntry<Method> for EntryReader<'a> {
             impl_flags: row.impl_flags,
             flags: row.flags,
             name: self.read(row.name)?,
-            signature: self.read(row.signature)?,
+            signature: MethodSignature::from_sig_def(self.read(row.signature)?)?,
             param_list: self.read(RowRange::new(row.param_list, next.map(|x| x.param_list)))?,
         })
+    }
+}
+
+impl Display for Method  {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.flags.contains(MethodFlags::Private) {
+            write!(f, "private ")?;
+        }else if self.flags.contains(MethodFlags::Public) {
+            write!(f, "public ")?;
+        }
+
+        if self.flags.contains(MethodFlags::Static) {
+            write!(f, "static ")?;
+        }
+
+        write!(f, "{} {}", self.signature.return_type, self.name)?;
+
+        if let Some(generic_args) = self.signature.generic_params {
+            write!(f, "<")?;
+            for i in 0..generic_args {
+                if !i.is_zero() {
+                    write!(f, ", ")?;
+                }
+                write!(f, "M{}", i)?;
+            }
+            write!(f, ">")?;
+        }
+
+        write!(f, "(")?;
+        for (i, param) in self.signature.parameters.iter().enumerate() {
+            if !i.is_zero() {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", param)?;
+        }
+        write!(f, ")")?;
+        Ok(())
     }
 }
 
@@ -649,10 +747,10 @@ impl AssemblyRef {
     pub fn is_corlib(&self) -> bool {
         const KNOWN_CORLIB_NAMES: &[&'static str] = &[
             "mscorlib",
-            "System.Runtime",
-            "System.Private.CoreLib",
             "netstandard",
             "corefx",
+            "System.Runtime",
+            "System.Private.CoreLib",
         ];
 
         KNOWN_CORLIB_NAMES
