@@ -112,7 +112,7 @@ pub struct SignatureReader<'a> {
 }
 
 impl<'a> SignatureReader<'a> {
-    const RECURSTION_LIMIT: usize = 120;
+    const RECURSTION_LIMIT: usize = 100;
     pub(crate) fn new(reader: BlobStream<'a>, entries: &'a MaybeUninitEntries) -> Self {
         Self {
             reader,

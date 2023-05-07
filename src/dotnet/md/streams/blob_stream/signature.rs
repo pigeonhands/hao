@@ -1,9 +1,7 @@
-use std::fmt::Debug;
-use std::ops::{Deref, DerefMut};
-
 use bitflags::bitflags;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
+use std::fmt::Debug;
 
 use super::reader::{BlobStream, SignatureReader};
 use crate::dotnet::entries::values::*;
@@ -88,12 +86,13 @@ bitflags! {
 }
 
 #[derive(Clone, Debug)]
-pub struct Signature {
+pub struct SignatureDef {
     pub calling_convention: SignatureCallingConvention,
     pub flags: SignatureFlags,
 }
-impl<'a> ReadData<Signature> for SignatureReader<'a> {
-    fn read(&mut self) -> Result<Signature> {
+
+impl<'a> ReadData<SignatureDef> for SignatureReader<'a> {
+    fn read(&mut self) -> Result<SignatureDef> {
         self.recursion_inc()?;
 
         const CALLING_CONVENTION_MASK: u8 = 0x0F;
@@ -110,7 +109,7 @@ impl<'a> ReadData<Signature> for SignatureReader<'a> {
             SignatureCallingConvention::from_reader(self, calling_convention, flags)?;
 
         self.recursion_dec();
-        Ok(Signature {
+        Ok(SignatureDef {
             flags,
             calling_convention,
         })
@@ -119,7 +118,7 @@ impl<'a> ReadData<Signature> for SignatureReader<'a> {
 
 #[derive(Clone, Debug)]
 pub enum SignatureCallingConvention {
-    Field(TypeSig),
+    Field(TypeSigDef),
     Method(MethodSig),
     LocalSig(LocalSig),
     Property(MethodSig),
@@ -154,28 +153,14 @@ impl SignatureCallingConvention {
 }
 
 #[derive(Clone)]
-pub struct TypeDefOrRefSig(TypeDefOrRef);
-
-impl Deref for TypeDefOrRefSig {
-    type Target = TypeDefOrRef;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for TypeDefOrRefSig {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+pub struct TypeDefOrRefSig(pub (crate)TypeDefOrRefPtr);
 
 // This is to stop infinite reccursion when debug printing
 impl Debug for TypeDefOrRefSig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
-            TypeDefOrRef::None => write!(f, "None"),
-            TypeDefOrRef::TypeDef(tref) => match tref.is_set() {
+            TypeDefOrRefPtr::None => write!(f, "None"),
+            TypeDefOrRefPtr::TypeDef(tref) => match tref.is_set() {
                 true => write!(
                     f,
                     "TypeRef(Ptr(\"{}.{}\"))",
@@ -184,7 +169,7 @@ impl Debug for TypeDefOrRefSig {
                 ),
                 false => write!(f, "TypeRef(Invalid)"),
             },
-            TypeDefOrRef::TypeRef(tdef) => match tdef.is_set() {
+            TypeDefOrRefPtr::TypeRef(tdef) => match tdef.is_set() {
                 true => write!(
                     f,
                     "TypeRef(Ptr(\"{}.{}\"))",
@@ -198,8 +183,8 @@ impl Debug for TypeDefOrRefSig {
     }
 }
 
-impl From<TypeDefOrRef> for TypeDefOrRefSig {
-    fn from(value: TypeDefOrRef) -> Self {
+impl From<TypeDefOrRefPtr> for TypeDefOrRefSig {
+    fn from(value: TypeDefOrRefPtr) -> Self {
         Self(value)
     }
 }
@@ -215,7 +200,7 @@ pub enum ArraySize {
 }
 
 #[derive(Debug, Clone)]
-pub enum TypeSig {
+pub enum TypeSigDef {
     Void,
     Boolean,
     Char,
@@ -235,31 +220,37 @@ pub enum TypeSig {
     UIntPtr,
     Object,
 
-    Ptr(Box<TypeSig>),
-    ByRef(Box<TypeSig>),
+    Ptr(Box<TypeSigDef>),
+    ByRef(Box<TypeSigDef>),
     ValueType(TypeDefOrRefSig),
     Class(TypeDefOrRefSig),
-    FnPtr(Box<Signature>),
-    SZArray(Box<TypeSig>),
+    FnPtr(Box<SignatureDef>),
+    SZArray(Box<TypeSigDef>),
     CModReq(TypeDefOrRefSig),
     CModOpt(TypeDefOrRefSig),
     Sentinel,
-    Pinned(Box<TypeSig>),
+    Pinned(Box<TypeSigDef>),
 
     Var {
-        generic_params: u32,
+        generic_param_index: u32,
     },
     MVar {
-        generic_params: u32,
+        generic_param_index: u32,
     },
-    ValueArray(u32, Box<TypeSig>),
-    Module(u32, Box<TypeSig>),
+    ValueArray {
+        len: u32,
+        next_sig: Box<TypeSigDef>,
+    },
+    Module {
+        index: u32,
+        ty: Box<TypeSigDef>,
+    },
     GenericInst {
-        ty: Box<TypeSig>,
-        generic_args: Vec<TypeSig>,
+        ty: Box<TypeSigDef>,
+        generic_args: Vec<TypeSigDef>,
     },
     Array {
-        ty: Box<TypeSig>,
+        ty: Box<TypeSigDef>,
         size: ArraySize,
     },
     Internal,
@@ -267,69 +258,71 @@ pub enum TypeSig {
     Unknown(ElementType),
 }
 
-impl TypeSig {
+impl TypeSigDef {
     const MAX_ARRAY_RANK: u32 = 64;
 }
 
-impl<'a> ReadData<TypeSig> for SignatureReader<'a> {
-    fn read(&mut self) -> Result<TypeSig> {
+impl<'a> ReadData<TypeSigDef> for SignatureReader<'a> {
+    fn read(&mut self) -> Result<TypeSigDef> {
         let element_type: ElementType = self.read()?;
 
         let value = match element_type {
-            ElementType::Void => TypeSig::Void,
-            ElementType::Boolean => TypeSig::Boolean,
-            ElementType::Char => TypeSig::Char,
-            ElementType::I1 => TypeSig::Byte,
-            ElementType::U1 => TypeSig::SByte,
-            ElementType::I2 => TypeSig::Int16,
-            ElementType::U2 => TypeSig::UInt16,
-            ElementType::I4 => TypeSig::Int32,
-            ElementType::U4 => TypeSig::UInt32,
-            ElementType::I8 => TypeSig::Int64,
-            ElementType::U8 => TypeSig::UInt64,
-            ElementType::R4 => TypeSig::Single,
-            ElementType::R8 => TypeSig::Double,
-            ElementType::String => TypeSig::String,
-            ElementType::TypedByRef => TypeSig::TypedRefrence,
-            ElementType::I => TypeSig::IntPtr,
-            ElementType::U => TypeSig::UIntPtr,
-            ElementType::Object => TypeSig::Object,
+            ElementType::Void => TypeSigDef::Void,
+            ElementType::Boolean => TypeSigDef::Boolean,
+            ElementType::Char => TypeSigDef::Char,
+            ElementType::I1 => TypeSigDef::Byte,
+            ElementType::U1 => TypeSigDef::SByte,
+            ElementType::I2 => TypeSigDef::Int16,
+            ElementType::U2 => TypeSigDef::UInt16,
+            ElementType::I4 => TypeSigDef::Int32,
+            ElementType::U4 => TypeSigDef::UInt32,
+            ElementType::I8 => TypeSigDef::Int64,
+            ElementType::U8 => TypeSigDef::UInt64,
+            ElementType::R4 => TypeSigDef::Single,
+            ElementType::R8 => TypeSigDef::Double,
+            ElementType::String => TypeSigDef::String,
+            ElementType::TypedByRef => TypeSigDef::TypedRefrence,
+            ElementType::I => TypeSigDef::IntPtr,
+            ElementType::U => TypeSigDef::UIntPtr,
+            ElementType::Object => TypeSigDef::Object,
 
-            ElementType::Ptr => TypeSig::Ptr(Box::new(self.read()?)),
-            ElementType::ByRef => TypeSig::ByRef(Box::new(self.read()?)),
+            ElementType::Ptr => TypeSigDef::Ptr(Box::new(self.read()?)),
+            ElementType::ByRef => TypeSigDef::ByRef(Box::new(self.read()?)),
             ElementType::ValueType => {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;
-                TypeSig::ValueType(self.entries.get_entry_field(token)?.into())
+                TypeSigDef::ValueType(self.entries.get_entry_field(token)?.into())
             }
             ElementType::Class => {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;
-                TypeSig::Class(self.entries.get_entry_field(token)?.into())
+                TypeSigDef::Class(self.entries.get_entry_field(token)?.into())
             }
-            ElementType::FnPtr => TypeSig::FnPtr(Box::new(self.read()?)),
-            ElementType::SZArray => TypeSig::SZArray(Box::new(self.read()?)),
+            ElementType::FnPtr => TypeSigDef::FnPtr(Box::new(self.read()?)),
+            ElementType::SZArray => TypeSigDef::SZArray(Box::new(self.read()?)),
             ElementType::CModReqd => {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;
-                TypeSig::CModReq(self.entries.get_entry_field(token)?.into())
+                TypeSigDef::CModReq(self.entries.get_entry_field(token)?.into())
             }
             ElementType::CModOpt => {
                 let token: CodedToken<TypeDefOrRefToken> = self.read()?;
-                TypeSig::CModOpt(self.entries.get_entry_field(token)?.into())
+                TypeSigDef::CModOpt(self.entries.get_entry_field(token)?.into())
             }
-            ElementType::Sentinel => TypeSig::Sentinel,
-            ElementType::Pinned => TypeSig::Pinned(Box::new(self.read()?)),
+            ElementType::Sentinel => TypeSigDef::Sentinel,
+            ElementType::Pinned => TypeSigDef::Pinned(Box::new(self.read()?)),
 
-            ElementType::Var => TypeSig::Var {
-                generic_params: self.reader.read_compressed_u32()?,
+            ElementType::Var => TypeSigDef::Var {
+                generic_param_index: self.reader.read_compressed_u32()?,
             },
-            ElementType::MVar => TypeSig::MVar {
-                generic_params: self.reader.read_compressed_u32()?,
+            ElementType::MVar => TypeSigDef::MVar {
+                generic_param_index: self.reader.read_compressed_u32()?,
             },
-            ElementType::ValueArray => {
-                TypeSig::ValueArray(self.reader.read_compressed_u32()?, Box::new(self.read()?))
-            }
-            ElementType::Module => {
-                TypeSig::Module(self.reader.read_compressed_u32()?, Box::new(self.read()?))
-            }
+            ElementType::ValueArray => TypeSigDef::ValueArray {
+                len: self.reader.read_compressed_u32()?,
+                next_sig: Box::new(self.read()?),
+            },
+            ElementType::Module => TypeSigDef::Module {
+                index: self.reader.read_compressed_u32()?,
+                ty: Box::new(self.read()?),
+            },
             ElementType::GenericInst => {
                 let ty = Box::new(self.read()?);
                 let n = self.reader.read_compressed_u32()? as usize;
@@ -337,18 +330,18 @@ impl<'a> ReadData<TypeSig> for SignatureReader<'a> {
                 for _ in 0..n {
                     generic_args.push(self.read()?);
                 }
-                TypeSig::GenericInst { ty, generic_args }
+                TypeSigDef::GenericInst { ty, generic_args }
             }
             ElementType::Array => {
                 let ty = Box::new(self.read()?);
                 let rank = self.reader.read_compressed_u32()?;
-                if rank > TypeSig::MAX_ARRAY_RANK {
+                if rank > TypeSigDef::MAX_ARRAY_RANK {
                     return Err(HaoError::BadImageFormat(
                         "Tried to read an array with more dimentions than allowed.",
                     ));
                 }
 
-                TypeSig::Array {
+                TypeSigDef::Array {
                     ty,
                     size: if rank == 0 {
                         ArraySize::SingleDimention
@@ -375,8 +368,8 @@ impl<'a> ReadData<TypeSig> for SignatureReader<'a> {
                     },
                 }
             }
-            ElementType::Internal => TypeSig::Internal, // TODO
-            ElementType::End | ElementType::R => TypeSig::Unknown(element_type),
+            ElementType::Internal => TypeSigDef::Internal, // TODO
+            ElementType::End | ElementType::R => TypeSigDef::Unknown(element_type),
         };
         Ok(value)
     }
@@ -384,10 +377,10 @@ impl<'a> ReadData<TypeSig> for SignatureReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct MethodSig {
-    pub return_type: Box<TypeSig>,
+    pub return_type: Box<TypeSigDef>,
     pub generic_params: Option<u32>,
-    pub parameters: Vec<TypeSig>,
-    pub params_after_sentinel: Option<Vec<TypeSig>>,
+    pub parameters: Vec<TypeSigDef>,
+    pub params_after_sentinel: Option<Vec<TypeSigDef>>,
 }
 
 impl MethodSig {
@@ -399,12 +392,22 @@ impl MethodSig {
         let num_params = reader.reader.read_compressed_u32()?;
         let return_type = Box::new(reader.read()?);
 
+        if num_params as usize > reader.reader.reader.remaning() {
+            return Ok(Self {
+                generic_params: None,
+                parameters: Vec::new(),
+                params_after_sentinel: None,
+                return_type
+            })
+        }
+        
         let mut parameters = Vec::with_capacity(num_params as usize);
-        let mut params_after_sentinel: Option<Vec<TypeSig>> = None;
+        let mut params_after_sentinel: Option<Vec<TypeSigDef>> = None;
+
 
         for _ in 0..num_params {
             let ty = reader.read()?;
-            if matches!(ty, TypeSig::Sentinel) {
+            if matches!(ty, TypeSigDef::Sentinel) {
                 let senti_vec = if let Some(v) = &mut params_after_sentinel {
                     v
                 } else {
@@ -433,7 +436,7 @@ impl MethodSig {
 
 #[derive(Debug, Clone)]
 pub struct LocalSig {
-    pub locals: Vec<TypeSig>,
+    pub locals: Vec<TypeSigDef>,
 }
 
 impl<'a> ReadData<LocalSig> for SignatureReader<'a> {
@@ -455,7 +458,7 @@ impl<'a> ReadData<LocalSig> for SignatureReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct GenericInstMethodSig {
-    pub generic_args: Vec<TypeSig>,
+    pub generic_args: Vec<TypeSigDef>,
 }
 
 impl<'a> ReadData<GenericInstMethodSig> for SignatureReader<'a> {

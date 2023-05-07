@@ -874,12 +874,12 @@ impl<'a> ReadData<ModuleRefTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct TypeSpecTableRow {
-    pub signature: BlobStreamOffset,
+    pub signature: BlobStreamOffsetTypeSpec,
 }
 
 impl<'a> CalculateTableSize<TypeSpecTableRow> for SizeCalculator<'a> {
     fn calculate_table_size_bytes(&self) -> usize {
-        BlobStreamOffset::streams_offset_size(self.flags).byte_size()
+        BlobStreamOffsetTypeSpec::streams_offset_size(self.flags).byte_size()
     }
 }
 

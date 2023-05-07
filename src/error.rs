@@ -4,6 +4,8 @@ pub type Result<T> = std::result::Result<T, HaoError>;
 
 #[derive(Error, Debug)]
 pub enum HaoError {
+    #[error("An IO error has occored. {0:?}")]
+    IoError(std::io::Error),
     #[error("failed to parse PE file")]
     BadPeFormat,
     #[error("file is not a .net binary")]
@@ -28,8 +30,12 @@ pub enum HaoError {
     InvalidSignatureCallingConvention(u8),
     #[error("Invalid signature element type ({0}) at position ({0}).")]
     InvalidSignatureElementType(u8, usize),
+    #[error("The provided signature does not match what is expected for the entry.")]
+    InvalidSignatureForEntry(&'static str),
     #[error("Recursion limit reached.")]
     RecursionLimitReached,
+    #[error("Invalid refrence to enttry in {0} table at index {1}.")]
+    InvalidEntryRefrence(&'static str, usize),
     #[error("unknown error")]
     Unknown,
 }

@@ -28,6 +28,7 @@ hao
 A libarary for reading and (eventually) writing .net assembiles and modules in rust.
 
 ## Example
+this example will print out c# code of each type and its fields
 ```rust
 use hao::{Module, Result};
 
@@ -35,9 +36,9 @@ fn main() -> Result<()>{
     let module = Metadata::from_path(r#"Example.Net.dll"#).unwrap();
 
     for ty in module.types().values() {
-        println!("{} {{", ty.name());
+        println!("{} {{", ty);
         for field in ty.fields().values() {
-            println!("\tfield: {}", field.name());
+            println!("\t{};", field);
         }
         println!("}}");
     }

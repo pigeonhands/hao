@@ -1,26 +1,33 @@
 use crate::{
     dotnet::{
+        entries::{values::TypeDef, GetEntryField, MaybeUninitEntries},
         entries::{
-            values::{Field, Method},
+            values::{Field, Method, Param},
             Ptr, RowRange,
         },
-        entries::{GetEntryField, MaybeUninitEntries},
         md::streams::{
             tables_stream::{
+                coded_tokens::{CodedToken, CodedTokenTarget},
                 BlobStreamOffset, FieldTableOffset, GuidStreamOffset, MethodTableOffset,
-                StringsStreamOffset,
+                StringsStreamOffset, TypeDefTableOffset, ParamTableOffset, BlobStreamOffsetTypeSpec,
             },
-            MetadataStreams, Signature,
+            MetadataStreams, SignatureDef, TypeSigDef,
         },
     },
-    error::Result,
+    error::{HaoError, Result},
 };
 
 use super::ReadData;
 
 pub trait ValueReadable<T> {
-    type EntryValue;
+    type EntryValue: Clone;
     fn read(&self, identifier: T) -> Result<Self::EntryValue>;
+}
+
+pub(crate) trait GetTableForRead<T> {
+    type TablevalueType: Clone;
+    fn to_index(&self, offset: T) -> Result<usize>;
+    fn get_table(&self) -> &[Ptr<Self::TablevalueType>];
 }
 
 pub(crate) struct EntryReader<'a> {
@@ -37,13 +44,107 @@ impl<'a> EntryReader<'a> {
     }
 }
 
+impl<'a, T: CodedTokenTarget> ValueReadable<CodedToken<T>> for EntryReader<'a>
+where
+    MaybeUninitEntries: GetEntryField<CodedToken<T>>,
+{
+    type EntryValue = <MaybeUninitEntries as GetEntryField<CodedToken<T>>>::EntryFieldValue;
+    fn read(&self, identifier: CodedToken<T>) -> Result<Self::EntryValue> {
+        self.entries.get_entry_field(identifier)
+    }
+}
+
 impl<'a, T> ValueReadable<T> for EntryReader<'a>
 where
-    MaybeUninitEntries: GetEntryField<T>,
+    EntryReader<'a>: GetTableForRead<T>,
 {
-    type EntryValue = <MaybeUninitEntries as GetEntryField<T>>::EntryFieldValue;
+    type EntryValue = Ptr<<EntryReader<'a> as GetTableForRead<T>>::TablevalueType>;
+
     fn read(&self, identifier: T) -> Result<Self::EntryValue> {
-        self.entries.get_entry_field(identifier)
+        let index = self.to_index(identifier)?;
+        let table = self.get_table();
+
+        table
+            .get(index)
+            .ok_or_else(|| {
+                HaoError::InvalidEntryRefrence(std::any::type_name::<Self::EntryValue>(), index)
+            })
+            .cloned()
+    }
+}
+
+impl<'a, T> ValueReadable<RowRange<T>> for EntryReader<'a>
+where
+    EntryReader<'a>: GetTableForRead<T>,
+{
+    //type EntryValue = Vec<Ptr<EntryReader<'a> as GetTableForRead<T>>::TablevalueType>>
+    type EntryValue = Vec<Ptr<<EntryReader<'a> as GetTableForRead<T>>::TablevalueType>>;
+
+    fn read(&self, identifier: RowRange<T>) -> Result<Self::EntryValue> {
+        let target_rows = self.get_table();
+
+        let start = self.to_index(identifier.start)?;
+        let end = identifier.end.map(|v| self.to_index(v)).transpose()?;
+
+        if start >= target_rows.len() {
+            return Err(HaoError::InvalidEntryRefrence(
+                std::any::type_name::<Self::EntryValue>(),
+                start,
+            ));
+        }
+
+        let end = end.unwrap_or(target_rows.len());
+
+        let slice = target_rows.get(start..end).unwrap_or(&target_rows[start..]);
+        Ok(slice.to_vec())
+    }
+}
+
+impl<'a> GetTableForRead<FieldTableOffset> for EntryReader<'a> {
+    type TablevalueType = Field;
+    fn to_index(&self, offset: FieldTableOffset) -> Result<usize> {
+        (offset.0 as usize).checked_sub(1).ok_or_else(|| {
+            HaoError::InvalidEntryRefrence(std::any::type_name::<Self::TablevalueType>(), 0)
+        })
+    }
+    fn get_table(&self) -> &[Ptr<Self::TablevalueType>] {
+        self.entries.fields.as_slice()
+    }
+}
+
+impl<'a> GetTableForRead<TypeDefTableOffset> for EntryReader<'a> {
+    type TablevalueType = TypeDef;
+    fn to_index(&self, offset: TypeDefTableOffset) -> Result<usize> {
+        (offset.0 as usize).checked_sub(1).ok_or_else(|| {
+            HaoError::InvalidEntryRefrence(std::any::type_name::<Self::TablevalueType>(), 0)
+        })
+    }
+    fn get_table(&self) -> &[Ptr<Self::TablevalueType>] {
+        self.entries.type_defs.as_slice()
+    }
+}
+
+impl<'a> GetTableForRead<ParamTableOffset> for EntryReader<'a> {
+    type TablevalueType = Param;
+    fn to_index(&self, offset: ParamTableOffset) -> Result<usize> {
+        (offset.0 as usize).checked_sub(1).ok_or_else(|| {
+            HaoError::InvalidEntryRefrence(std::any::type_name::<Self::TablevalueType>(), 0)
+        })
+    }
+    fn get_table(&self) -> &[Ptr<Self::TablevalueType>] {
+        self.entries.params.as_slice()
+    }
+}
+
+impl<'a> GetTableForRead<MethodTableOffset> for EntryReader<'a> {
+    type TablevalueType = Method;
+    fn to_index(&self, offset: MethodTableOffset) -> Result<usize> {
+        (offset.0 as usize).checked_sub(1).ok_or_else(|| {
+            HaoError::InvalidEntryRefrence(std::any::type_name::<Self::TablevalueType>(), 0)
+        })
+    }
+    fn get_table(&self) -> &[Ptr<Self::TablevalueType>] {
+        self.entries.methods.as_slice()
     }
 }
 
@@ -75,7 +176,7 @@ impl<'a> ValueReadable<GuidStreamOffset> for EntryReader<'a> {
 }
 
 impl<'a> ValueReadable<BlobStreamOffset> for EntryReader<'a> {
-    type EntryValue = Signature;
+    type EntryValue = SignatureDef;
 
     fn read(&self, identifier: BlobStreamOffset) -> Result<Self::EntryValue> {
         let mut reader = self
@@ -86,36 +187,14 @@ impl<'a> ValueReadable<BlobStreamOffset> for EntryReader<'a> {
     }
 }
 
-impl<'a> ValueReadable<RowRange<FieldTableOffset>> for EntryReader<'a> {
-    type EntryValue = Vec<Ptr<Field>>;
+impl<'a> ValueReadable<BlobStreamOffsetTypeSpec> for EntryReader<'a> {
+    type EntryValue = TypeSigDef;
 
-    fn read(&self, identifier: RowRange<FieldTableOffset>) -> Result<Self::EntryValue> {
-        let target_rows = &self.entries.fields;
-
-        let start = identifier.start.0 as usize;
-        let end = identifier
-            .end
-            .map(|c| c.0 as usize)
-            .unwrap_or(target_rows.len());
-
-        let slice = target_rows.get(start..end).unwrap_or(&target_rows[start..]);
-        Ok(slice.to_vec())
-    }
-}
-
-impl<'a> ValueReadable<RowRange<MethodTableOffset>> for EntryReader<'a> {
-    type EntryValue = Vec<Ptr<Method>>;
-
-    fn read(&self, identifier: RowRange<MethodTableOffset>) -> Result<Self::EntryValue> {
-        let target_rows = &self.entries.methods;
-
-        let start = identifier.start.0 as usize;
-        let end = identifier
-            .end
-            .map(|c| c.0 as usize)
-            .unwrap_or(target_rows.len());
-
-        let slice = target_rows.get(start..end).unwrap_or(&target_rows[start..]);
-        Ok(slice.to_vec())
+    fn read(&self, identifier: BlobStreamOffsetTypeSpec) -> Result<Self::EntryValue> {
+        let mut reader = self
+            .streams
+            .blob_stream
+            .get_signature_reader(identifier.0, self.entries)?;
+        reader.read()
     }
 }

@@ -61,6 +61,31 @@ impl<'a> ReadData<BlobStreamOffset> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
+pub struct BlobStreamOffsetTypeSpec(pub u32);
+
+impl StreamsOffsetSize for BlobStreamOffsetTypeSpec {
+    fn streams_offset_size(flags: MDStreamFlags) -> ValueSize {
+        if flags.contains(MDStreamFlags::BigBlob) {
+            ValueSize::Big
+        } else {
+            ValueSize::Small
+        }
+    }
+}
+
+impl<'a> ReadData<BlobStreamOffsetTypeSpec> for TablesStreamReader<'a> {
+    fn read(&mut self) -> Result<BlobStreamOffsetTypeSpec> {
+        if BlobStreamOffsetTypeSpec::streams_offset_size(self.header.flags) == ValueSize::Big {
+            Ok(BlobStreamOffsetTypeSpec(self.read()?))
+        } else {
+            let small_str: u16 = self.read()?;
+            Ok(BlobStreamOffsetTypeSpec(small_str as u32))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct GuidStreamOffset(pub u32);
 
 impl StreamsOffsetSize for GuidStreamOffset {
