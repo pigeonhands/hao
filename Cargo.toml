@@ -2,7 +2,7 @@
 name = "hao"
 authors = ["Sam M."]
 categories = ["parsing"]
-keywords = [".net", "managed", "c#", "mono.cecil", "dnlib"]
+keywords = ["dotnet", "managed", "csharp", "netcore",  "dnlib"]
 
 version = "0.0.2-prerelease"
 edition = "2021"
