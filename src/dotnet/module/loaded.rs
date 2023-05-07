@@ -10,7 +10,7 @@ use crate::error::HaoError;
 use crate::{error::Result, io::EntryReader};
 
 use super::resolver::PathAssemblyResolver;
-use super::resolver::{AssemblyResolver, AssemblyLoadResult};
+use super::resolver::{AssemblyLoadResult, AssemblyResolver};
 
 /// Represents a loaded .net module.
 /// ```no_run
@@ -25,7 +25,6 @@ use super::resolver::{AssemblyResolver, AssemblyLoadResult};
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct Module {
-    // All below are from metatada tables
     pub(crate) modules: EntList<ModuleDef>,
     pub(crate) type_refs: EntList<TypeRef>,
     pub(crate) type_defs: EntList<TypeDef>,
@@ -40,26 +39,50 @@ pub struct Module {
 }
 
 impl Module {
+    /// Load a .net assembly from the given path and resolve its dependancies
+    /// with the default [`PathAssemblyResolver`] resolver.
+    /// 
+    /// ```no_run
+    /// let module = Module::from_path(r#"Example.Net.dll"#)?;
+    /// ```
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let data = std::fs::read(path.as_ref()).map_err(HaoError::IoError)?;
         let md = Metadata::parse(&data)?;
         let asm = Self::from_metadata(&md)?;
 
-        dbg!(&md.metadata_streams.tables_stream.header.table_locations.field);
+        dbg!(
+            &md.metadata_streams
+                .tables_stream
+                .header
+                .table_locations
+                .field
+        );
         let mut resolver: PathAssemblyResolver = PathAssemblyResolver::new(path.as_ref());
         asm.load_dependancies(&mut resolver)?;
         Ok(asm)
     }
 
+    /// Load a .net assembly from the given path and but do not reolve its dependancies.
+    /// 
+    /// ```no_run
+    /// let module = Module::from_path_no_resolve(r#"Example.Net.dll"#)?;
+    /// ```
     pub fn from_path_no_resolve(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let data = std::fs::read(path.as_ref()).map_err(HaoError::IoError)?;
         let md = Metadata::parse(&data)?;
-        //dbg!(&md.metadata_streams.tables_stream.header.table_locations.field);
 
         let asm = Self::from_metadata(&md)?;
         Ok(asm)
     }
 
+    /// Load a .net assembly from metadata.
+    /// This will not resolve the modules dependancies.
+    /// ```no_run
+    /// # use hao::{Module, dotnet::Metadata};
+    /// let data = std::fs::read("Example.Net.dll").unwrap();
+    /// let md = Metadata::parse(&data).unwrap();
+    /// let loaded_module = Module::from_metadata(&md).unwrap();
+    /// ```
     pub fn from_metadata(metadada: &Metadata) -> Result<Self> {
         let entries = {
             let locations = &metadada
@@ -95,9 +118,8 @@ impl Module {
         })
     }
 
-    /// Attempts to load the refrenced assemblies using the given resolver
-    /// this will panic if there is a refrence holding any of the 
-    /// [`AssemblyRef`] in this module.
+    /// Attempts to load the refrenced assemblies using the given resolver.
+    /// This will panic if there is a refrence holding any of the [`AssemblyRef`] in this module. 
     pub fn load_dependancies(&self, resolver: &mut impl AssemblyResolver) -> Result<()> {
         for asm in self.assembly_ref.iter() {
             let mut asm = asm.value_mut();
@@ -106,7 +128,7 @@ impl Module {
             }
             asm.refrenced_assembly = match resolver.load(&asm.name)? {
                 AssemblyLoadResult::Ignore => None,
-                AssemblyLoadResult::Loaded(asm) => Some(asm)
+                AssemblyLoadResult::Loaded(asm) => Some(asm),
             };
         }
         Ok(())
@@ -125,77 +147,75 @@ impl Module {
 
     /// Returns an [`EntryCollection`] of [`TypeDef`] with all the type refrences
     /// inside the current module.
+    /// 
+    /// ```
+    /// # use hao::Module;
+    /// let module = Module::default();
+    /// 
+    /// for ty in module.types().values() {
+    ///     println!("{}", ty);
+    /// }
+    /// ```
     pub fn types(&self) -> EntryCollection<TypeDef> {
         EntryCollection::new(&self.type_defs)
     }
 
-    /// Returns an [`EntryCollection`] of [`Field`] with all the fields
-    /// defined in the module regardless of the parent type.
+    /// Returns all the fields defined in the module regardless of the parent type.
     ///
-    /// If you want the associated type, use [`TypeDef::fields()`].
+    /// If you want the associated type, use [`TypeDef::fields`].
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// for ty in module.types().values() {
-    ///    for field in ty.fields().values() {
-    ///        println!("{} {}", field.signature(), field.name());
-    ///    }
+    /// 
+    /// for field in module.all_fields().values() {
+    ///     println!("{} {}", field.signature(), field.name());
     /// }
     /// ```
     pub fn all_fields(&self) -> EntryCollection<Field> {
         EntryCollection::new(&self.fields)
     }
 
-    /// Returns an [`EntryCollection`] of [`Method`] with all the methods
-    /// defined in the module regardless of the parent type.
+    /// Returns  all the methods defined in the module regardless of the parent type.
     ///
-    /// If you want the associated type, use [`TypeDef::methods()`].
+    /// If you want the associated type, use [`TypeDef::methods`].
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// for ty in module.types().values() {
-    ///    for method in ty.methods().values() {
-    ///        println!("{}", method.name());
-    ///    }
+    /// 
+    /// for method in module.all_methods().values() {
+    ///    println!("{}", method.name());
     /// }
     /// ```
     pub fn all_methods(&self) -> EntryCollection<Method> {
         EntryCollection::new(&self.methods)
     }
 
-    /// Returns an [`EntryCollection`] of [`Param`] with all the parameters
-    /// defined in the module regardless of the parent method.
+    /// Returns all the parameters defined in the module regardless of the parent method.
     ///
-    /// If you want the associated method, use [`Method::params()`].
+    /// If you want the associated method, use [`Method::params`].
     /// ```
     /// # use hao::Module;
     /// let module = Module::default();
-    /// for ty in module.types().values() {
-    ///    for method in ty.methods().values() {
-    ///        for param in method.params().values() {
-    ///             println!("{}", param.name());
-    ///        }
-    ///    }
+    /// 
+    /// for param in module.all_params().values() {
+    ///     println!("{}", param.name());
     /// }
     /// ```
     pub fn all_params(&self) -> EntryCollection<Param> {
         EntryCollection::new(&self.params)
     }
 
-    /// Returns an [`EntryCollection`] of [`TypeSpec`] with all the type specs
-    /// defined in the module.
+    /// Returns all the type specs  defined in the module.
     pub fn all_type_specs(&self) -> EntryCollection<TypeSpec> {
         EntryCollection::new(&self.type_specs)
     }
 
-    /// Returns an [`EntryCollection`] of [`ModuleRef`] with all the modules
-    /// refrenced in the module.
+    /// Returns all the modules refrenced in the module.
     pub fn module_ref(&self) -> EntryCollection<ModuleRef> {
         EntryCollection::new(&self.module_ref)
     }
 
-    /// Returns an [`EntryCollection`] of [`AssemblyRef`] with all the assemblies
-    /// refrenced in the module.
+    /// Returns all the assemblies  refrenced in the module.
     pub fn assembly_ref(&self) -> EntryCollection<AssemblyRef> {
         EntryCollection::new(&self.assembly_ref)
     }
