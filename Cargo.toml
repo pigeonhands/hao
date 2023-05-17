@@ -4,7 +4,7 @@ authors = ["Sam M."]
 categories = ["parsing"]
 keywords = ["dotnet", "managed", "csharp", "netcore",  "dnlib"]
 
-version = "0.0.2-prerelease"
+version = "0.0.3"
 edition = "2021"
 description = ".net binary reader"
 license = "MIT"
