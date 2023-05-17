@@ -89,7 +89,7 @@ where
         let end = end.unwrap_or(target_rows.len());
 
         if start == end {
-            return Ok(Vec::new());
+            Ok(Vec::new())
         } else {
             if start >= target_rows.len() {
                 return Err(HaoError::InvalidEntryRefrence(

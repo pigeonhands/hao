@@ -74,7 +74,7 @@ pub(crate) enum ResolutionScopePtr {
     None,
 }
 
-impl<'a> GetEntryField<CodedToken<ResolutionScopeToken>> for MaybeUninitEntries {
+impl GetEntryField<CodedToken<ResolutionScopeToken>> for MaybeUninitEntries {
     type EntryFieldValue = ResolutionScopePtr;
 
     fn get_entry_field(
@@ -135,7 +135,7 @@ impl TypeRef {
             ResolutionScope::AssemblyRef(r) if r.value().is_corlib() => {
                 WellKnown::from_full_name(self.namespace(), self.name())
             }
-            _ => return None,
+            _ => None,
         }
     }
 
@@ -148,10 +148,7 @@ impl TypeRef {
     }
 
     pub fn is_corlib(&self) -> bool {
-        match self.resolution_scope() {
-            ResolutionScope::AssemblyRef(r) if r.value().is_corlib() => true,
-            _ => false,
-        }
+        matches!(self.resolution_scope(), ResolutionScope::AssemblyRef(r) if r.value().is_corlib())
     }
 
     pub fn is_system_type_instance(&self, system_type: SystemType) -> bool {
@@ -211,17 +208,17 @@ impl GetEntryField<CodedToken<TypeDefOrRefToken>> for MaybeUninitEntries {
                 .type_defs
                 .get(index)
                 .cloned()
-                .map(|c| TypeDefOrRefPtr::TypeDef(c)),
+                .map(TypeDefOrRefPtr::TypeDef),
             TypeDefOrRefToken::TypeRef => self
                 .type_refs
                 .get(index)
                 .cloned()
-                .map(|c| TypeDefOrRefPtr::TypeRef(c)),
+                .map(TypeDefOrRefPtr::TypeRef),
             TypeDefOrRefToken::TypeSpec => self
                 .type_specs
                 .get(index)
                 .cloned()
-                .map(|c| TypeDefOrRefPtr::TypeSpec(c)),
+                .map(TypeDefOrRefPtr::TypeSpec),
         };
         val.ok_or_else(|| HaoError::InvalidCodedTokenOffset(identifier.rid, "TypeDefOrRefToken"))
     }
@@ -376,20 +373,18 @@ impl Display for TypeDef {
 
         if self.is_static() {
             write!(f, "static class ")?;
-        } else {
-            if self.is_interface() {
-                write!(f, "interface ")?;
-            } else if self.is_struct() {
-                if self.flags.contains(TypeAttributes::Sealed) {
-                    write!(f, "readonly ")?;
-                }
-                write!(f, "struct ")?;
-            } else {
-                if self.flags.contains(TypeAttributes::Sealed) {
-                    write!(f, "sealed ")?;
-                }
-                write!(f, "class ")?;
+        } else if self.is_interface() {
+            write!(f, "interface ")?;
+        } else if self.is_struct() {
+            if self.flags.contains(TypeAttributes::Sealed) {
+                write!(f, "readonly ")?;
             }
+            write!(f, "struct ")?;
+        } else {
+            if self.flags.contains(TypeAttributes::Sealed) {
+                write!(f, "sealed ")?;
+            }
+            write!(f, "class ")?;
         }
 
         if !self.namespace().is_empty() {

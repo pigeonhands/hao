@@ -329,14 +329,14 @@ impl MethodSignature {
             parameters: method_sig
                 .parameters
                 .into_iter()
-                .map(|sig| TypeSignature::from_sig_def(sig))
+                .map(TypeSignature::from_sig_def)
                 .collect::<Result<_>>()?,
             params_after_sentinel: method_sig
                 .params_after_sentinel
                 .map(|params| {
                     params
                         .into_iter()
-                        .map(|sig| TypeSignature::from_sig_def(sig))
+                        .map(TypeSignature::from_sig_def)
                         .collect::<Result<Vec<_>>>()
                 })
                 .transpose()?,

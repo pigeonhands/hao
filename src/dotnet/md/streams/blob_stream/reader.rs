@@ -125,7 +125,7 @@ impl<'a> SignatureReader<'a> {
     pub(crate) fn recursion_inc(&mut self) -> Result<()> {
         self.recursion_count += 1;
         if self.recursion_count > Self::RECURSTION_LIMIT {
-            return Err(HaoError::RecursionLimitReached);
+            Err(HaoError::RecursionLimitReached)
         } else {
             Ok(())
         }

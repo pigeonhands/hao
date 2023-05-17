@@ -55,7 +55,7 @@ pub struct TypeRefTableRow {
 
 impl<'a> CalculateTableSize<TypeRefTableRow> for SizeCalculator<'a> {
     fn calculate_table_size_bytes(&self) -> usize {
-        ResolutionScopeToken::token_size(&self.coded_tokens_sizes).byte_size()
+        ResolutionScopeToken::token_size(self.coded_tokens_sizes).byte_size()
             + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
             + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
     }
@@ -141,7 +141,7 @@ impl<'a> CalculateTableSize<TypeDefTableRow> for SizeCalculator<'a> {
         self.size_of_prim::<TypeAttributes>()
             + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
             + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
-            + TypeDefOrRefToken::token_size(&self.coded_tokens_sizes).byte_size()
+            + TypeDefOrRefToken::token_size(self.coded_tokens_sizes).byte_size()
             + FieldTableOffset::table_offset_size(self.rows).byte_size()
             + MethodTableOffset::table_offset_size(self.rows).byte_size()
     }

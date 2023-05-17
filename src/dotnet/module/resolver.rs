@@ -5,7 +5,7 @@ use crate::error::HaoError;
 use crate::{error::Result, Module};
 
 // Hard code for testing
-const TRUSTED_ASSEMBLY_LOCATION: &'static str =
+const TRUSTED_ASSEMBLY_LOCATION: &str =
     r#"C:\Program Files\dotnet\shared\Microsoft.NETCore.App\6.0.16\"#;
 
 pub enum AssemblyLoadResult {
@@ -27,7 +27,7 @@ impl PathAssemblyResolver {
     pub fn new(path: &std::path::Path) -> Self {
         let base_path = path.to_owned();
         Self {
-            base_path: base_path,
+            base_path,
             assembly_list: Vec::new(),
         }
     }
@@ -35,7 +35,7 @@ impl PathAssemblyResolver {
 
 impl PathAssemblyResolver {
     fn find_path_for(&self, assembly_name: &str) -> Option<PathBuf> {
-        const KNOWN_EXTENTIONS: [&'static str; 2] = ["dll", "CoreLib.dll"];
+        const KNOWN_EXTENTIONS: [&str; 2] = ["dll", "CoreLib.dll"];
         let asm_locations = [Path::new(TRUSTED_ASSEMBLY_LOCATION), &self.base_path];
 
         for asm_root_path in asm_locations.into_iter() {
@@ -70,7 +70,7 @@ impl AssemblyResolver for PathAssemblyResolver {
             self.assembly_list
                 .push((assembly_name.into(), loaded_asm.clone()));
             loaded_asm.load_dependancies(self)?;
-            return Ok(AssemblyLoadResult::Loaded(loaded_asm));
+            Ok(AssemblyLoadResult::Loaded(loaded_asm))
         } else {
             Err(HaoError::IoError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
