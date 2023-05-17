@@ -4,7 +4,7 @@ authors = ["Sam M."]
 categories = ["parsing"]
 keywords = ["dotnet", "managed", "csharp", "netcore",  "dnlib"]
 
-version = "0.0.2-prerelease"
+version = "0.0.3"
 edition = "2021"
 description = ".net binary reader"
 license = "MIT"
@@ -15,7 +15,7 @@ documentation = "https://docs.rs/hao"
 
 [dependencies]
 thiserror = "1.0.35"
-goblin = { version = "0.6.1", default-features = false, features = ["pe32"] }
+pewter = { version = "0.0.3"}
 bitflags = "2.2.1"
 num-traits = "0.2"
 num-derive = "0.3"

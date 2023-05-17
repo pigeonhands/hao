@@ -5,9 +5,6 @@
 //! a feature flag that can optionally continue parsing the file and expose the raw, non-sanitary
 //! parts that it encounters.
 //!
-//! Currently, `hao` depends on [goblin](https://docs.rs/goblin/latest/goblin/) for parsing the win32 pe files,
-//! but at some point ths dependancy will be removed and the pe parsing will be included for more flexability.
-//!
 //! The current state of this library is read-only with .net framework/core files and largely untested with mono, however
 //! mono support is definetly going to be supported in the future.
 //!
