@@ -100,6 +100,7 @@ impl<'a, T> ReadData<T> for BlobStream<'a>
 where
     DataReader<'a>: ReadData<T>,
 {
+    #[inline(always)]
     fn read(&mut self) -> Result<T> {
         self.reader.read()
     }
@@ -138,6 +139,7 @@ impl<'a, T> ReadData<T> for SignatureReader<'a>
 where
     BlobStream<'a>: ReadData<T>,
 {
+    #[inline(always)]
     fn read(&mut self) -> Result<T> {
         self.reader.read()
     }

@@ -47,9 +47,13 @@ impl Module {
     /// ```
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let mut exec_path = path.as_ref().to_owned();
-        let data = std::fs::read(&exec_path).map_err(HaoError::IoError)?;
-        let md = Metadata::parse(&data)?;
-        let asm = Self::from_metadata(&md)?;
+
+        let asm = {
+            let data = std::fs::read(&exec_path).map_err(HaoError::IoError)?;
+            let md = Metadata::parse(&data)?;
+            Self::from_metadata(&md)?
+        };
+        
         exec_path.pop();
         let mut resolver: PathAssemblyResolver = PathAssemblyResolver::new(&exec_path);
         asm.load_dependancies(&mut resolver)?;

@@ -14,6 +14,7 @@ impl<'a, T> ReadData<T> for DataReader<'a>
 where
     T: Readable,
 {
+    #[inline(always)]
     fn read(&mut self) -> Result<T> {
         T::from_reader(self)
     }
@@ -38,6 +39,7 @@ impl<'a> DataReader<'a> {
         self.buffer.len() - self.position()
     }
 
+    #[inline(always)]
     pub fn offset(&mut self, amount: usize) -> Result<()> {
         if self.buffer.len() < self.index + amount {
             return Err(HaoError::NotEnoughDataLeft(
@@ -49,6 +51,16 @@ impl<'a> DataReader<'a> {
         Ok(())
     }
 
+    #[inline]
+    pub fn view_range(&self, range: Range<usize>) -> Result<&'a [u8]> {
+        if self.buffer.len() < range.end {
+            return Err(HaoError::NotEnoughDataLeft(range.end - self.buffer.len()));
+        }
+
+        Ok(&self.buffer[range])
+    }
+
+    #[inline]
     pub fn view_slice(&self, len: usize) -> Result<&'a [u8]> {
         if self.buffer.len() < self.index + len {
             return Err(HaoError::NotEnoughDataLeft(
@@ -58,20 +70,14 @@ impl<'a> DataReader<'a> {
         Ok(&self.buffer[self.index..self.index + len])
     }
 
-    pub fn view_range(&self, range: Range<usize>) -> Result<&'a [u8]> {
-        if self.buffer.len() < range.end {
-            return Err(HaoError::NotEnoughDataLeft(range.end - self.buffer.len()));
-        }
-
-        Ok(&self.buffer[range])
-    }
-
+    #[inline(always)]
     pub fn read_slice(&mut self, len: usize) -> Result<&'a [u8]> {
         let s = self.view_slice(len)?;
         self.index += s.len();
         Ok(s)
     }
 
+    #[inline(always)]
     pub fn remaning_slice(&self) -> &'a [u8] {
         &self.buffer[self.index..]
     }
@@ -87,6 +93,7 @@ macro_rules! impl_read_data {
     ($($t:ty),+) => {
         $(
             impl ReadData<$t> for DataReader<'_> {
+                #[inline(always)]
                 fn read(&mut self) -> Result<$t> {
                     let data = self.read();
                     data.map(<$t>::from_le_bytes)
@@ -103,8 +110,9 @@ impl_read_data! {
 }
 
 impl ReadData<u8> for DataReader<'_> {
+    #[inline(always)]
     fn read(&mut self) -> Result<u8> {
-        if self.buffer.len() < self.index + 1 {
+        if self.buffer.len() <= self.index {
             return Err(HaoError::NotEnoughDataLeft(1));
         }
         let b = self.buffer[self.index];
@@ -114,11 +122,11 @@ impl ReadData<u8> for DataReader<'_> {
 }
 
 impl<const N: usize> ReadData<[u8; N]> for DataReader<'_> {
+    #[inline(always)]
     fn read(&mut self) -> Result<[u8; N]> {
-        let e = self
+        self
             .read_slice(N)?
             .try_into()
-            .map_err(|_| HaoError::NotEnoughDataLeft(N))?;
-        Ok(e)
+            .map_err(|_| HaoError::NotEnoughDataLeft(N))
     }
 }
