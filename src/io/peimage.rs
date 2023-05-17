@@ -1,86 +1,58 @@
 use crate::error::{HaoError, Result};
 use crate::io::DataReader;
 
-use goblin::pe::{
-    data_directories::DataDirectory, import::Bitfield, optional_header::OptionalHeader,
-    section_table::SectionTable, PE,
-};
+use pewter::pe::optional_header::OptionalHeader;
+use pewter::pe::sections::cor20::ImageCor20Header;
+use pewter::pe::sections::{SectionRow};
+use pewter::PEFile;
 
 pub struct PEImage<'a> {
-    pe: PE<'a>,
-    data: &'a [u8],
+    pub pe: PEFile<'a>,
 }
 
 impl<'a> PEImage<'a> {
     pub fn load_bytes(data: &'a [u8]) -> Result<Self> {
-        let pe = PE::parse(data).map_err(|_| HaoError::BadPeFormat)?;
+        let pe = PEFile::parse(data).map_err(|_| HaoError::BadPeFormat)?;
 
-        Ok(Self { pe, data })
+        Ok(Self { pe })
     }
 
-    pub fn optional_header(&self) -> Result<OptionalHeader> {
-        self.pe.header.optional_header.ok_or(HaoError::BadPeFormat)
+    pub fn optional_header(&self) -> Result<&OptionalHeader> {
+        self.pe.optional_header.as_ref().ok_or(HaoError::BadPeFormat)
     }
 
-    pub fn rva_to_section(&self, rva: u32) -> Option<&SectionTable> {
-        fn align_up(v: u32, allignment: u32) -> u32 {
-            (v + allignment - 1) & !(allignment - 1)
-        }
-        let alignment = self
-            .optional_header()
-            .ok()?
-            .windows_fields
-            .section_alignment;
-
-        self.pe.sections.iter().find(|section| {
-            rva >= section.virtual_address
-                && rva < (section.virtual_address + align_up(section.virtual_size, alignment))
-        })
+    pub fn rva_to_section(&self, rva: u32) -> Option<&SectionRow> {
+        self.pe.sections.find_rva(rva as usize)
     }
 
-    pub fn rva_to_file_offset(&self, rva: u32) -> Result<usize> {
-        let optional_header = self.optional_header()?;
-
-        if rva >= optional_header.windows_fields.size_of_image {
-            return Err(HaoError::BadRva(rva));
-        }
-
-        let image_section_header = self.rva_to_section(rva);
-
-        if let Some(section) = image_section_header {
-            let offset = rva - section.virtual_address;
-            if offset >= section.size_of_raw_data {
-                return Err(HaoError::BadRva(rva));
-            }
-            Ok((offset + section.pointer_to_raw_data) as usize)
-        } else {
-            Ok(rva as usize)
-        }
+    pub fn rva_to_file_offset_(&self, _rva: u32) -> Result<usize> {
+        todo!()
     }
 
     pub fn create_reader(&self, rva: u32, size: Option<usize>) -> Result<DataReader<'a>> {
-        let file_offset = self.rva_to_file_offset(rva)?;
+        let data = self
+            .pe
+            .sections
+            .find_rva_data(rva as usize)
+            .ok_or_else(|| HaoError::BadRva(rva))?;
 
         let data = if let Some(size) = size {
-            &self.data[file_offset..file_offset + size]
+            &data[..size]
         } else {
-            &self.data[file_offset..]
+            data
         };
 
         Ok(DataReader::new(data))
     }
 
-    pub fn read_clr_rt_header(&self) -> Result<DataDirectory> {
-        let header = self
-            .optional_header()?
-            .data_directories
-            .get_clr_runtime_header()
-            .ok_or(HaoError::NotDotNetBinary)?;
+    pub fn read_clr_rt_header(&self) -> Result<ImageCor20Header> {
+        let clr = self
+            .pe
+            .read_clr_runtime_header()
+            .map_err(|_| HaoError::BadImageFormat("Failed to read image cor20 header"))?;
 
-        if header.virtual_address.is_zero() {
-            Err(HaoError::BadImageFormat(".NET data directory RVA is 0"))
-        } else {
-            Ok(header)
-        }
+        let header = clr.ok_or(HaoError::NotDotNetBinary)?;
+
+        Ok(header)
     }
 }
