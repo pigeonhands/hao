@@ -1,16 +1,18 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use crate::dotnet::entries::{EntryCollection, EntryView, MaybeUninitEntries};
 use crate::dotnet::{
     entries::{values::*, EntList},
     metadata::Metadata,
 };
-
-use crate::error::HaoError;
 use crate::{error::Result, io::EntryReader};
-
-use super::resolver::PathAssemblyResolver;
 use super::resolver::{AssemblyLoadResult, AssemblyResolver};
+
+#[cfg(feature = "std")]
+use crate::error::HaoError;
+
+#[cfg(feature = "std")]
+use super::resolver::PathAssemblyResolver;
 
 /// Represents a loaded .net module.
 /// ```no_run
@@ -45,6 +47,7 @@ impl Module {
     /// ```no_run
     /// let module = Module::from_path(r#"Example.Net.dll"#)?;
     /// ```
+    #[cfg(feature = "std")]
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let mut exec_path = path.as_ref().to_owned();
 
@@ -65,6 +68,7 @@ impl Module {
     /// ```no_run
     /// let module = Module::from_path_no_resolve(r#"Example.Net.dll"#)?;
     /// ```
+    #[cfg(feature = "std")]
     pub fn from_path_no_resolve(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let data = std::fs::read(path.as_ref()).map_err(HaoError::IoError)?;
         let md = Metadata::parse(&data)?;
@@ -120,7 +124,7 @@ impl Module {
     /// This will panic if there is a refrence holding any of the [`AssemblyRef`] in this module.
     pub fn load_dependancies(&self, resolver: &mut impl AssemblyResolver) -> Result<()> {
         for asm in self.assembly_ref.iter() {
-            let mut asm: std::cell::RefMut<AssemblyRef> = asm.value_mut();
+            let mut asm: core::cell::RefMut<AssemblyRef> = asm.value_mut();
             if asm.refrenced_assembly.is_some() {
                 continue;
             }

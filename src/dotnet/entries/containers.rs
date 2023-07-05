@@ -1,9 +1,12 @@
-use std::{
+use core::{
     cell::{Ref, RefCell, RefMut},
     fmt::{Debug, Display},
-    mem::MaybeUninit,
+    mem::{self, MaybeUninit},
     ops::{Deref, DerefMut},
+};
+use crate::alloc_containers::{
     rc::Rc,
+    vec::Vec
 };
 
 #[derive(Debug)]
@@ -23,7 +26,7 @@ impl<T: Sized> MaybeUnsetEntry<T> {
     pub fn assume_init_value(mut self) -> T {
         assert!(self.is_set());
         self.is_set = false;
-        let value = std::mem::replace(&mut self.value, MaybeUninit::uninit());
+        let value = mem::replace(&mut self.value, MaybeUninit::uninit());
         unsafe { value.assume_init().value }
     }
 
@@ -113,7 +116,7 @@ impl<T> Display for RowEntry<T>
 where
     T: Display,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.value)
     }
 }
@@ -174,7 +177,7 @@ impl<T> Clone for Ptr<T> {
 }
 
 impl<T: Debug> Debug for Ptr<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let v = self.0.as_ref().borrow();
         if v.is_set() {
             v.as_ref().fmt(f)

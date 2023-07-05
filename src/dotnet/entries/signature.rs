@@ -1,4 +1,5 @@
-use std::{cell::Ref, fmt::Display, ops::Deref};
+use core::{cell::Ref, fmt::Display, ops::Deref};
+use crate::alloc_containers::{vec::Vec, Box};
 
 pub use crate::dotnet::md::streams::ArraySize;
 use crate::{
@@ -34,12 +35,12 @@ impl ResolutionScope {
     }
     pub(crate) fn from_ent_ptr_must(ptr: ResolutionScopePtr) -> Result<Self> {
         Self::from_ent_pointer(ptr)
-            .ok_or_else(|| HaoError::InvalidSignatureForEntry(std::any::type_name::<Self>()))
+            .ok_or_else(|| HaoError::InvalidSignatureForEntry(core::any::type_name::<Self>()))
     }
 }
 
 impl Display for ResolutionScope {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Module(e) => write!(f, "{}", e.value().name),
             Self::ModuleRef(e) => write!(f, "{}", e.value().name),
@@ -67,7 +68,7 @@ impl TypeDefOrRef {
     }
     pub(crate) fn from_ent_ptr_must(ptr: TypeDefOrRefPtr) -> Result<Self> {
         Self::from_ent_pointer(ptr)
-            .ok_or_else(|| HaoError::InvalidSignatureForEntry(std::any::type_name::<Self>()))
+            .ok_or_else(|| HaoError::InvalidSignatureForEntry(core::any::type_name::<Self>()))
     }
 
     pub fn is_type_ref_and(&self, func: impl FnOnce(Ref<RowEntry<TypeRef>>) -> bool) -> bool {
@@ -86,8 +87,8 @@ impl TypeDefOrRef {
 }
 
 // impl to stop infiniate reccursion on debug print
-impl std::fmt::Debug for TypeDefOrRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for TypeDefOrRef {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::TypeDef(e) => write!(
                 f,
@@ -107,7 +108,7 @@ impl std::fmt::Debug for TypeDefOrRef {
 }
 
 impl Display for TypeDefOrRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::TypeDef(e) => write!(f, "{}", e.value().name()),
             Self::TypeRef(e) => write!(f, "{}", e.value()),
@@ -222,7 +223,7 @@ impl ValueType {
 }
 
 impl Display for ValueType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Void => write!(f, "void"),
             Self::Boolean => write!(f, "bool"),
@@ -289,7 +290,7 @@ impl FieldSignature {
         let field_sig = match sig.calling_convention {
             SignatureCallingConvention::Field(field) => field,
             _ => {
-                return Err(HaoError::InvalidSignatureForEntry(std::any::type_name::<
+                return Err(HaoError::InvalidSignatureForEntry(core::any::type_name::<
                     Self,
                 >()))
             }
@@ -300,7 +301,7 @@ impl FieldSignature {
 }
 
 impl Display for FieldSignature {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.0.fmt(f)
     }
 }
@@ -317,7 +318,7 @@ impl MethodSignature {
         let method_sig = match sig.calling_convention {
             SignatureCallingConvention::Method(method) => method,
             _ => {
-                return Err(HaoError::InvalidSignatureForEntry(std::any::type_name::<
+                return Err(HaoError::InvalidSignatureForEntry(core::any::type_name::<
                     Self,
                 >()))
             }
@@ -345,7 +346,7 @@ impl MethodSignature {
 }
 
 impl Display for MethodSignature {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "fn(")?;
         for (index, param) in self.parameters.iter().enumerate() {
             if index > 0 {
@@ -433,7 +434,7 @@ impl TypeSignature {
 }
 
 impl Display for TypeSignature {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::GenericInst { ty, generic_args } => {
                 write!(f, "{}", ty)?;

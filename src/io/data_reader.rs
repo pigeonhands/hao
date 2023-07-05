@@ -1,4 +1,4 @@
-use std::{convert::TryInto, ops::Range};
+use core::{convert::TryInto, ops::Range};
 
 use crate::error::{HaoError, Result};
 

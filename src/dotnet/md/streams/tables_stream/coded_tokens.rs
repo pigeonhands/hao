@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -28,7 +28,7 @@ impl<T: CodedTokenTarget> CodedToken<T> {
         Ok(CodedToken {
             rid: table_offset,
             target: T::from_u32(target).ok_or_else(|| {
-                HaoError::InvalidCodedToken(coded_value, std::any::type_name::<T>())
+                HaoError::InvalidCodedToken(coded_value, core::any::type_name::<T>())
             })?,
         })
     }

@@ -36,8 +36,8 @@ impl ValueSize {
     #[inline(always)]
     pub fn byte_size(&self) -> usize {
         match self {
-            ValueSize::Big => std::mem::size_of::<u32>(),
-            ValueSize::Small => std::mem::size_of::<u16>(),
+            ValueSize::Big => core::mem::size_of::<u32>(),
+            ValueSize::Small => core::mem::size_of::<u16>(),
         }
     }
 }

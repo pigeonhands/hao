@@ -2,6 +2,7 @@ use crate::{
     error::{HaoError, Result},
     io::DataReader,
 };
+use crate::alloc_containers::vec::Vec;
 
 #[derive(Debug, Clone)]
 pub struct StringsStream<'a> {
@@ -28,7 +29,7 @@ impl<'a> StringsStream<'a> {
             .position(|c| *c == 0)
             .ok_or_else(|| HaoError::InvalidStreamIndex("#Strings", offset))?;
 
-        std::str::from_utf8(&slice[..terminator])
+        core::str::from_utf8(&slice[..terminator])
             .map_err(|_| HaoError::InvalidUTF8String(offset, Vec::from(&slice[..terminator])))
     }
 }

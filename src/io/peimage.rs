@@ -3,7 +3,7 @@ use crate::io::DataReader;
 
 use pewter::pe::optional_header::OptionalHeader;
 use pewter::pe::sections::cor20::ImageCor20Header;
-use pewter::pe::sections::{SectionRow};
+use pewter::pe::sections::SectionRow;
 use pewter::PEFile;
 
 pub struct PEImage<'a> {

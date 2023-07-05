@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use crate::alloc_containers::{borrow::Cow, vec::Vec, string::String};
 
 use crate::{
     error::{HaoError, Result},

@@ -2,7 +2,8 @@ mod containers;
 pub mod signature;
 pub mod values;
 pub mod well_known;
-use std::cell::{Ref, RefCell, RefMut};
+use crate::alloc_containers::vec::Vec;
+use core::cell::{Ref, RefCell, RefMut};
 
 use super::md::streams::tables_stream::metadata::TableLocations;
 use crate::{

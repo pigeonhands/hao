@@ -1,10 +1,11 @@
 use thiserror::Error;
-
-pub type Result<T> = std::result::Result<T, HaoError>;
+use crate::alloc_containers::vec::Vec;
+pub type Result<T> = core::result::Result<T, HaoError>;
 
 #[derive(Error, Debug)]
 pub enum HaoError {
     #[error("An IO error has occored. {0:?}")]
+    #[cfg(feature = "std")]
     IoError(std::io::Error),
     #[error("failed to parse PE file")]
     BadPeFormat,

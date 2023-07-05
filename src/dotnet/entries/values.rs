@@ -15,6 +15,7 @@ use super::{
     well_known::{SystemType, WellKnown},
     EntryCollection, EntryView, {Ptr, ReadEntry, RowRange},
 };
+use crate::alloc_containers::{rc::Rc, string::String, vec::Vec};
 use crate::{
     dotnet::{
         entries::{GetEntryField, MaybeUninitEntries},
@@ -27,10 +28,7 @@ use crate::{
     io::{EntryReader, ValueReadable},
     Module,
 };
-use std::{
-    fmt::{Debug, Display},
-    rc::Rc,
-};
+use core::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
 pub struct ModuleDef {
@@ -154,7 +152,6 @@ impl TypeRef {
     pub fn is_system_type_instance(&self, system_type: SystemType) -> bool {
         SystemType::from_full_name(self.namespace(), self.name()) == Some(system_type)
     }
-
 }
 
 impl<'a> ReadEntry<TypeRef> for EntryReader<'a> {
@@ -174,7 +171,7 @@ impl<'a> ReadEntry<TypeRef> for EntryReader<'a> {
 }
 
 impl Display for TypeRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if let Some(well_known) = self.well_known() {
             write!(f, "{}", well_known.type_name())
         } else {
@@ -293,7 +290,7 @@ impl TypeDef {
     pub fn full_name_is(&self, namespace: &str, name: &str) -> bool {
         (namespace, name) == (self.namespace(), self.name())
     }
-    
+
     pub fn is_static(&self) -> bool {
         self.flags.contains(TypeAttributes::AutoLayout)
             && self.flags.contains(TypeAttributes::Class)
@@ -352,7 +349,7 @@ impl<'a> ReadEntry<TypeDef> for EntryReader<'a> {
 }
 
 impl Display for TypeDef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if self.flags.contains(TypeAttributes::Public) {
             write!(f, "public ")?;
         } else if self.flags.contains(TypeAttributes::NotPublic) {
@@ -456,7 +453,7 @@ impl<'a> ReadEntry<Field> for EntryReader<'a> {
 }
 
 impl Display for Field {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if self.flags.contains(FieldFlags::Public) {
             write!(f, "public ")?;
         }
@@ -543,7 +540,7 @@ impl<'a> ReadEntry<Method> for EntryReader<'a> {
 }
 
 impl Display for Method {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if self.flags.contains(MethodFlags::Private) {
             write!(f, "private ")?;
         } else if self.flags.contains(MethodFlags::Public) {

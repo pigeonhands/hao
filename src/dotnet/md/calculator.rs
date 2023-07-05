@@ -23,7 +23,7 @@ pub struct SizeCalculator<'a> {
 
 impl<'a> SizeCalculator<'a> {
     pub fn size_of_prim<T: Sized>(&self) -> usize {
-        std::mem::size_of::<T>()
+        core::mem::size_of::<T>()
     }
 
     pub fn size_of<T>(&self) -> usize

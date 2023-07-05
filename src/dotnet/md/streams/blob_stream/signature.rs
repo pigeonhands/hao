@@ -1,7 +1,8 @@
 use bitflags::bitflags;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
-use std::fmt::Debug;
+use core::fmt::Debug;
+use crate::alloc_containers::{Box, vec::Vec};
 
 use super::reader::{BlobStream, SignatureReader};
 use crate::dotnet::entries::values::*;
@@ -157,7 +158,7 @@ pub struct TypeDefOrRefSig(pub(crate) TypeDefOrRefPtr);
 
 // This is to stop infinite reccursion when debug printing
 impl Debug for TypeDefOrRefSig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match &self.0 {
             TypeDefOrRefPtr::None => write!(f, "None"),
             TypeDefOrRefPtr::TypeDef(tref) => match tref.is_set() {

@@ -16,6 +16,7 @@ use crate::{
     },
     error::{HaoError, Result},
 };
+use crate::alloc_containers::{vec::Vec, string::String};
 
 use super::ReadData;
 
@@ -67,7 +68,7 @@ where
         table
             .get(index)
             .ok_or_else(|| {
-                HaoError::InvalidEntryRefrence(std::any::type_name::<Self::EntryValue>(), index)
+                HaoError::InvalidEntryRefrence(core::any::type_name::<Self::EntryValue>(), index)
             })
             .cloned()
     }
@@ -93,7 +94,7 @@ where
         } else {
             if start >= target_rows.len() {
                 return Err(HaoError::InvalidEntryRefrence(
-                    std::any::type_name::<Self::EntryValue>(),
+                    core::any::type_name::<Self::EntryValue>(),
                     start,
                 ));
             }
@@ -108,7 +109,7 @@ impl<'a> GetTableForRead<FieldTableOffset> for EntryReader<'a> {
     type TablevalueType = Field;
     fn to_index(&self, offset: FieldTableOffset) -> Result<usize> {
         (offset.0 as usize).checked_sub(1).ok_or_else(|| {
-            HaoError::InvalidEntryRefrence(std::any::type_name::<Self::TablevalueType>(), 0)
+            HaoError::InvalidEntryRefrence(core::any::type_name::<Self::TablevalueType>(), 0)
         })
     }
     fn get_table(&self) -> &[Ptr<Self::TablevalueType>] {
@@ -120,7 +121,7 @@ impl<'a> GetTableForRead<TypeDefTableOffset> for EntryReader<'a> {
     type TablevalueType = TypeDef;
     fn to_index(&self, offset: TypeDefTableOffset) -> Result<usize> {
         (offset.0 as usize).checked_sub(1).ok_or_else(|| {
-            HaoError::InvalidEntryRefrence(std::any::type_name::<Self::TablevalueType>(), 0)
+            HaoError::InvalidEntryRefrence(core::any::type_name::<Self::TablevalueType>(), 0)
         })
     }
     fn get_table(&self) -> &[Ptr<Self::TablevalueType>] {
@@ -132,7 +133,7 @@ impl<'a> GetTableForRead<ParamTableOffset> for EntryReader<'a> {
     type TablevalueType = Param;
     fn to_index(&self, offset: ParamTableOffset) -> Result<usize> {
         (offset.0 as usize).checked_sub(1).ok_or_else(|| {
-            HaoError::InvalidEntryRefrence(std::any::type_name::<Self::TablevalueType>(), 0)
+            HaoError::InvalidEntryRefrence(core::any::type_name::<Self::TablevalueType>(), 0)
         })
     }
     fn get_table(&self) -> &[Ptr<Self::TablevalueType>] {
@@ -144,7 +145,7 @@ impl<'a> GetTableForRead<MethodTableOffset> for EntryReader<'a> {
     type TablevalueType = Method;
     fn to_index(&self, offset: MethodTableOffset) -> Result<usize> {
         (offset.0 as usize).checked_sub(1).ok_or_else(|| {
-            HaoError::InvalidEntryRefrence(std::any::type_name::<Self::TablevalueType>(), 0)
+            HaoError::InvalidEntryRefrence(core::any::type_name::<Self::TablevalueType>(), 0)
         })
     }
     fn get_table(&self) -> &[Ptr<Self::TablevalueType>] {

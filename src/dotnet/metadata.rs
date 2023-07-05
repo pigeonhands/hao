@@ -1,7 +1,7 @@
 use super::md::streams::MetadataStreams;
 use crate::dotnet::md::metadata_header::{MetadataHeader, MetadataType};
 use crate::error::{HaoError, Result};
-use crate::io::{PEImage};
+use crate::io::PEImage;
 
 pub struct Metadata<'a> {
     pub metadata_streams: MetadataStreams<'a>,

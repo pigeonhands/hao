@@ -1,5 +1,5 @@
-use std::{fmt::Debug, marker::PhantomData};
-
+use core::{fmt::Debug, marker::PhantomData};
+use crate::alloc_containers::vec::Vec;
 use super::{TableLocation, TablesStreamsHeader};
 use crate::{
     error::{HaoError, Result},
