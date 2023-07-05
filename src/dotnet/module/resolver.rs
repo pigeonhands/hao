@@ -17,7 +17,7 @@ pub trait AssemblyResolver: Debug {
 
 #[cfg(feature = "std")]
 mod std_resolver {
-
+    use super::*;
     use crate::error::HaoError;
     use std::path::Path;
     use std::{fmt::Debug, path::PathBuf, rc::Rc};

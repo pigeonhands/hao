@@ -17,7 +17,7 @@ use super::resolver::PathAssemblyResolver;
 /// Represents a loaded .net module.
 /// ```no_run
 /// # use hao::Module;
-/// let module = Module::from_file(r#"Example.Net.dll"#);
+/// let module = Module::from_path(r#"Example.Net.dll"#).unwrap();
 ///
 /// for ty in module.types().values() {
 ///    for method in ty.methods().values() {
@@ -45,7 +45,8 @@ impl Module {
     /// with the default [`PathAssemblyResolver`] resolver.
     ///
     /// ```no_run
-    /// let module = Module::from_path(r#"Example.Net.dll"#)?;
+    /// # use hao::Module;
+    /// let module = Module::from_path(r#"Example.Net.dll"#).unwrap();
     /// ```
     #[cfg(feature = "std")]
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self> {
@@ -66,7 +67,8 @@ impl Module {
     /// Load a .net assembly from the given path but do not reolve its dependancies.
     ///
     /// ```no_run
-    /// let module = Module::from_path_no_resolve(r#"Example.Net.dll"#)?;
+    /// # use hao::Module;
+    /// let module = Module::from_path_no_resolve(r#"Example.Net.dll"#).unwrap();
     /// ```
     #[cfg(feature = "std")]
     pub fn from_path_no_resolve(path: impl AsRef<std::path::Path>) -> Result<Self> {

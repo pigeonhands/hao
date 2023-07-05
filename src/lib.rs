@@ -37,7 +37,7 @@
 //! ```
 //!
 //! this will print out all the types close-to c# syntax.
-#![no_std]
+#![cfg_attr(feature = "no_std", no_std)]
 
 pub mod dotnet;
 pub mod error;
@@ -48,7 +48,7 @@ pub use dotnet::{module::resolver, Module};
 #[cfg(feature = "std")]
 mod alloc_containers {
     pub extern crate std;
-    pub use std::{error, string, vec, borrow};
+    pub use std::{error, string, vec, borrow, rc, boxed::Box};
 }
 #[cfg(not(feature = "std"))]
 mod alloc_containers {
