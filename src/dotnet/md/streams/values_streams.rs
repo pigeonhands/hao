@@ -54,6 +54,10 @@ impl<'a> GuidStream<'a> {
 
         let position = (offset - 1) as usize * GUID_SIZE;
 
+        if position > self.heap_data.len() {
+            return Err(HaoError::InvalidStreamIndex("#Guid", position));
+        }
+
         uuid::Uuid::from_slice(&self.heap_data[position..])
             .map_err(|_| HaoError::InvalidStreamIndex("#GUID", position))
     }
