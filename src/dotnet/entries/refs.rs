@@ -131,7 +131,7 @@ impl TypeRef {
             }
             _ => return None,
         };
-        module.find_type(&self.namespace, &self.name)
+        module.resolve_type(&self.namespace, &self.name)
     }
 }
 

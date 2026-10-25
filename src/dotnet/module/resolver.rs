@@ -1,13 +1,13 @@
-use std::path::Path;
-use std::{fmt::Debug, path::PathBuf};
-use crate::sync::Shared;
+use std::{
+    fmt::Debug,
+    path::{Path, PathBuf},
+};
 
-use crate::error::HaoError;
-use crate::{error::Result, Module};
-
-// Hard code for testing
-const TRUSTED_ASSEMBLY_LOCATION: &str =
-    r#"C:\Program Files\dotnet\shared\Microsoft.NETCore.App\6.0.16\"#;
+use crate::{
+    error::{HaoError, Result},
+    sync::Shared,
+    Module,
+};
 
 pub enum AssemblyLoadResult {
     Loaded(Shared<Module>),
@@ -18,65 +18,84 @@ pub trait AssemblyResolver: Debug {
     fn load(&mut self, assembly_name: &str) -> Result<AssemblyLoadResult>;
 }
 
+/// Resolves assemblies from a list of directories, by default the module's own
+/// directory followed by the newest installed `Microsoft.NETCore.App` framework.
 #[derive(Debug, Default)]
 pub struct PathAssemblyResolver {
-    base_path: std::path::PathBuf,
-    pub(crate) assembly_list: Vec<(String, Shared<Module>)>,
+    pub search_paths: Vec<PathBuf>,
+    /// Skip assemblies that can't be found instead of returning an error.
+    pub ignore_missing: bool,
+    loaded: Vec<(String, Shared<Module>)>,
 }
 
 impl PathAssemblyResolver {
-    pub fn new(path: &std::path::Path) -> Self {
-        let base_path = path.to_owned();
+    pub fn new(base_path: &Path) -> Self {
+        let mut search_paths = vec![base_path.to_owned()];
+        search_paths.extend(Self::find_framework_dir());
         Self {
-            base_path,
-            assembly_list: Vec::new(),
+            search_paths,
+            ignore_missing: true,
+            loaded: Vec::new(),
         }
+    }
+
+    /// The newest `shared/Microsoft.NETCore.App/<version>` directory.
+    pub fn find_framework_dir() -> Option<PathBuf> {
+        let roots = std::env::var_os("DOTNET_ROOT")
+            .map(PathBuf::from)
+            .into_iter()
+            .chain(
+                [
+                    "/usr/share/dotnet",
+                    "/usr/lib/dotnet",
+                    "/usr/local/share/dotnet",
+                    "/opt/dotnet",
+                    r"C:\Program Files\dotnet",
+                ]
+                .map(PathBuf::from),
+            );
+
+        roots
+            .map(|root| root.join("shared").join("Microsoft.NETCore.App"))
+            .filter_map(|dir| std::fs::read_dir(dir).ok())
+            .flat_map(|entries| entries.filter_map(|e| e.ok()).map(|e| e.path()))
+            .filter(|p| p.is_dir())
+            .max_by_key(|p| parse_version(p))
+    }
+
+    fn find_path_for(&self, assembly_name: &str) -> Option<PathBuf> {
+        self.search_paths
+            .iter()
+            .flat_map(|dir| ["dll", "exe"].map(|ext| dir.join(format!("{}.{}", assembly_name, ext))))
+            .find(|p| p.exists())
     }
 }
 
-impl PathAssemblyResolver {
-    fn find_path_for(&self, assembly_name: &str) -> Option<PathBuf> {
-        const KNOWN_EXTENTIONS: [&str; 2] = ["dll", "CoreLib.dll"];
-        let asm_locations = [Path::new(TRUSTED_ASSEMBLY_LOCATION), &self.base_path];
-
-        for asm_root_path in asm_locations.into_iter() {
-            let mut path = asm_root_path.join(format!("{}.ext", assembly_name));
-
-            for ext in KNOWN_EXTENTIONS {
-                path.set_extension(ext);
-                if path.exists() {
-                    return Some(path);
-                }
-            }
-        }
-        None
-    }
+fn parse_version(path: &Path) -> Vec<u32> {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.split(['.', '-']).map(|p| p.parse().unwrap_or(0)).collect())
+        .unwrap_or_default()
 }
 
 impl AssemblyResolver for PathAssemblyResolver {
     fn load(&mut self, assembly_name: &str) -> Result<AssemblyLoadResult> {
-        let cached_module = self
-            .assembly_list
-            .iter()
-            .filter(|(saved_asm, _)| saved_asm == assembly_name)
-            .map(|asm| asm.1.clone())
-            .next();
-
-        if let Some(asm) = cached_module {
-            return Ok(AssemblyLoadResult::Loaded(asm));
+        if let Some((_, module)) = self.loaded.iter().find(|(name, _)| name == assembly_name) {
+            return Ok(AssemblyLoadResult::Loaded(module.clone()));
         }
 
-        if let Some(found_path) = self.find_path_for(assembly_name) {
-            let loaded_asm = Shared::new(Module::from_path_no_resolve(found_path)?);
-            self.assembly_list
-                .push((assembly_name.into(), loaded_asm.clone()));
-            loaded_asm.load_dependancies(self)?;
-            Ok(AssemblyLoadResult::Loaded(loaded_asm))
-        } else {
-            Err(HaoError::IoError(std::io::Error::new(
+        match self.find_path_for(assembly_name) {
+            Some(path) => {
+                let module = Shared::new(Module::from_path_no_resolve(path)?);
+                self.loaded.push((assembly_name.into(), module.clone()));
+                module.load_dependancies(self)?;
+                Ok(AssemblyLoadResult::Loaded(module))
+            }
+            None if self.ignore_missing => Ok(AssemblyLoadResult::Ignore),
+            None => Err(HaoError::IoError(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("Could not resolve assembly {:?}", assembly_name),
-            )))
+            ))),
         }
     }
 }

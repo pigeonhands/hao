@@ -155,6 +155,31 @@ impl Module {
             .cloned()
     }
 
+    /// Like [`Module::find_type`], but also follows type forwarders to other loaded assemblies.
+    pub fn resolve_type(&self, namespace: &str, name: &str) -> Option<Entry<TypeDef>> {
+        self.resolve_type_depth(namespace, name, 0)
+    }
+
+    fn resolve_type_depth(&self, namespace: &str, name: &str, depth: usize) -> Option<Entry<TypeDef>> {
+        if let Some(ty) = self.find_type(namespace, name) {
+            return Some(ty);
+        }
+        if depth > 16 {
+            return None;
+        }
+        let exported = self
+            .exported_types
+            .iter()
+            .find(|e| e.get().namespace == namespace && e.get().name == name)?;
+        match &exported.get().implementation {
+            Some(Implementation::AssemblyRef(asm)) => {
+                let module = asm.get().resolved.clone()?;
+                module.resolve_type_depth(namespace, name, depth + 1)
+            }
+            _ => None,
+        }
+    }
+
     /// Finds a type by its full name, using `/` for nested types (`Ns.Outer/Inner`).
     pub fn find_type_by_full_name(&self, full_name: &str) -> Option<Entry<TypeDef>> {
         let mut parts = full_name.split('/');

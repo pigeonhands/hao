@@ -184,3 +184,15 @@ fn module_is_send_and_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<Module>();
 }
+
+#[test]
+fn resolves_framework_types() {
+    if hao::resolver::PathAssemblyResolver::find_framework_dir().is_none() {
+        return;
+    }
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/Sample.dll");
+    let module = Module::from_path(path).unwrap();
+    let calc = module.find_type("Sample", "Calc").unwrap();
+    let object = calc.get().extends.clone().unwrap().resolve().unwrap();
+    assert_eq!(object.get().full_name(), "System.Object");
+}
