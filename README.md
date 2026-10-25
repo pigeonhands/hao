@@ -25,25 +25,91 @@ hao
 
 -----
 
-A libarary for reading and (eventually) writing .net assembiles and modules in rust.
+A library for reading, editing and writing .NET assemblies in Rust.
 
-## Example
-this example will print out c# code of each type and its fields
+- Loads every metadata table into a graph of shared [`Entry`] handles. Types own their
+  fields, methods, properties, events, nested types and generic parameters.
+- Decodes signatures and CIL method bodies. Branch targets are instruction indices and
+  operands are resolved to their entries, so edits don't need manual offset fixups.
+- Writes modules back out by rebuilding the metadata from scratch, like dnlib's `ModuleWriter`.
+  ReadyToRun images are converted back to IL only images.
+- Writes C#-like declarations (optionally with IL listings) through `CSharpWriter`.
+- Supports compressed (`#~`) and uncompressed (`#-`) metadata.
+
+## Loading
+
 ```rust
-use hao::{Module, Result};
+use hao::Module;
 
-fn main() -> Result<()>{
-    let module = Metadata::from_path(r#"Example.Net.dll"#).unwrap();
+let module = Module::from_path("Example.dll")?;
 
-    for ty in module.types().values() {
-        println!("{} {{", ty);
-        for field in ty.fields().values() {
-            println!("\t{};", field);
-        }
-        println!("}}");
+for ty in module.all_types() {
+    let ty = ty.get();
+    println!("{}", ty.full_name());
+    for method in &ty.methods {
+        println!("    {}", method.get().name);
     }
-
-    Ok(())
 }
 ```
-You can see more examples in the [example](https://github.com/pigeonhands/hao/tree/master/examples) directory of the repository.
+
+`Module::from_path` also resolves referenced assemblies from the module's directory and the
+installed .NET shared framework. Use `Module::from_path_no_resolve` to skip that.
+
+## Patching IL
+
+```rust
+use hao::{dotnet::il::{Instruction, OpCode, Operand}, Module};
+
+let module = Module::from_path_no_resolve("Sample.dll")?;
+let calc = module.find_type("Sample", "Calc").unwrap();
+let add = calc.get().find_method("Add").unwrap();
+
+{
+    let mut add = add.get_mut();
+    let body = add.body.as_mut().unwrap();
+    let index = body.position(|i| i.opcode == OpCode::Add).unwrap();
+    body.instructions[index] = Instruction::simple(OpCode::Mul);
+    body.insert(0, [
+        Instruction::new(OpCode::Ldstr, Operand::String("hi".into())),
+        Instruction::simple(OpCode::Pop),
+    ]);
+}
+
+module.write_to_path("Sample.patched.dll")?;
+```
+
+New type, member and assembly references used by the patched code are added to the metadata
+automatically. See [`examples/patch_method.rs`](examples/patch_method.rs) for a complete example
+that adds a `Console.WriteLine` call.
+
+## C# output
+
+```rust
+use hao::dotnet::csharp::{CSharpOptions, WriteCSharp};
+
+println!("{}", module.to_csharp());
+println!("{}", method.csharp());
+
+let with_il = module.to_csharp_with(CSharpOptions { il_bodies: true, ..Default::default() });
+```
+
+```sh
+cargo run --example dump_csharp -- tests/fixtures/Sample.dll --il
+```
+
+## Thread safety
+
+Entries use `Rc<RefCell<T>>` by default. Enable the `sync` feature to use `Arc<RwLock<T>>`
+instead, which makes `Module` `Send + Sync`.
+
+## Tests
+
+`tests/fixtures/Sample.dll` is built from `tests/fixtures/Sample` with `tests/fixtures/build.sh`.
+The write tests run the rewritten assembly with `dotnet` when it is installed. The ignored tests
+load and rewrite every assembly in the installed shared framework:
+
+```sh
+cargo test --release -- --include-ignored
+```
+
+[`Entry`]: https://docs.rs/hao/latest/hao/dotnet/entries/struct.Entry.html
