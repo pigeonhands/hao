@@ -102,6 +102,27 @@ impl Instruction {
     pub fn simple(opcode: OpCode) -> Self {
         Self::new(opcode, Operand::None)
     }
+
+    /// Encoded size in bytes.
+    pub fn size(&self) -> usize {
+        self.opcode.size()
+            + match &self.operand {
+                Operand::Switch(targets) => targets.len() * 4,
+                _ => 0,
+            }
+    }
+}
+
+/// Byte offset of every instruction, plus one extra for the end of the code.
+pub fn instruction_offsets(instructions: &[Instruction]) -> Vec<u32> {
+    let mut offsets = Vec::with_capacity(instructions.len() + 1);
+    let mut offset = 0;
+    for instruction in instructions {
+        offsets.push(offset);
+        offset += instruction.size() as u32;
+    }
+    offsets.push(offset);
+    offsets
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +140,17 @@ pub struct ExceptionHandler {
     pub try_end: Label,
     pub handler_start: Label,
     pub handler_end: Label,
+}
+
+impl ExceptionHandler {
+    pub fn kind_name(&self) -> &'static str {
+        match self.kind {
+            HandlerKind::Catch(_) => "catch",
+            HandlerKind::Filter(_) => "filter",
+            HandlerKind::Finally => "finally",
+            HandlerKind::Fault => "fault",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
