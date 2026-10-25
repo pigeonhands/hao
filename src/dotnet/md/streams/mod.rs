@@ -59,13 +59,13 @@ impl<'a> MetadataStreams<'a> {
 
         Ok(Self {
             tables_stream: tables_stream
-                .ok_or_else(|| HaoError::BadImageFormat("No .net tables stream (#~)"))?,
+                .ok_or(HaoError::BadImageFormat("No .net tables stream (#~)"))?,
             strings_stream: strings_stream
-                .ok_or_else(|| HaoError::BadImageFormat("No strings stream (#Strings)"))?,
+                .ok_or(HaoError::BadImageFormat("No strings stream (#Strings)"))?,
             guid_stream: guid_stream
-                .ok_or_else(|| HaoError::BadImageFormat("No guid stream (#GUID)"))?,
+                .ok_or(HaoError::BadImageFormat("No guid stream (#GUID)"))?,
             blob_stream: blob_stream
-                .ok_or_else(|| HaoError::BadImageFormat("No blob stream (#Blob)"))?,
+                .ok_or(HaoError::BadImageFormat("No blob stream (#Blob)"))?,
             user_strings_stream,
         })
     }

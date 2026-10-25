@@ -26,7 +26,7 @@ impl<'a> StringsStream<'a> {
         let terminator = slice
             .iter()
             .position(|c| *c == 0)
-            .ok_or_else(|| HaoError::InvalidStreamIndex("#Strings", offset))?;
+            .ok_or(HaoError::InvalidStreamIndex("#Strings", offset))?;
 
         std::str::from_utf8(&slice[..terminator])
             .map_err(|_| HaoError::InvalidUTF8String(offset, Vec::from(&slice[..terminator])))

@@ -21,7 +21,7 @@ impl<'a> PEImage<'a> {
         self.pe.optional_header.as_ref().ok_or(HaoError::BadPeFormat)
     }
 
-    pub fn rva_to_section(&self, rva: u32) -> Option<&SectionRow> {
+    pub fn rva_to_section(&self, rva: u32) -> Option<&SectionRow<'_>> {
         self.pe.sections.find_rva(rva as usize)
     }
 
@@ -34,7 +34,7 @@ impl<'a> PEImage<'a> {
             .pe
             .sections
             .find_rva_data(rva as usize)
-            .ok_or_else(|| HaoError::BadRva(rva))?;
+            .ok_or(HaoError::BadRva(rva))?;
 
         let data = if let Some(size) = size {
             &data[..size]
