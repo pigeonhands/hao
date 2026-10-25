@@ -2,9 +2,12 @@
 
 mod opcodes;
 mod reader;
+mod writer;
 
 pub use opcodes::*;
 pub(crate) use reader::{BodyReader, BodyResolver};
+pub(crate) use writer::{encode_body, BodyEncoder};
+pub use writer::compute_max_stack;
 
 use crate::dotnet::{
     entries::{Entry, Field, MemberRef, Method, MethodSpec, TypeDef, TypeDefOrRef, TypeRef, TypeSpec},
