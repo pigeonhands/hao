@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::FromPrimitive;
+use strum::FromRepr;
 
 use crate::{
     dotnet::md::streams::tables_stream::metadata::TableRowCount,
@@ -18,6 +17,14 @@ pub struct CodedToken<T: CodedTokenTarget> {
 }
 
 impl<T: CodedTokenTarget> CodedToken<T> {
+    pub fn new(target: T, rid: u32) -> Self {
+        Self { rid, target }
+    }
+
+    pub fn encode(&self) -> u32 {
+        (self.rid << T::BITS) | self.target.tag()
+    }
+
     pub fn decode(coded_value: u32) -> Result<Self> {
         let offset_mask = 0xFFFFFFFF << T::BITS;
         let target_mask = !offset_mask;
@@ -27,7 +34,7 @@ impl<T: CodedTokenTarget> CodedToken<T> {
 
         Ok(CodedToken {
             rid: table_offset,
-            target: T::from_u32(target).ok_or_else(|| {
+            target: T::from_tag(target).ok_or_else(|| {
                 HaoError::InvalidCodedToken(coded_value, std::any::type_name::<T>())
             })?,
         })
@@ -218,38 +225,55 @@ impl CodedTokenSizes {
     }
 }
 
-pub trait CodedTokenTarget: FromPrimitive {
+pub trait CodedTokenTarget: Sized + Copy {
     const BITS: usize;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize;
+    fn from_tag(tag: u32) -> Option<Self>;
+    fn tag(self) -> u32;
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum TypeDefOrRefToken {
     TypeDef,
     TypeRef,
     TypeSpec,
 }
 impl CodedTokenTarget for TypeDefOrRefToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 2;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.type_def_or_ref
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum HasConstantToken {
     Field,
     Param,
     Property,
 }
 impl CodedTokenTarget for HasConstantToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 2;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_constant
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum HasCustomAttributeToken {
     Method,
     Field,
@@ -277,38 +301,59 @@ pub enum HasCustomAttributeToken {
     Unused2,
 }
 impl CodedTokenTarget for HasCustomAttributeToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 5;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_custom_attribute
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum HasFieldMarshalToken {
     Field,
     Param,
 }
 impl CodedTokenTarget for HasFieldMarshalToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 1;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_field_marshal
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum HasDeclSecurityToken {
     TypeDef,
     Method,
     Assembly,
 }
 impl CodedTokenTarget for HasDeclSecurityToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 2;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_decl_security
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum MemberRefParentToken {
     TypeDef,
     TypeRef,
@@ -317,62 +362,97 @@ pub enum MemberRefParentToken {
     TypeSpec,
 }
 impl CodedTokenTarget for MemberRefParentToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 3;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.member_ref_parent
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum HasSemanticToken {
     Event,
     Property,
 }
 impl CodedTokenTarget for HasSemanticToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 1;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_semantic
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum MethodDefOrRefToken {
     Method,
     MemberRef,
 }
 impl CodedTokenTarget for MethodDefOrRefToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 1;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.method_def_or_ref
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum MemberForwardedToken {
     Field,
     Method,
 }
 impl CodedTokenTarget for MemberForwardedToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 1;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.member_forwarded
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum ImplementationToken {
     File,
     AssemblyRef,
     ExportedType,
 }
 impl CodedTokenTarget for ImplementationToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 2;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.implementation
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum CustomAttributeTypeToken {
     Unused1,
     Unused2,
@@ -381,13 +461,20 @@ pub enum CustomAttributeTypeToken {
     Unused3,
 }
 impl CodedTokenTarget for CustomAttributeTypeToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 3;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.custom_attribute_type
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum ResolutionScopeToken {
     Module,
     ModuleRef,
@@ -395,6 +482,12 @@ pub enum ResolutionScopeToken {
     TypeRef,
 }
 impl CodedTokenTarget for ResolutionScopeToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 2;
     #[inline(always)]
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
@@ -402,19 +495,27 @@ impl CodedTokenTarget for ResolutionScopeToken {
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum TypeOrMethodDefToken {
     TypeDef,
     Method,
 }
 impl CodedTokenTarget for TypeOrMethodDefToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 1;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.type_or_method_def
     }
 }
 
-#[derive(Debug, Clone, Copy, ToPrimitive, FromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[repr(u32)]
 pub enum HasCustomDebugInformationToken {
     Method,
     Field,
@@ -445,6 +546,12 @@ pub enum HasCustomDebugInformationToken {
     ImportScope,
 }
 impl CodedTokenTarget for HasCustomDebugInformationToken {
+    fn from_tag(tag: u32) -> Option<Self> {
+        Self::from_repr(tag)
+    }
+    fn tag(self) -> u32 {
+        self as u32
+    }
     const BITS: usize = 5;
     fn token_size(sizes: &CodedTokenSizes) -> ValueSize {
         sizes.has_custom_debug_information

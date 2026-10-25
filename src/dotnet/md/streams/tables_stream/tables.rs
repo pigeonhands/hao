@@ -72,7 +72,7 @@ impl<'a> ReadData<TypeRefTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct TypeAttributes: u32 {
                  // Use this mask to retrieve the type visibility information.
         const     VisibilityMask        =   0x00000007;
@@ -180,7 +180,7 @@ impl<'a> ReadData<FieldPtrTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct FieldFlags: u16 {
         // member access mask - Use this mask to retrieve accessibility information.
         const FieldAccessMask           =   0x0007;
@@ -258,7 +258,7 @@ impl<'a> ReadData<MethodPtrTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct MethodImplFlags: u16 {
            // code impl mask
         const CodeTypeMask      =   0x0003;   // Flags about code type.
@@ -287,7 +287,7 @@ bitflags! {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct MethodFlags: u16 {
         // member access mask - Use this mask to retrieve accessibility information.
         const MemberAccessMask          =   0x0007;
@@ -365,12 +365,12 @@ impl<'a> ReadData<MethodTableRow> for TablesStreamReader<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ParamPtrTableRow {
-    pub param: ParamPtrTableOffset,
+    pub param: ParamTableOffset,
 }
 
 impl<'a> CalculateTableSize<ParamPtrTableRow> for SizeCalculator<'a> {
     fn calculate_table_size_bytes(&self) -> usize {
-        ParamPtrTableOffset::table_offset_size(self.rows).byte_size()
+        ParamTableOffset::table_offset_size(self.rows).byte_size()
     }
 }
 
@@ -383,7 +383,7 @@ impl<'a> ReadData<ParamPtrTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct ParamFlags: u16 {
         const In                        =   0x0001;     // Param is [In]
         const Out                       =   0x0002;     // Param is [out]
@@ -677,7 +677,7 @@ impl<'a> ReadData<EventPtrTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct EventFlags: u16 {
         const SpecialName           =   0x0200;     // const ent is special. Name describes how.
 
@@ -754,7 +754,7 @@ impl<'a> ReadData<PropertyPtrTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct PropertyFlags: u16 {
         const SpecialName           =   0x0200;     // const operty is special. Name describes how.
 
@@ -794,7 +794,7 @@ impl<'a> ReadData<PropertyTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct MethodSemanticsFlags: u16 {
         const Setter    =   0x0001;     // Setter for property
         const Getter    =   0x0002;     // Getter for property
@@ -892,7 +892,7 @@ impl<'a> ReadData<TypeSpecTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct PInvokeMapFlags: u16 {
         const NoMangle          = 0x0001;   // Pinvoke is to use the member name as specified.
 
@@ -1018,7 +1018,7 @@ impl<'a> ReadData<ENCMapTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct AssemblyFlags: u32 {
         const PublicKey             =   0x0001;     // The assembly ref holds the full (unhashed) public key.
 
@@ -1225,8 +1225,8 @@ impl<'a> ReadData<AssemblyRefOSTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct FileFlags: u16 {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    pub struct FileFlags: u32 {
         const ContainsMetaData      =   0x0000;     // This is not a resource file
         const ContainsNoMetaData    =   0x0001;     // This is a resource file or other non-metadata-containing file                                      // assembly from a different publisher.
     }
@@ -1260,7 +1260,7 @@ impl<'a> ReadData<FileTableRow> for TablesStreamReader<'a> {
 #[derive(Debug, Clone)]
 pub struct ExportedTypeTableRow {
     pub flags: TypeAttributes,
-    pub type_def_id: TypeDefTableOffset,
+    pub type_def_id: u32,
     pub type_name: StringsStreamOffset,
     pub type_namespace: StringsStreamOffset,
     pub implementation: CodedToken<ImplementationToken>,
@@ -1269,7 +1269,7 @@ pub struct ExportedTypeTableRow {
 impl<'a> CalculateTableSize<ExportedTypeTableRow> for SizeCalculator<'a> {
     fn calculate_table_size_bytes(&self) -> usize {
         self.size_of_prim::<TypeAttributes>()
-            + TypeDefTableOffset::table_offset_size(self.rows).byte_size()
+            + self.size_of_prim::<u32>()
             + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
             + StringsStreamOffset::streams_offset_size(self.flags).byte_size()
             + ImplementationToken::token_size(self.coded_tokens_sizes).byte_size()
@@ -1289,7 +1289,7 @@ impl<'a> ReadData<ExportedTypeTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct ManifestResourceFlags: u32 {
         const VisibilityMask        =   0x0007;
         const Public                =   0x0001;     // The Resource is exported from the Assembly.
@@ -1348,7 +1348,7 @@ impl<'a> ReadData<NestedClassTableRow> for TablesStreamReader<'a> {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct GenericParamFlags: u16 {
         // Variance of type parameters; only applicable to generic parameters
         // for generic interfaces and delegates
