@@ -1,31 +1,19 @@
-use hao::{dotnet::md::streams::tables_stream::FieldFlags, Module};
+use hao::Module;
 
 fn main() {
-    let module = Module::from_path(r#"C:\re\dnspy\bin\dnlib.dll"#).unwrap();
-    println!("loaded");
+    let path = std::env::args().nth(1).expect("usage: simple <assembly>");
+    let module = Module::from_path_no_resolve(path).unwrap();
 
-    for ty in module.types().values() {
-        println!("{} {{", ty);
-        if ty.is_enum() {
-            for field in ty
-                .fields()
-                .values()
-                .filter(|x| !x.flags().contains(FieldFlags::SpecialName))
-            {
-                println!("\t{},", field.name());
-            }
-        } else {
-            for field in ty.fields().values() {
-                println!("\t{};", field);
-            }
+    for ty in module.all_types() {
+        let ty = ty.get();
+        println!("{}", ty.full_name());
+        for field in &ty.fields {
+            println!("\tfield {}", field.get().name);
         }
-
-        println!("\n");
-
-        for method in ty.methods().values() {
-            println!("\t{};", method);
+        for method in &ty.methods {
+            let method = method.get();
+            let size = method.body.as_ref().map_or(0, |b| b.instructions.len());
+            println!("\tmethod {} ({} instructions)", method.name, size);
         }
-
-        println!("}}");
     }
 }

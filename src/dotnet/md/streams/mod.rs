@@ -25,6 +25,7 @@ pub struct MetadataStreams<'a> {
     pub strings_stream: StringsStream<'a>,
     pub guid_stream: GuidStream<'a>,
     pub blob_stream: BlobStream<'a>,
+    pub user_strings_stream: Option<UserStringsStream<'a>>,
 }
 
 impl<'a> MetadataStreams<'a> {
@@ -37,6 +38,7 @@ impl<'a> MetadataStreams<'a> {
         let mut tables_stream = None;
         let mut blob_stream = None;
         let mut guid_stream = None;
+        let mut user_strings_stream = None;
 
         for stream_header in streams {
             let stream_reader = pe_image.create_reader(
@@ -46,10 +48,10 @@ impl<'a> MetadataStreams<'a> {
 
             match stream_header.name.as_ref() {
                 "#Strings" => strings_stream = Some(StringsStream::from_reader(stream_reader)?),
-                "#US" => continue,
+                "#US" => user_strings_stream = Some(UserStringsStream::from_reader(stream_reader)?),
                 "#Blob" => blob_stream = Some(BlobStream::from_reader(stream_reader)?),
                 "#GUID" => guid_stream = Some(GuidStream::from_reader(stream_reader)?),
-                "#~" => tables_stream = Some(TablesStreams::from_reader(stream_reader)?),
+                "#~" | "#-" => tables_stream = Some(TablesStreams::from_reader(stream_reader)?),
                 "#Pdb" => continue,
                 _ => {}
             }
@@ -64,6 +66,7 @@ impl<'a> MetadataStreams<'a> {
                 .ok_or_else(|| HaoError::BadImageFormat("No guid stream (#GUID)"))?,
             blob_stream: blob_stream
                 .ok_or_else(|| HaoError::BadImageFormat("No blob stream (#Blob)"))?,
+            user_strings_stream,
         })
     }
 }

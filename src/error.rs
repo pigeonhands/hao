@@ -8,6 +8,8 @@ pub enum HaoError {
     IoError(std::io::Error),
     #[error("failed to parse PE file")]
     BadPeFormat,
+    #[error("PE error: {0:?}")]
+    PeError(pewter::error::PewterError),
     #[error("file is not a .net binary")]
     NotDotNetBinary,
     #[error("file is badly formatted. {0}")]
@@ -28,13 +30,25 @@ pub enum HaoError {
     InvalidUTF8String(usize, Vec<u8>),
     #[error("Invalid signature calling convention. {0}.")]
     InvalidSignatureCallingConvention(u8),
-    #[error("Invalid signature element type ({0}) at position ({0}).")]
+    #[error("Invalid signature element type ({0:#x}) at position {1}.")]
     InvalidSignatureElementType(u8, usize),
+    #[error("Invalid signature: {0} (at position {1}).")]
+    InvalidSignature(&'static str, usize),
+    #[error("Invalid method body: {0} (at position {1}).")]
+    InvalidMethodBody(&'static str, usize),
+    #[error("Invalid opcode {0:#x} at position {1}.")]
+    InvalidOpCode(u16, usize),
+    #[error("Invalid metadata token {0:#010x}.")]
+    InvalidToken(u32),
+    #[error("Value too large to encode as a {0}.")]
+    ValueTooLarge(&'static str),
+    #[error("Could not write module: {0}")]
+    WriteError(String),
     #[error("The provided signature does not match what is expected for the entry.")]
     InvalidSignatureForEntry(&'static str),
     #[error("Recursion limit reached.")]
     RecursionLimitReached,
-    #[error("Invalid refrence to enttry in {0} table at index {1}.")]
+    #[error("Invalid reference to entry in {0} table at index {1}.")]
     InvalidEntryRefrence(&'static str, usize),
     #[error("unknown error")]
     Unknown,

@@ -1,5 +1,6 @@
 use std::path::Path;
-use std::{fmt::Debug, path::PathBuf, rc::Rc};
+use std::{fmt::Debug, path::PathBuf};
+use crate::sync::Shared;
 
 use crate::error::HaoError;
 use crate::{error::Result, Module};
@@ -9,7 +10,7 @@ const TRUSTED_ASSEMBLY_LOCATION: &str =
     r#"C:\Program Files\dotnet\shared\Microsoft.NETCore.App\6.0.16\"#;
 
 pub enum AssemblyLoadResult {
-    Loaded(Rc<Module>),
+    Loaded(Shared<Module>),
     Ignore,
 }
 
@@ -20,7 +21,7 @@ pub trait AssemblyResolver: Debug {
 #[derive(Debug, Default)]
 pub struct PathAssemblyResolver {
     base_path: std::path::PathBuf,
-    pub(crate) assembly_list: Vec<(String, Rc<Module>)>,
+    pub(crate) assembly_list: Vec<(String, Shared<Module>)>,
 }
 
 impl PathAssemblyResolver {
@@ -66,7 +67,7 @@ impl AssemblyResolver for PathAssemblyResolver {
         }
 
         if let Some(found_path) = self.find_path_for(assembly_name) {
-            let loaded_asm = Rc::new(Module::from_path_no_resolve(found_path)?);
+            let loaded_asm = Shared::new(Module::from_path_no_resolve(found_path)?);
             self.assembly_list
                 .push((assembly_name.into(), loaded_asm.clone()));
             loaded_asm.load_dependancies(self)?;

@@ -5,41 +5,28 @@
 //! a feature flag that can optionally continue parsing the file and expose the raw, non-sanitary
 //! parts that it encounters.
 //!
-//! The current state of this library is read-only with .net framework/core files and largely untested with mono, however
-//! mono support is definetly going to be supported in the future.
-//!
-//! The entrypoint for this library is the [`Module`] struct. You can get started with loading a module like so:
+//! The entrypoint for this library is the [`Module`] struct:
 //!
 //! ```no_run
-//! use hao::{dotnet::md::streams::tables_stream::FieldFlags, Module};
+//! use hao::Module;
 //!
-//! let module = Module::from_path(r#"C:\re\dnspy\bin\dnlib.dll"#).unwrap();
-//! 
-//! println!("loaded");
-//! 
-//! for ty in module.types().values() {
-//!     println!("{} {{", ty);
-//!     if ty.is_enum() {
-//!         for field in ty
-//!             .fields()
-//!             .values()
-//!             .filter(|x| !x.flags().contains(FieldFlags::SpecialName))
-//!         {
-//!             println!("\t{},", field.name());
-//!         }
-//!     } else {
-//!         for field in ty.fields().values() {
-//!             println!("\t{};", field);
-//!         }
+//! let module = Module::from_path("Example.dll").unwrap();
+//!
+//! for ty in module.all_types() {
+//!     let ty = ty.get();
+//!     println!("{}", ty.full_name());
+//!     for method in &ty.methods {
+//!         println!("\t{}", method.get().name);
 //!     }
-//!     println!("}}");
 //! }
 //! ```
 //!
-//! this will print out all the types close-to c# syntax.
+//! Entries are shared handles ([`dotnet::entries::Entry`]) backed by `Rc<RefCell<_>>`,
+//! or `Arc<RwLock<_>>` with the `sync` feature.
 
 pub mod dotnet;
 pub mod error;
 pub mod io;
+pub mod sync;
 
 pub use dotnet::{module::resolver, Module};
