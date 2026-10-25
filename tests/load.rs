@@ -1,3 +1,5 @@
+mod common;
+
 use hao::{
     dotnet::{
         entries::{ResourceData, TypeDefOrRef},
@@ -7,15 +9,14 @@ use hao::{
     Module,
 };
 
-const SAMPLE: &[u8] = include_bytes!("fixtures/Sample.dll");
 
-fn sample() -> Module {
-    Module::from_bytes(SAMPLE).unwrap()
+fn load(sample: &common::Sample) -> Module {
+    Module::from_bytes(&sample.bytes).unwrap()
 }
 
 #[test]
 fn loads_types() {
-    let module = sample();
+    let module = load(sample!());
     assert_eq!(module.name(), "Sample.dll");
     assert_eq!(module.types[0].get().name, "<Module>");
 
@@ -35,7 +36,7 @@ fn loads_types() {
 
 #[test]
 fn nested_and_generic_types() {
-    let module = sample();
+    let module = load(sample!());
     let boxed = module.find_type_by_full_name("Sample.Box`1/Nested").unwrap();
     assert_eq!(boxed.get().full_name(), "Sample.Box`1/Nested");
 
@@ -51,7 +52,7 @@ fn nested_and_generic_types() {
 
 #[test]
 fn enums_structs_and_layout() {
-    let module = sample();
+    let module = load(sample!());
     let colour = module.find_type("Sample", "Colour").unwrap();
     let colour = colour.get();
     assert!(colour.is_enum() && colour.is_value_type());
@@ -77,7 +78,7 @@ fn enums_structs_and_layout() {
 
 #[test]
 fn custom_attributes_resources_and_pinvoke() {
-    let module = sample();
+    let module = load(sample!());
     let circle = module.find_type("Sample", "Circle").unwrap();
     let names: Vec<String> = circle
         .get()
@@ -104,7 +105,7 @@ fn custom_attributes_resources_and_pinvoke() {
 
 #[test]
 fn field_rva_switch_and_exception_handlers() {
-    let module = sample();
+    let module = load(sample!());
     let primes: Vec<u8> = module
         .all_fields()
         .iter()
@@ -148,7 +149,7 @@ fn field_rva_switch_and_exception_handlers() {
 
 #[test]
 fn type_refs_resolve_to_corlib() {
-    let module = sample();
+    let module = load(sample!());
     let calc = module.find_type("Sample", "Calc").unwrap();
     let extends = calc.get().extends.clone().unwrap();
     assert!(matches!(&extends, TypeDefOrRef::TypeRef(r) if r.get().is_corlib()));
@@ -190,8 +191,7 @@ fn resolves_framework_types() {
     if hao::resolver::PathAssemblyResolver::find_framework_dir().is_none() {
         return;
     }
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/Sample.dll");
-    let module = Module::from_path(path).unwrap();
+    let module = Module::from_path(sample!().dir.join("Sample.dll")).unwrap();
     let calc = module.find_type("Sample", "Calc").unwrap();
     let object = calc.get().extends.clone().unwrap().resolve().unwrap();
     assert_eq!(object.get().full_name(), "System.Object");

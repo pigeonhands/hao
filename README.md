@@ -98,7 +98,8 @@ let with_il = module.to_csharp_with(CSharpOptions { il_bodies: true, ..Default::
 ```
 
 ```sh
-cargo run --example dump_csharp -- tests/fixtures/Sample.dll --il
+tests/fixtures/build.sh
+cargo run --example dump_csharp -- tests/fixtures/out/Sample.dll --il
 ```
 
 ## Thread safety
@@ -108,8 +109,8 @@ instead, which makes `Module` `Send + Sync`.
 
 ## Tests
 
-`tests/fixtures/Sample.dll` is built from `tests/fixtures/Sample` with `tests/fixtures/build.sh`.
-The write tests run the rewritten assembly with `dotnet` when it is installed. The ignored tests
+The tests build `tests/fixtures/Sample` with the dotnet SDK and run the rewritten assemblies with
+it. Tests that need the sample are skipped when the SDK is not installed. The ignored tests
 load and rewrite every assembly in the installed shared framework:
 
 ```sh

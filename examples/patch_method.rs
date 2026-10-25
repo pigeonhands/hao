@@ -1,8 +1,9 @@
-//! Patches the IL of `tests/fixtures/Sample.dll` and writes a new assembly.
+//! Patches the IL of the sample assembly and writes a new assembly.
 //!
 //! ```sh
-//! cargo run --example patch_method -- tests/fixtures/Sample.dll out/Sample.dll
-//! cp tests/fixtures/Sample.runtimeconfig.json out/
+//! tests/fixtures/build.sh
+//! cargo run --example patch_method -- tests/fixtures/out/Sample.dll out/Sample.dll
+//! cp tests/fixtures/out/Sample.runtimeconfig.json out/
 //! dotnet out/Sample.dll
 //! ```
 

@@ -1,13 +1,14 @@
+mod common;
+
 use hao::{
     dotnet::csharp::{CSharpOptions, WriteCSharp},
     Module,
 };
 
-const SAMPLE: &[u8] = include_bytes!("fixtures/Sample.dll");
 
 #[test]
 fn declarations() {
-    let module = Module::from_bytes(SAMPLE).unwrap();
+    let module = Module::from_bytes(&sample!().bytes).unwrap();
     let source = module.to_csharp();
     for expected in [
         "public enum Colour : byte",
@@ -30,7 +31,7 @@ fn declarations() {
 
 #[test]
 fn display_adapter_and_il() {
-    let module = Module::from_bytes(SAMPLE).unwrap();
+    let module = Module::from_bytes(&sample!().bytes).unwrap();
     let calc = module.find_type("Sample", "Calc").unwrap();
     let add = calc.get().find_method("Add").unwrap();
     assert_eq!(add.csharp().to_string(), "public static int Add(int a, int b);\n");

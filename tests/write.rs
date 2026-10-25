@@ -1,3 +1,5 @@
+mod common;
+
 use std::{path::PathBuf, process::Command};
 
 use hao::{
@@ -5,34 +7,32 @@ use hao::{
     Module,
 };
 
-const SAMPLE: &[u8] = include_bytes!("fixtures/Sample.dll");
-const EXPECTED_OUTPUT: &str = include_str!("fixtures/expected_output.txt");
 
-fn out_dir(name: &str) -> PathBuf {
+fn out_dir(sample: &common::Sample, name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::copy(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/Sample.runtimeconfig.json"),
+        sample.dir.join("Sample.runtimeconfig.json"),
         dir.join("Sample.runtimeconfig.json"),
     )
     .unwrap();
     dir
 }
 
-/// Runs the assembly with `dotnet`, or returns `None` when no runtime is installed.
-fn run(dir: &std::path::Path) -> Option<String> {
-    let output = Command::new("dotnet").arg(dir.join("Sample.dll")).output().ok()?;
+fn run(dir: &std::path::Path) -> String {
+    let output = Command::new("dotnet").arg(dir.join("Sample.dll")).output().unwrap();
     assert!(
         output.status.success(),
         "dotnet failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    Some(String::from_utf8(output.stdout).unwrap())
+    String::from_utf8(output.stdout).unwrap()
 }
 
 #[test]
 fn rewrite_unmodified() {
-    let module = Module::from_bytes(SAMPLE).unwrap();
+    let sample = sample!();
+    let module = Module::from_bytes(&sample.bytes).unwrap();
     let written = module.write().unwrap();
 
     let reloaded = Module::from_bytes(&written).unwrap();
@@ -49,16 +49,15 @@ fn rewrite_unmodified() {
         );
     }
 
-    let dir = out_dir("unmodified");
+    let dir = out_dir(sample, "unmodified");
     std::fs::write(dir.join("Sample.dll"), &written).unwrap();
-    if let Some(output) = run(&dir) {
-        assert_eq!(output, EXPECTED_OUTPUT);
-    }
+    assert_eq!(run(&dir), sample.expected_output);
 }
 
 #[test]
 fn patch_instructions() {
-    let module = Module::from_bytes(SAMPLE).unwrap();
+    let sample = sample!();
+    let module = Module::from_bytes(&sample.bytes).unwrap();
     let calc = module.find_type("Sample", "Calc").unwrap();
 
     let add = calc.get().find_method("Add").unwrap();
@@ -81,14 +80,13 @@ fn patch_instructions() {
     }
 
     let written = module.write().unwrap();
-    let dir = out_dir("patched");
+    let dir = out_dir(sample, "patched");
     std::fs::write(dir.join("Sample.dll"), &written).unwrap();
-    if let Some(output) = run(&dir) {
-        let expected = EXPECTED_OUTPUT
-            .replace("Hello from hao", "Patched by hao")
-            .replace("add=42", "add=80");
-        assert_eq!(output, expected);
-    }
+    let expected = sample
+        .expected_output
+        .replace("Hello from hao", "Patched by hao")
+        .replace("add=42", "add=80");
+    assert_eq!(run(&dir), expected);
 }
 
 fn signature(module: &Module) -> Vec<(String, usize, usize, usize)> {
@@ -163,7 +161,8 @@ fn rewrite_ready_to_run() {
 fn import_helpers() {
     use hao::dotnet::signature::{MethodSig, TypeSig};
 
-    let mut module = Module::from_bytes(SAMPLE).unwrap();
+    let sample = sample!();
+    let mut module = Module::from_bytes(&sample.bytes).unwrap();
     let refs = module.member_refs.len();
 
     let write_line = module
@@ -198,11 +197,9 @@ fn import_helpers() {
         );
     });
 
-    let dir = out_dir("imported");
+    let dir = out_dir(sample, "imported");
     module.write_to_path(dir.join("Sample.dll")).unwrap();
-    if let Some(output) = run(&dir) {
-        assert_eq!(output, format!("imported ok\n{}", EXPECTED_OUTPUT));
-    }
+    assert_eq!(run(&dir), format!("imported ok\n{}", sample.expected_output));
 }
 
 #[test]

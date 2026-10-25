@@ -3,3 +3,10 @@
 /scripts
 /.vscode
 out.txt
+
+# built test fixtures
+*.dll
+*.exe
+tests/fixtures/out/
+tests/fixtures/Sample/bin/
+tests/fixtures/Sample/obj/
