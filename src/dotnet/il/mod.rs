@@ -164,3 +164,76 @@ pub struct MethodBody {
     pub instructions: Vec<Instruction>,
     pub exception_handlers: Vec<ExceptionHandler>,
 }
+
+impl MethodBody {
+    fn remap_labels(&mut self, f: impl Fn(usize) -> usize) {
+        let f = |l: &mut Label| l.0 = f(l.0);
+        for instruction in &mut self.instructions {
+            match &mut instruction.operand {
+                Operand::Target(t) => f(t),
+                Operand::Switch(targets) => targets.iter_mut().for_each(f),
+                _ => {}
+            }
+        }
+        for h in &mut self.exception_handlers {
+            f(&mut h.try_start);
+            f(&mut h.try_end);
+            f(&mut h.handler_start);
+            f(&mut h.handler_end);
+            if let HandlerKind::Filter(start) = &mut h.kind {
+                f(start);
+            }
+        }
+    }
+
+    /// Inserts instructions before `index`. Branches and exception ranges that
+    /// pointed at `index` or later keep pointing at the same instructions.
+    pub fn insert(&mut self, index: usize, instructions: impl IntoIterator<Item = Instruction>) {
+        let new: Vec<Instruction> = instructions.into_iter().collect();
+        let count = new.len();
+        self.remap_labels(|l| if l >= index { l + count } else { l });
+        self.instructions.splice(index..index, new);
+    }
+
+    /// Removes the instruction at `index`. Branches to it now target the next instruction.
+    pub fn remove(&mut self, index: usize) -> Instruction {
+        self.remap_labels(|l| if l > index { l - 1 } else { l });
+        self.instructions.remove(index)
+    }
+
+    /// Index of the first instruction matching `f`.
+    pub fn position(&self, f: impl Fn(&Instruction) -> bool) -> Option<usize> {
+        self.instructions.iter().position(f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insert_and_remove_keep_branch_targets() {
+        let mut body = MethodBody {
+            instructions: vec![
+                Instruction::simple(OpCode::Nop),
+                Instruction::new(OpCode::Br_S, Operand::Target(Label(0))),
+                Instruction::simple(OpCode::Ret),
+            ],
+            exception_handlers: vec![ExceptionHandler {
+                kind: HandlerKind::Finally,
+                try_start: Label(0),
+                try_end: Label(2),
+                handler_start: Label(2),
+                handler_end: Label(3),
+            }],
+            ..Default::default()
+        };
+        body.insert(0, [Instruction::simple(OpCode::Ldnull), Instruction::simple(OpCode::Pop)]);
+        assert_eq!(body.instructions[3].operand, Operand::Target(Label(2)));
+        assert_eq!(body.exception_handlers[0].handler_end, Label(5));
+
+        body.remove(2);
+        assert_eq!(body.instructions[2].operand, Operand::Target(Label(2)));
+        assert_eq!(body.exception_handlers[0].try_start, Label(2));
+    }
+}
