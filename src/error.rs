@@ -40,6 +40,8 @@ pub enum HaoError {
     InvalidOpCode(u16, usize),
     #[error("Invalid metadata token {0:#010x}.")]
     InvalidToken(u32),
+    #[error("Invalid custom attribute: {0}")]
+    InvalidCustomAttribute(String),
     #[error("Value too large to encode as a {0}.")]
     ValueTooLarge(&'static str),
     #[error("Could not write module: {0}")]
