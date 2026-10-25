@@ -1,6 +1,6 @@
 mod common;
 
-use std::{path::PathBuf, process::Command};
+use std::path::PathBuf;
 
 use hao::{
     dotnet::il::{Instruction, OpCode, Operand},
@@ -11,22 +11,16 @@ use hao::{
 fn out_dir(sample: &common::Sample, name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::copy(
-        sample.dir.join("Sample.runtimeconfig.json"),
-        dir.join("Sample.runtimeconfig.json"),
-    )
-    .unwrap();
+    for config in ["Sample.runtimeconfig.json", "Sample.exe.config"] {
+        if sample.dir.join(config).exists() {
+            std::fs::copy(sample.dir.join(config), dir.join(config)).unwrap();
+        }
+    }
     dir
 }
 
 fn run(dir: &std::path::Path) -> String {
-    let output = Command::new("dotnet").arg(dir.join("Sample.dll")).output().unwrap();
-    assert!(
-        output.status.success(),
-        "dotnet failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).unwrap()
+    common::sample().unwrap().run(dir).unwrap()
 }
 
 #[test]
@@ -285,4 +279,30 @@ fn reference_from_manifest() {
     let written = Module::from_bytes(&module.write().unwrap()).unwrap();
     let r = written.find_assembly_ref("System.Linq").unwrap();
     assert!(r.get().flags.contains(AssemblyFlags::PublicKey));
+}
+
+/// The same checks against the .NET Framework build, which references `mscorlib`
+/// like Unity's Mono games. Runs it with Mono when Mono is installed.
+#[test]
+fn rewrite_and_patch_for_mono() {
+    let sample = sample!(framework_sample);
+    let module = Module::from_bytes(&sample.bytes).unwrap();
+    assert!(module.find_assembly_ref("mscorlib").is_some());
+
+    let reloaded = Module::from_bytes(&module.write().unwrap()).unwrap();
+    assert_eq!(reloaded.all_methods().len(), module.all_methods().len());
+
+    let add = module.find_method("Sample.Calc", "Add").unwrap();
+    add.edit_body(|body| {
+        let index = body.position(|i| i.opcode == OpCode::Add).unwrap();
+        body.instructions[index] = Instruction::simple(OpCode::Mul);
+    });
+
+    let dir = out_dir(sample, "mono_patched");
+    module.write_to_path(dir.join(sample.file_name)).unwrap();
+    if let Some(output) = sample.run(&dir) {
+        assert_eq!(output, sample.expected_output.replace("add=42", "add=80"));
+    } else {
+        eprintln!("mono not installed, only checked the rewritten structure");
+    }
 }
