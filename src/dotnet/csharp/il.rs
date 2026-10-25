@@ -1,13 +1,19 @@
 use std::fmt::{self, Write};
 
-use super::{CSharpWriter, ToCSharpWith};
+use super::{CSharpWriter, ToCSharpWith, WriteCSharp};
 use crate::dotnet::{
     entries::MemberRefParent,
     il::{instruction_offsets, MemberToken, MethodBody, Operand},
 };
 
-/// Writes the instructions of `body` as `// IL_0000: opcode operand` lines.
-pub fn write_il<W: Write>(w: &mut CSharpWriter<W>, body: &MethodBody) -> fmt::Result {
+/// Lists the instructions as `// IL_0000: opcode operand` comment lines.
+impl WriteCSharp for MethodBody {
+    fn write_csharp<W: Write>(&self, w: &mut CSharpWriter<W>) -> fmt::Result {
+        write_il(w, self)
+    }
+}
+
+fn write_il<W: Write>(w: &mut CSharpWriter<W>, body: &MethodBody) -> fmt::Result {
     let offsets = instruction_offsets(&body.instructions);
     let label = |index: usize| format!("IL_{:04x}", offsets[index]);
 

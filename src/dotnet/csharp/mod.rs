@@ -16,7 +16,6 @@ use crate::{
     Module,
 };
 
-pub use il::write_il;
 
 #[derive(Debug, Clone, Default)]
 pub struct CSharpOptions {
@@ -511,7 +510,7 @@ fn write_method<W: Write>(w: &mut CSharpWriter<W>, m: &Method) -> fmt::Result {
     match &m.body {
         Some(body) if w.options.il_bodies => {
             w.open_block()?;
-            write_il(w, body)?;
+            body.write_csharp(w)?;
             w.close_block()
         }
         _ => w.write_str(";\n"),
