@@ -1,4 +1,4 @@
-use phf::phf_map;
+use strum::{EnumString, IntoStaticStr};
 
 /// Check if a name is a well known one.
 /// the `full_name` and `name` methods will return the name
@@ -177,120 +177,12 @@ impl WellKnown {
     }
 }
 
-static SYSTEM: phf::Map<&'static str, SystemType> = phf_map! {
-    "Object" => SystemType::Object,
-    "Enum" => SystemType::Enum,
-    "MulticastDelegate" => SystemType::MulticastDelegate,
-    "Delegate" => SystemType::Delegate,
-    "ValueType" => SystemType::ValueType,
-    "Void" => SystemType::Void,
-    "Boolean" => SystemType::Boolean,
-    "Char" => SystemType::Char,
-    "SByte" => SystemType::SByte,
-    "Byte" => SystemType::Byte,
-    "Int16" => SystemType::Int16,
-    "UInt16" => SystemType::UInt16,
-    "Int32" => SystemType::Int32,
-    "UInt32" => SystemType::UInt32,
-    "Int64" => SystemType::Int64,
-    "UInt64" => SystemType::UInt64,
-    "Decimal" => SystemType::Decimal,
-    "Single" => SystemType::Single,
-    "Double" => SystemType::Double,
-    "String" => SystemType::String,
-    "IntPtr" => SystemType::IntPtr,
-    "UIntPtr" => SystemType::UIntPtr,
-    "Array" => SystemType::Array,
-    "Nullable`1" => SystemType::Nullable_1,
-    "DateTime" => SystemType::DateTime,
-    "IDisposable" => SystemType::IDisposable,
-    "TypedReference" => SystemType::TypedReference,
-    "ArgIterator" => SystemType::ArgIterator,
-    "RuntimeArgumentHandle" => SystemType::RuntimeArgumentHandle,
-    "RuntimeFieldHandle" => SystemType::RuntimeFieldHandle,
-    "RuntimeMethodHandle" => SystemType::RuntimeMethodHandle,
-    "RuntimeTypeHandle" => SystemType::RuntimeTypeHandle,
-    "IAsyncResult" => SystemType::IAsyncResult,
-    "AsyncCallback" => SystemType::AsyncCallback,
-    "Math" => SystemType::Math,
-    "Attribute" => SystemType::Attribute,
-    "CLSCompliantAttribute" => SystemType::CLSCompliantAttribute,
-    "Convert" => SystemType::Convert,
-    "Exception" => SystemType::Exception,
-    "FlagsAttribute" => SystemType::FlagsAttribute,
-    "FormattableString" => SystemType::FormattableString,
-    "Guid" => SystemType::Guid,
-    "IFormattable" => SystemType::IFormattable,
-    "MarshalByRefObject" => SystemType::MarshalByRefObject,
-    "Type" => SystemType::Type,
-    "Func`1" => SystemType::Func_1,
-    "Func`2" => SystemType::Func_2,
-    "Func`3" => SystemType::Func_3,
-    "Func`4" => SystemType::Func_4,
-    "Func`5" => SystemType::Func_5,
-    "Func`6" => SystemType::Func_6,
-    "Func`7" => SystemType::Func_7,
-    "Func`8" => SystemType::Func_8,
-    "Func`9" => SystemType::Func_9,
-    "Func`10" => SystemType::Func_10,
-    "Func`11" => SystemType::Func_11,
-    "Func`12" => SystemType::Func_12,
-    "Func`13" => SystemType::Func_13,
-    "Func`14" => SystemType::Func_14,
-    "Func`15" => SystemType::Func_15,
-    "Func`16" => SystemType::Func_16,
-    "Func`17" => SystemType::Func_17,
-    "Action" => SystemType::Action,
-    "Action`1" => SystemType::Action_1,
-    "Action`2" => SystemType::Action_2,
-    "Action`3" => SystemType::Action_3,
-    "Action`4" => SystemType::Action_4,
-    "Action`5" => SystemType::Action_5,
-    "Action`6" => SystemType::Action_6,
-    "Action`7" => SystemType::Action_7,
-    "Action`8" => SystemType::Action_8,
-    "Action`9" => SystemType::Action_9,
-    "Action`10" => SystemType::Action_10,
-    "Action`11" => SystemType::Action_11,
-    "Action`12" => SystemType::Action_12,
-    "Action`13" => SystemType::Action_13,
-    "Action`14" => SystemType::Action_14,
-    "Action`15" => SystemType::Action_15,
-    "Action`16" => SystemType::Action_16,
-    "Activator" => SystemType::Activator,
-
-    "AttributeUsageAttribute" => SystemType::AttributeUsageAttribute,
-    "ParamArrayAttribute" => SystemType::ParamArrayAttribute,
-    "NonSerializedAttribute" => SystemType::NonSerializedAttribute,
-    "STAThreadAttribute" => SystemType::STAThreadAttribute,
-    "IEquatable`1" => SystemType::IEquatable_1,
-    "NotSupportedException" => SystemType::NotSupportedException,
-    "Environment" => SystemType::Environment,
-    "IFormatProvider" => SystemType::IFormatProvider,
-    "ValueTuple`1" => SystemType::ValueTuple_1,
-    "ValueTuple`2" => SystemType::ValueTuple_2,
-    "ValueTuple`3" => SystemType::ValueTuple_3,
-    "ValueTuple`4" => SystemType::ValueTuple_4,
-    "ValueTuple`5" => SystemType::ValueTuple_5,
-    "ValueTuple`6" => SystemType::ValueTuple_6,
-    "ValueTuple`7" => SystemType::ValueTuple_7,
-    "ValueTuple`8" => SystemType::ValueTuple_8,
-    "ContextBoundObject" => SystemType::ContextBoundObject,
-    "SerializableAttribute" => SystemType::SerializableAttribute,
-    "RuntimeMethodHandleInternal" => SystemType::RuntimeMethodHandleInternal,
-    "ByReference`1" => SystemType::ByReference_1,
-    "__ComObject" => SystemType::__ComObject,
-    "DBNull" => SystemType::DBNull,
-    "ObsoleteAttribute" => SystemType::ObsoleteAttribute,
-    "Span`1" => SystemType::Span_1,
-    "ReadOnlySpan`1" => SystemType::ReadOnlySpan_1,
-    "Index" => SystemType::Index,
-    "Range" => SystemType::Range,
-    "IAsyncDisposable" => SystemType::IAsyncDisposable,
-};
+fn strip_arity(name: &'static str) -> &'static str {
+    name.split('`').next().unwrap_or(name)
+}
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemType {
     Object,
     Enum,
@@ -315,6 +207,7 @@ pub enum SystemType {
     IntPtr,
     UIntPtr,
     Array,
+    #[strum(serialize = "Nullable`1")]
     Nullable_1,
     DateTime,
     IDisposable,
@@ -337,74 +230,119 @@ pub enum SystemType {
     IFormattable,
     MarshalByRefObject,
     Type,
+    #[strum(serialize = "Func`1")]
     Func_1,
+    #[strum(serialize = "Func`2")]
     Func_2,
+    #[strum(serialize = "Func`3")]
     Func_3,
+    #[strum(serialize = "Func`4")]
     Func_4,
+    #[strum(serialize = "Func`5")]
     Func_5,
+    #[strum(serialize = "Func`6")]
     Func_6,
+    #[strum(serialize = "Func`7")]
     Func_7,
+    #[strum(serialize = "Func`8")]
     Func_8,
+    #[strum(serialize = "Func`9")]
     Func_9,
+    #[strum(serialize = "Func`10")]
     Func_10,
+    #[strum(serialize = "Func`11")]
     Func_11,
+    #[strum(serialize = "Func`12")]
     Func_12,
+    #[strum(serialize = "Func`13")]
     Func_13,
+    #[strum(serialize = "Func`14")]
     Func_14,
+    #[strum(serialize = "Func`15")]
     Func_15,
+    #[strum(serialize = "Func`16")]
     Func_16,
+    #[strum(serialize = "Func`17")]
     Func_17,
     Action,
+    #[strum(serialize = "Action`1")]
     Action_1,
+    #[strum(serialize = "Action`2")]
     Action_2,
+    #[strum(serialize = "Action`3")]
     Action_3,
+    #[strum(serialize = "Action`4")]
     Action_4,
+    #[strum(serialize = "Action`5")]
     Action_5,
+    #[strum(serialize = "Action`6")]
     Action_6,
+    #[strum(serialize = "Action`7")]
     Action_7,
+    #[strum(serialize = "Action`8")]
     Action_8,
+    #[strum(serialize = "Action`9")]
     Action_9,
+    #[strum(serialize = "Action`10")]
     Action_10,
+    #[strum(serialize = "Action`11")]
     Action_11,
+    #[strum(serialize = "Action`12")]
     Action_12,
+    #[strum(serialize = "Action`13")]
     Action_13,
+    #[strum(serialize = "Action`14")]
     Action_14,
+    #[strum(serialize = "Action`15")]
     Action_15,
+    #[strum(serialize = "Action`16")]
     Action_16,
     Activator,
-
     AttributeUsageAttribute,
     ParamArrayAttribute,
     NonSerializedAttribute,
     STAThreadAttribute,
+    #[strum(serialize = "IEquatable`1")]
     IEquatable_1,
     NotSupportedException,
     Environment,
     IFormatProvider,
+    #[strum(serialize = "ValueTuple`1")]
     ValueTuple_1,
+    #[strum(serialize = "ValueTuple`2")]
     ValueTuple_2,
+    #[strum(serialize = "ValueTuple`3")]
     ValueTuple_3,
+    #[strum(serialize = "ValueTuple`4")]
     ValueTuple_4,
+    #[strum(serialize = "ValueTuple`5")]
     ValueTuple_5,
+    #[strum(serialize = "ValueTuple`6")]
     ValueTuple_6,
+    #[strum(serialize = "ValueTuple`7")]
     ValueTuple_7,
+    #[strum(serialize = "ValueTuple`8")]
     ValueTuple_8,
     ContextBoundObject,
     SerializableAttribute,
     RuntimeMethodHandleInternal,
+    #[strum(serialize = "ByReference`1")]
     ByReference_1,
     __ComObject,
     DBNull,
     ObsoleteAttribute,
+    #[strum(serialize = "Span`1")]
     Span_1,
+    #[strum(serialize = "ReadOnlySpan`1")]
     ReadOnlySpan_1,
     Index,
     Range,
     IAsyncDisposable,
 }
+
 impl SystemType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM.get(name).copied()
+        name.parse().ok()
     }
 
     pub fn from_full_name(namespace: &str, name: &str) -> Option<Self> {
@@ -413,162 +351,15 @@ impl SystemType {
         }
         Self::from_type_name(name)
     }
+
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Object => "Object",
-            Self::Enum => "Enum",
-            Self::MulticastDelegate => "MulticastDelegate",
-            Self::Delegate => "Delegate",
-            Self::ValueType => "ValueType",
-            Self::Void => "Void",
-            Self::Boolean => "Boolean",
-            Self::Char => "Char",
-            Self::SByte => "SByte",
-            Self::Byte => "Byte",
-            Self::Int16 => "Int16",
-            Self::UInt16 => "UInt16",
-            Self::Int32 => "Int32",
-            Self::UInt32 => "UInt32",
-            Self::Int64 => "Int64",
-            Self::UInt64 => "UInt64",
-            Self::Decimal => "Decimal",
-            Self::Single => "Single",
-            Self::Double => "Double",
-            Self::String => "String",
-            Self::IntPtr => "IntPtr",
-            Self::UIntPtr => "UIntPtr",
-            Self::Array => "Array",
-            Self::Nullable_1 => "Nullable",
-            Self::DateTime => "DateTime",
-            Self::IDisposable => "IDisposable",
-            Self::TypedReference => "TypedReference",
-            Self::ArgIterator => "ArgIterator",
-            Self::RuntimeArgumentHandle => "RuntimeArgumentHandle",
-            Self::RuntimeFieldHandle => "RuntimeFieldHandle",
-            Self::RuntimeMethodHandle => "RuntimeMethodHandle",
-            Self::RuntimeTypeHandle => "RuntimeTypeHandle",
-            Self::IAsyncResult => "IAsyncResult",
-            Self::AsyncCallback => "AsyncCallback",
-            Self::Math => "Math",
-            Self::Attribute => "Attribute",
-            Self::CLSCompliantAttribute => "CLSCompliantAttribute",
-            Self::Convert => "Convert",
-            Self::Exception => "Exception",
-            Self::FlagsAttribute => "FlagsAttribute",
-            Self::FormattableString => "FormattableString",
-            Self::Guid => "Guid",
-            Self::IFormattable => "IFormattable",
-            Self::MarshalByRefObject => "MarshalByRefObject",
-            Self::Type => "Type",
-            Self::Func_1 => "Func",
-            Self::Func_2 => "Func",
-            Self::Func_3 => "Func",
-            Self::Func_4 => "Func",
-            Self::Func_5 => "Func",
-            Self::Func_6 => "Func",
-            Self::Func_7 => "Func",
-            Self::Func_8 => "Func",
-            Self::Func_9 => "Func",
-            Self::Func_10 => "Func",
-            Self::Func_11 => "Func",
-            Self::Func_12 => "Func",
-            Self::Func_13 => "Func",
-            Self::Func_14 => "Func",
-            Self::Func_15 => "Func",
-            Self::Func_16 => "Func",
-            Self::Func_17 => "Func",
-            Self::Action => "Action",
-            Self::Action_1 => "Action",
-            Self::Action_2 => "Action",
-            Self::Action_3 => "Action",
-            Self::Action_4 => "Action",
-            Self::Action_5 => "Action",
-            Self::Action_6 => "Action",
-            Self::Action_7 => "Action",
-            Self::Action_8 => "Action",
-            Self::Action_9 => "Action",
-            Self::Action_10 => "Action",
-            Self::Action_11 => "Action",
-            Self::Action_12 => "Action",
-            Self::Action_13 => "Action",
-            Self::Action_14 => "Action",
-            Self::Action_15 => "Action",
-            Self::Action_16 => "Action",
-            Self::Activator => "Activator",
-            Self::AttributeUsageAttribute => "AttributeUsageAttribute",
-            Self::ParamArrayAttribute => "ParamArrayAttribute",
-            Self::NonSerializedAttribute => "NonSerializedAttribute",
-            Self::STAThreadAttribute => "STAThreadAttribute",
-            Self::IEquatable_1 => "IEquatable",
-            Self::NotSupportedException => "NotSupportedException",
-            Self::Environment => "Environment",
-            Self::IFormatProvider => "IFormatProvider",
-            Self::ValueTuple_1 => "ValueTuple",
-            Self::ValueTuple_2 => "ValueTuple",
-            Self::ValueTuple_3 => "ValueTuple",
-            Self::ValueTuple_4 => "ValueTuple",
-            Self::ValueTuple_5 => "ValueTuple",
-            Self::ValueTuple_6 => "ValueTuple",
-            Self::ValueTuple_7 => "ValueTuple",
-            Self::ValueTuple_8 => "ValueTuple",
-            Self::ContextBoundObject => "ContextBoundObject",
-            Self::SerializableAttribute => "SerializableAttribute",
-            Self::RuntimeMethodHandleInternal => "RuntimeMethodHandleInternal",
-            Self::ByReference_1 => "ByReference",
-            Self::__ComObject => "__ComObject",
-            Self::DBNull => "DBNull",
-            Self::ObsoleteAttribute => "ObsoleteAttribute",
-            Self::Span_1 => "Span",
-            Self::ReadOnlySpan_1 => "ReadOnlySpan",
-            Self::Index => "Index",
-            Self::Range => "Range",
-            Self::IAsyncDisposable => "IAsyncDisposable",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_RUNTIME_COMPILER_SERVICE: phf::Map<&'static str, SystemRuntimeCompilerServicesType> = phf_map! {
-    "IsVolatile" => SystemRuntimeCompilerServicesType::IsVolatile,
-    "FormattableStringFactory" => SystemRuntimeCompilerServicesType::FormattableStringFactory,
-    "RuntimeHelpers" => SystemRuntimeCompilerServicesType::RuntimeHelpers,
-    "DateTimeConstantAttribute" => SystemRuntimeCompilerServicesType::DateTimeConstantAttribute,
-    "DecimalConstantAttribute" => SystemRuntimeCompilerServicesType::DecimalConstantAttribute,
-    "IUnknownConstantAttribute" => SystemRuntimeCompilerServicesType::IUnknownConstantAttribute,
-    "IDispatchConstantAttribute" => SystemRuntimeCompilerServicesType::IDispatchConstantAttribute,
-    "ExtensionAttribute" => SystemRuntimeCompilerServicesType::ExtensionAttribute,
-    "INotifyCompletion" => SystemRuntimeCompilerServicesType::INotifyCompletion,
-    "InternalsVisibleToAttribute" => SystemRuntimeCompilerServicesType::InternalsVisibleToAttribute,
-    "CompilerGeneratedAttribute" => SystemRuntimeCompilerServicesType::CompilerGeneratedAttribute,
-    "AccessedThroughPropertyAttribute" => SystemRuntimeCompilerServicesType::AccessedThroughPropertyAttribute,
-    "CompilationRelaxationsAttribute" => SystemRuntimeCompilerServicesType::CompilationRelaxationsAttribute,
-    "RuntimeCompatibilityAttribute" => SystemRuntimeCompilerServicesType::RuntimeCompatibilityAttribute,
-    "UnsafeValueTypeAttribute" => SystemRuntimeCompilerServicesType::UnsafeValueTypeAttribute,
-    "FixedBufferAttribute" => SystemRuntimeCompilerServicesType::FixedBufferAttribute,
-    "DynamicAttribute" => SystemRuntimeCompilerServicesType::DynamicAttribute,
-    "CallSiteBinder" => SystemRuntimeCompilerServicesType::CallSiteBinder,
-    "CallSite" => SystemRuntimeCompilerServicesType::CallSite,
-    "CallSite`1" => SystemRuntimeCompilerServicesType::CallSite_1,
-    "ICriticalNotifyCompletion" => SystemRuntimeCompilerServicesType::ICriticalNotifyCompletion,
-    "IAsyncStateMachine" => SystemRuntimeCompilerServicesType::IAsyncStateMachine,
-    "AsyncVoidMethodBuilder" => SystemRuntimeCompilerServicesType::AsyncVoidMethodBuilder,
-    "AsyncTaskMethodBuilder" => SystemRuntimeCompilerServicesType::AsyncTaskMethodBuilder,
-    "AsyncTaskMethodBuilder`1" => SystemRuntimeCompilerServicesType::AsyncTaskMethodBuilder_1,
-    "AsyncStateMachineAttribute" => SystemRuntimeCompilerServicesType::AsyncStateMachineAttribute,
-    "IteratorStateMachineAttribute" => SystemRuntimeCompilerServicesType::IteratorStateMachineAttribute,
-    "TupleElementNamesAttribute" => SystemRuntimeCompilerServicesType::TupleElementNamesAttribute,
-    "ReferenceAssemblyAttribute" => SystemRuntimeCompilerServicesType::ReferenceAssemblyAttribute,
-    "TypeForwardedToAttribute" => SystemRuntimeCompilerServicesType::TypeForwardedToAttribute,
-    "IsReadOnlyAttribute" => SystemRuntimeCompilerServicesType::IsReadOnlyAttribute,
-    "IsByRefLikeAttribute" => SystemRuntimeCompilerServicesType::IsByRefLikeAttribute,
-    "AsyncIteratorMethodBuilder" => SystemRuntimeCompilerServicesType::AsyncIteratorMethodBuilder,
-    "AsyncIteratorStateMachineAttribute" => SystemRuntimeCompilerServicesType::AsyncIteratorStateMachineAttribute,
-    "NullableAttribute" => SystemRuntimeCompilerServicesType::NullableAttribute,
-    "IsUnmanagedAttribute" => SystemRuntimeCompilerServicesType::IsUnmanagedAttribute,
-
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemRuntimeCompilerServicesType {
     IsVolatile,
     FormattableStringFactory,
@@ -589,11 +380,13 @@ pub enum SystemRuntimeCompilerServicesType {
     DynamicAttribute,
     CallSiteBinder,
     CallSite,
+    #[strum(serialize = "CallSite`1")]
     CallSite_1,
     ICriticalNotifyCompletion,
     IAsyncStateMachine,
     AsyncVoidMethodBuilder,
     AsyncTaskMethodBuilder,
+    #[strum(serialize = "AsyncTaskMethodBuilder`1")]
     AsyncTaskMethodBuilder_1,
     AsyncStateMachineAttribute,
     IteratorStateMachineAttribute,
@@ -610,122 +403,61 @@ pub enum SystemRuntimeCompilerServicesType {
 
 impl SystemRuntimeCompilerServicesType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_RUNTIME_COMPILER_SERVICE.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::IsVolatile => "IsVolatile",
-            Self::FormattableStringFactory => "FormattableStringFactory",
-            Self::RuntimeHelpers => "RuntimeHelpers",
-            Self::DateTimeConstantAttribute => "DateTimeConstantAttribute",
-            Self::DecimalConstantAttribute => "DecimalConstantAttribute",
-            Self::IUnknownConstantAttribute => "IUnknownConstantAttribute",
-            Self::IDispatchConstantAttribute => "IDispatchConstantAttribute",
-            Self::ExtensionAttribute => "ExtensionAttribute",
-            Self::INotifyCompletion => "INotifyCompletion",
-            Self::InternalsVisibleToAttribute => "InternalsVisibleToAttribute",
-            Self::CompilerGeneratedAttribute => "CompilerGeneratedAttribute",
-            Self::AccessedThroughPropertyAttribute => "AccessedThroughPropertyAttribute",
-            Self::CompilationRelaxationsAttribute => "CompilationRelaxationsAttribute",
-            Self::RuntimeCompatibilityAttribute => "RuntimeCompatibilityAttribute",
-            Self::UnsafeValueTypeAttribute => "UnsafeValueTypeAttribute",
-            Self::FixedBufferAttribute => "FixedBufferAttribute",
-            Self::DynamicAttribute => "DynamicAttribute",
-            Self::CallSiteBinder => "CallSiteBinder",
-            Self::CallSite => "CallSite",
-            Self::CallSite_1 => "CallSite",
-            Self::ICriticalNotifyCompletion => "ICriticalNotifyCompletion",
-            Self::IAsyncStateMachine => "IAsyncStateMachine",
-            Self::AsyncVoidMethodBuilder => "AsyncVoidMethodBuilder",
-            Self::AsyncTaskMethodBuilder => "AsyncTaskMethodBuilder",
-            Self::AsyncTaskMethodBuilder_1 => "AsyncTaskMethodBuilder",
-            Self::AsyncStateMachineAttribute => "AsyncStateMachineAttribute",
-            Self::IteratorStateMachineAttribute => "IteratorStateMachineAttribute",
-            Self::TupleElementNamesAttribute => "TupleElementNamesAttribute",
-            Self::ReferenceAssemblyAttribute => "ReferenceAssemblyAttribute",
-            Self::TypeForwardedToAttribute => "TypeForwardedToAttribute",
-            Self::IsReadOnlyAttribute => "IsReadOnlyAttribute",
-            Self::IsByRefLikeAttribute => "IsByRefLikeAttribute",
-            Self::AsyncIteratorMethodBuilder => "AsyncIteratorMethodBuilder",
-            Self::AsyncIteratorStateMachineAttribute => "AsyncIteratorStateMachineAttribute",
-            Self::NullableAttribute => "NullableAttribute",
-            Self::IsUnmanagedAttribute => "IsUnmanagedAttribute",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_COLLECTIONS_GENERIC: phf::Map<&'static str, SystemCollectionsGenericType> = phf_map! {
-    "IEnumerable`1" => SystemCollectionsGenericType::IEnumerable_1,
-    "IList`1" => SystemCollectionsGenericType::IList_1,
-    "ICollection`1" => SystemCollectionsGenericType::ICollection_1,
-    "IEnumerator`1" => SystemCollectionsGenericType::IEnumerator_1,
-    "IReadOnlyList`1" => SystemCollectionsGenericType::IReadOnlyList_1,
-    "IReadOnlyCollection`1" => SystemCollectionsGenericType::IReadOnlyCollection_1,
-    "EqualityComparer`1" => SystemCollectionsGenericType::EqualityComparer_1,
-    "List`1" => SystemCollectionsGenericType::List_1,
-    "IDictionary`2" => SystemCollectionsGenericType::IDictionary_2,
-    "Dictionary`2" => SystemCollectionsGenericType::Dictionary_2,
-    "IReadOnlyDictionary`2" => SystemCollectionsGenericType::IReadOnlyDictionary_2,
-    "KeyValuePair`2" => SystemCollectionsGenericType::KeyValuePair_2,
-    "IAsyncEnumerable`1" => SystemCollectionsGenericType::IAsyncEnumerable_1,
-    "IAsyncEnumerator`1" => SystemCollectionsGenericType::IAsyncEnumerator_1,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemCollectionsGenericType {
+    #[strum(serialize = "IEnumerable`1")]
     IEnumerable_1,
+    #[strum(serialize = "IList`1")]
     IList_1,
+    #[strum(serialize = "ICollection`1")]
     ICollection_1,
+    #[strum(serialize = "IEnumerator`1")]
     IEnumerator_1,
+    #[strum(serialize = "IReadOnlyList`1")]
     IReadOnlyList_1,
+    #[strum(serialize = "IReadOnlyCollection`1")]
     IReadOnlyCollection_1,
+    #[strum(serialize = "EqualityComparer`1")]
     EqualityComparer_1,
+    #[strum(serialize = "List`1")]
     List_1,
+    #[strum(serialize = "IDictionary`2")]
     IDictionary_2,
+    #[strum(serialize = "Dictionary`2")]
     Dictionary_2,
+    #[strum(serialize = "IReadOnlyDictionary`2")]
     IReadOnlyDictionary_2,
+    #[strum(serialize = "KeyValuePair`2")]
     KeyValuePair_2,
+    #[strum(serialize = "IAsyncEnumerable`1")]
     IAsyncEnumerable_1,
+    #[strum(serialize = "IAsyncEnumerator`1")]
     IAsyncEnumerator_1,
 }
 
 impl SystemCollectionsGenericType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_COLLECTIONS_GENERIC.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::IEnumerable_1 => "IEnumerable",
-            Self::IList_1 => "IList",
-            Self::ICollection_1 => "ICollection",
-            Self::IEnumerator_1 => "IEnumerator",
-            Self::IReadOnlyList_1 => "IReadOnlyList",
-            Self::IReadOnlyCollection_1 => "IReadOnlyCollection",
-            Self::EqualityComparer_1 => "EqualityComparer",
-            Self::List_1 => "List",
-            Self::IDictionary_2 => "IDictionary",
-            Self::Dictionary_2 => "Dictionary",
-            Self::IReadOnlyDictionary_2 => "IReadOnlyDictionary",
-            Self::KeyValuePair_2 => "KeyValuePair",
-            Self::IAsyncEnumerable_1 => "IAsyncEnumerable",
-            Self::IAsyncEnumerator_1 => "IAsyncEnumerator",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_COLLECTIONS: phf::Map<&'static str, SystemCollectionsType> = phf_map! {
-    "DictionaryEntry" => SystemCollectionsType::DictionaryEntry,
-    "IEnumerator" => SystemCollectionsType::IEnumerator,
-    "IEnumerable" => SystemCollectionsType::IEnumerable,
-    "IList" => SystemCollectionsType::IList,
-    "ICollection" => SystemCollectionsType::ICollection,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemCollectionsType {
     DictionaryEntry,
     IEnumerator,
@@ -736,82 +468,54 @@ pub enum SystemCollectionsType {
 
 impl SystemCollectionsType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_COLLECTIONS.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::DictionaryEntry => "DictionaryEntry",
-            Self::IEnumerator => "IEnumerator",
-            Self::IEnumerable => "IEnumerable",
-            Self::IList => "IList",
-            Self::ICollection => "ICollection",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_COLLECTIONS_OBJECTMODEL: phf::Map<&'static str, SystemCollectionsObjectModelType> = phf_map! {
-    "Collection`1" => SystemCollectionsObjectModelType::Collection_1,
-    "ReadOnlyCollection`1" => SystemCollectionsObjectModelType::ReadOnlyCollection_1,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemCollectionsObjectModelType {
+    #[strum(serialize = "Collection`1")]
     Collection_1,
+    #[strum(serialize = "ReadOnlyCollection`1")]
     ReadOnlyCollection_1,
 }
 
 impl SystemCollectionsObjectModelType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_COLLECTIONS_OBJECTMODEL.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Collection_1 => "Collection",
-            Self::ReadOnlyCollection_1 => "ReadOnlyCollection",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_COLLECTIONS_SPECIALIZED: phf::Map<&'static str, SystemCollectionsSpecializedType> = phf_map! {
-    "INotifyCollectionChanged" => SystemCollectionsSpecializedType::INotifyCollectionChanged,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemCollectionsSpecializedType {
     INotifyCollectionChanged,
 }
 
 impl SystemCollectionsSpecializedType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_COLLECTIONS_SPECIALIZED.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::INotifyCollectionChanged => "INotifyCollectionChanged",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_REFLECTION: phf::Map<&'static str, SystemReflectionType> = phf_map! {
-    "MethodInfo" => SystemReflectionType::MethodInfo,
-    "ConstructorInfo" => SystemReflectionType::ConstructorInfo,
-    "MethodBase" => SystemReflectionType::MethodBase,
-    "FieldInfo" => SystemReflectionType::FieldInfo,
-    "MemberInfo" => SystemReflectionType::MemberInfo,
-    "Missing" => SystemReflectionType::Missing,
-    "AssemblyKeyFileAttribute" => SystemReflectionType::AssemblyKeyFileAttribute,
-    "AssemblyKeyNameAttribute" => SystemReflectionType::AssemblyKeyNameAttribute,
-    "DefaultMemberAttribute" => SystemReflectionType::DefaultMemberAttribute,
-    "Assembly" => SystemReflectionType::Assembly,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemReflectionType {
     MethodInfo,
     ConstructorInfo,
@@ -827,39 +531,17 @@ pub enum SystemReflectionType {
 
 impl SystemReflectionType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_REFLECTION.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::MethodInfo => "MethodInfo",
-            Self::ConstructorInfo => "ConstructorInfo",
-            Self::MethodBase => "MethodBase",
-            Self::FieldInfo => "FieldInfo",
-            Self::MemberInfo => "MemberInfo",
-            Self::Missing => "Missing",
-            Self::AssemblyKeyFileAttribute => "AssemblyKeyFileAttribute",
-            Self::AssemblyKeyNameAttribute => "AssemblyKeyNameAttribute",
-            Self::DefaultMemberAttribute => "DefaultMemberAttribute",
-            Self::Assembly => "Assembly",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_DIAGNOSTICS: phf::Map<&'static str, SystemDiagnosticsType> = phf_map! {
-    "DebuggerTypeProxyAttribute" => SystemDiagnosticsType::DebuggerTypeProxyAttribute,
-    "Debugger" => SystemDiagnosticsType::Debugger,
-    "DebuggerDisplayAttribute" => SystemDiagnosticsType::DebuggerDisplayAttribute,
-    "DebuggerNonUserCodeAttribute" => SystemDiagnosticsType::DebuggerNonUserCodeAttribute,
-    "DebuggerHiddenAttribute" => SystemDiagnosticsType::DebuggerHiddenAttribute,
-    "DebuggerBrowsableAttribute" => SystemDiagnosticsType::DebuggerBrowsableAttribute,
-    "DebuggerStepThroughAttribute" => SystemDiagnosticsType::DebuggerStepThroughAttribute,
-    "DebuggerBrowsableState" => SystemDiagnosticsType::DebuggerBrowsableState,
-    "DebuggableAttribute" => SystemDiagnosticsType::DebuggableAttribute,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemDiagnosticsType {
     DebuggerTypeProxyAttribute,
     Debugger,
@@ -874,87 +556,34 @@ pub enum SystemDiagnosticsType {
 
 impl SystemDiagnosticsType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_DIAGNOSTICS.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::DebuggerTypeProxyAttribute => "DebuggerTypeProxyAttribute",
-            Self::Debugger => "Debugger",
-            Self::DebuggerDisplayAttribute => "DebuggerDisplayAttribute",
-            Self::DebuggerNonUserCodeAttribute => "DebuggerNonUserCodeAttribute",
-            Self::DebuggerHiddenAttribute => "DebuggerHiddenAttribute",
-            Self::DebuggerBrowsableAttribute => "DebuggerBrowsableAttribute",
-            Self::DebuggerStepThroughAttribute => "DebuggerStepThroughAttribute",
-            Self::DebuggerBrowsableState => "DebuggerBrowsableState",
-            Self::DebuggableAttribute => "DebuggableAttribute",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_RUNTIME_EXCEPTIONSERVICES: phf::Map<
-    &'static str,
-    SystemRuntimeExceptionServicesType,
-> = phf_map! {
-    "ExceptionDispatchInfo" => SystemRuntimeExceptionServicesType::ExceptionDispatchInfo,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemRuntimeExceptionServicesType {
     ExceptionDispatchInfo,
 }
 
 impl SystemRuntimeExceptionServicesType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_RUNTIME_EXCEPTIONSERVICES.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::ExceptionDispatchInfo => "ExceptionDispatchInfo",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_RUNTIME_INTEROPSERVICES: phf::Map<&'static str, SystemRuntimeInteropServicesType> = phf_map! {
-    "StructLayoutAttribute" => SystemRuntimeInteropServicesType::StructLayoutAttribute,
-    "UnknownWrapper" => SystemRuntimeInteropServicesType::UnknownWrapper,
-    "DispatchWrapper" => SystemRuntimeInteropServicesType::DispatchWrapper,
-    "CallingConvention" => SystemRuntimeInteropServicesType::CallingConvention,
-    "ClassInterfaceAttribute" => SystemRuntimeInteropServicesType::ClassInterfaceAttribute,
-    "ClassInterfaceType" => SystemRuntimeInteropServicesType::ClassInterfaceType,
-    "CoClassAttribute" => SystemRuntimeInteropServicesType::CoClassAttribute,
-    "ComAwareEventInfo" => SystemRuntimeInteropServicesType::ComAwareEventInfo,
-    "ComEventInterfaceAttribute" => SystemRuntimeInteropServicesType::ComEventInterfaceAttribute,
-    "ComInterfaceType" => SystemRuntimeInteropServicesType::ComInterfaceType,
-    "ComSourceInterfacesAttribute" => SystemRuntimeInteropServicesType::ComSourceInterfacesAttribute,
-    "ComVisibleAttribute" => SystemRuntimeInteropServicesType::ComVisibleAttribute,
-    "DispIdAttribute" => SystemRuntimeInteropServicesType::DispIdAttribute,
-    "GuidAttribute" => SystemRuntimeInteropServicesType::GuidAttribute,
-    "InterfaceTypeAttribute" => SystemRuntimeInteropServicesType::InterfaceTypeAttribute,
-    "Marshal" => SystemRuntimeInteropServicesType::Marshal,
-    "TypeIdentifierAttribute" => SystemRuntimeInteropServicesType::TypeIdentifierAttribute,
-    "BestFitMappingAttribute" => SystemRuntimeInteropServicesType::BestFitMappingAttribute,
-    "DefaultParameterValueAttribute" => SystemRuntimeInteropServicesType::DefaultParameterValueAttribute,
-    "LCIDConversionAttribute" => SystemRuntimeInteropServicesType::LCIDConversionAttribute,
-    "UnmanagedFunctionPointerAttribute" => SystemRuntimeInteropServicesType::UnmanagedFunctionPointerAttribute,
-    "ComImportAttribute" => SystemRuntimeInteropServicesType::ComImportAttribute,
-    "DllImportAttribute" => SystemRuntimeInteropServicesType::DllImportAttribute,
-    "FieldOffsetAttribute" => SystemRuntimeInteropServicesType::FieldOffsetAttribute,
-    "InAttribute" => SystemRuntimeInteropServicesType::InAttribute,
-    "MarshalAsAttribute" => SystemRuntimeInteropServicesType::MarshalAsAttribute,
-    "OptionalAttribute" => SystemRuntimeInteropServicesType::OptionalAttribute,
-    "OutAttribute" => SystemRuntimeInteropServicesType::OutAttribute,
-    "PreserveSigAttribute" => SystemRuntimeInteropServicesType::PreserveSigAttribute,
-    "CharSet" => SystemRuntimeInteropServicesType::CharSet,
-    "UnmanagedType" => SystemRuntimeInteropServicesType::UnmanagedType,
-    "VarEnum" => SystemRuntimeInteropServicesType::VarEnum,
-    "GCHandle" => SystemRuntimeInteropServicesType::GCHandle,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemRuntimeInteropServicesType {
     StructLayoutAttribute,
     UnknownWrapper,
@@ -993,88 +622,39 @@ pub enum SystemRuntimeInteropServicesType {
 
 impl SystemRuntimeInteropServicesType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_RUNTIME_INTEROPSERVICES.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::StructLayoutAttribute => "StructLayoutAttribute",
-            Self::UnknownWrapper => "UnknownWrapper",
-            Self::DispatchWrapper => "DispatchWrapper",
-            Self::CallingConvention => "CallingConvention",
-            Self::ClassInterfaceAttribute => "ClassInterfaceAttribute",
-            Self::ClassInterfaceType => "ClassInterfaceType",
-            Self::CoClassAttribute => "CoClassAttribute",
-            Self::ComAwareEventInfo => "ComAwareEventInfo",
-            Self::ComEventInterfaceAttribute => "ComEventInterfaceAttribute",
-            Self::ComInterfaceType => "ComInterfaceType",
-            Self::ComSourceInterfacesAttribute => "ComSourceInterfacesAttribute",
-            Self::ComVisibleAttribute => "ComVisibleAttribute",
-            Self::DispIdAttribute => "DispIdAttribute",
-            Self::GuidAttribute => "GuidAttribute",
-            Self::InterfaceTypeAttribute => "InterfaceTypeAttribute",
-            Self::Marshal => "Marshal",
-            Self::TypeIdentifierAttribute => "TypeIdentifierAttribute",
-            Self::BestFitMappingAttribute => "BestFitMappingAttribute",
-            Self::DefaultParameterValueAttribute => "DefaultParameterValueAttribute",
-            Self::LCIDConversionAttribute => "LCIDConversionAttribute",
-            Self::UnmanagedFunctionPointerAttribute => "UnmanagedFunctionPointerAttribute",
-            Self::ComImportAttribute => "ComImportAttribute",
-            Self::DllImportAttribute => "DllImportAttribute",
-            Self::FieldOffsetAttribute => "FieldOffsetAttribute",
-            Self::InAttribute => "InAttribute",
-            Self::MarshalAsAttribute => "MarshalAsAttribute",
-            Self::OptionalAttribute => "OptionalAttribute",
-            Self::OutAttribute => "OutAttribute",
-            Self::PreserveSigAttribute => "PreserveSigAttribute",
-            Self::CharSet => "CharSet",
-            Self::UnmanagedType => "UnmanagedType",
-            Self::VarEnum => "VarEnum",
-            Self::GCHandle => "GCHandle",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_THREADING_TASKS: phf::Map<&'static str, SystemThreadingTasksType> = phf_map! {
-    "Task" => SystemThreadingTasksType::Task,
-    "Task`1" => SystemThreadingTasksType::Task_1,
-    "ValueTask`1" => SystemThreadingTasksType::ValueTask_1,
-    "ValueTask" => SystemThreadingTasksType::ValueTask,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemThreadingTasksType {
     Task,
+    #[strum(serialize = "Task`1")]
     Task_1,
+    #[strum(serialize = "ValueTask`1")]
     ValueTask_1,
     ValueTask,
 }
 
 impl SystemThreadingTasksType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_THREADING_TASKS.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Task => "Task",
-            Self::Task_1 => "Task",
-            Self::ValueTask_1 => "ValueTask",
-            Self::ValueTask => "ValueTask",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_THREADING: phf::Map<&'static str, SystemThreadingType> = phf_map! {
-    "Interlocked" => SystemThreadingType::Interlocked,
-    "Monitor" => SystemThreadingType::Monitor,
-    "Thread" => SystemThreadingType::Thread,
-    "CancellationToken" => SystemThreadingType::CancellationToken,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemThreadingType {
     Interlocked,
     Monitor,
@@ -1084,28 +664,17 @@ pub enum SystemThreadingType {
 
 impl SystemThreadingType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_THREADING.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Interlocked => "Interlocked",
-            Self::Monitor => "Monitor",
-            Self::Thread => "Thread",
-            Self::CancellationToken => "CancellationToken",
-        }
+        strip_arity(self.into())
     }
 }
 
-static MICROSOFT_CSHARP_RUNTIMEBINDER: phf::Map<&'static str, MicrosoftCSharpRuntimeBinderType> = phf_map! {
-    "Binder" => MicrosoftCSharpRuntimeBinderType::Binder,
-    "CSharpArgumentInfo" => MicrosoftCSharpRuntimeBinderType::CSharpArgumentInfo,
-    "CSharpArgumentInfoFlags" => MicrosoftCSharpRuntimeBinderType::CSharpArgumentInfoFlags,
-    "CSharpBinderFlags" => MicrosoftCSharpRuntimeBinderType::CSharpBinderFlags,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum MicrosoftCSharpRuntimeBinderType {
     Binder,
     CSharpArgumentInfo,
@@ -1115,33 +684,17 @@ pub enum MicrosoftCSharpRuntimeBinderType {
 
 impl MicrosoftCSharpRuntimeBinderType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        MICROSOFT_CSHARP_RUNTIMEBINDER.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Binder => "Binder",
-            Self::CSharpArgumentInfo => "CSharpArgumentInfo",
-            Self::CSharpArgumentInfoFlags => "CSharpArgumentInfoFlags",
-            Self::CSharpBinderFlags => "CSharpBinderFlags",
-        }
+        strip_arity(self.into())
     }
 }
 
-static MICROSOFT_VISUALBASIC: phf::Map<&'static str, MicrosoftVisualBasicType> = phf_map! {
-    "CallType" => MicrosoftVisualBasicType::CallType,
-    "Embedded" => MicrosoftVisualBasicType::Embedded,
-    "CompareMethod" => MicrosoftVisualBasicType::CompareMethod,
-    "Strings" => MicrosoftVisualBasicType::Strings,
-    "ErrObject" => MicrosoftVisualBasicType::ErrObject,
-    "FileSystem" => MicrosoftVisualBasicType::FileSystem,
-    "Information" => MicrosoftVisualBasicType::Information,
-    "Interaction" => MicrosoftVisualBasicType::Interaction,
-    "Conversion" => MicrosoftVisualBasicType::Conversion,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum MicrosoftVisualBasicType {
     CallType,
     Embedded,
@@ -1156,45 +709,17 @@ pub enum MicrosoftVisualBasicType {
 
 impl MicrosoftVisualBasicType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        MICROSOFT_VISUALBASIC.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::CallType => "CallType",
-            Self::Embedded => "Embedded",
-            Self::CompareMethod => "CompareMethod",
-            Self::Strings => "Strings",
-            Self::ErrObject => "ErrObject",
-            Self::FileSystem => "FileSystem",
-            Self::Information => "Information",
-            Self::Interaction => "Interaction",
-            Self::Conversion => "Conversion",
-        }
+        strip_arity(self.into())
     }
 }
 
-static MICROSOFT_VISUALBASIC_COMPILERSERVICES: phf::Map<
-    &'static str,
-    MicrosoftVisualBasicCompilerServicesType,
-> = phf_map! {
-    "Conversions" => MicrosoftVisualBasicCompilerServicesType::Conversions,
-    "Operators" => MicrosoftVisualBasicCompilerServicesType::Operators,
-    "NewLateBinding" => MicrosoftVisualBasicCompilerServicesType::NewLateBinding,
-    "EmbeddedOperators" => MicrosoftVisualBasicCompilerServicesType::EmbeddedOperators,
-    "StandardModuleAttribute" => MicrosoftVisualBasicCompilerServicesType::StandardModuleAttribute,
-    "Utils" => MicrosoftVisualBasicCompilerServicesType::Utils,
-    "LikeOperator" => MicrosoftVisualBasicCompilerServicesType::LikeOperator,
-    "ProjectData" => MicrosoftVisualBasicCompilerServicesType::ProjectData,
-    "ObjectFlowControl" => MicrosoftVisualBasicCompilerServicesType::ObjectFlowControl,
-    "StaticLocalInitFlag" => MicrosoftVisualBasicCompilerServicesType::StaticLocalInitFlag,
-    "StringType" => MicrosoftVisualBasicCompilerServicesType::StringType,
-    "IncompleteInitialization" => MicrosoftVisualBasicCompilerServicesType::IncompleteInitialization,
-    "Versioned" => MicrosoftVisualBasicCompilerServicesType::Versioned,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum MicrosoftVisualBasicCompilerServicesType {
     Conversions,
     Operators,
@@ -1213,38 +738,17 @@ pub enum MicrosoftVisualBasicCompilerServicesType {
 
 impl MicrosoftVisualBasicCompilerServicesType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        MICROSOFT_VISUALBASIC_COMPILERSERVICES.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Conversions => "Conversions",
-            Self::Operators => "Operators",
-            Self::NewLateBinding => "NewLateBinding",
-            Self::EmbeddedOperators => "EmbeddedOperators",
-            Self::StandardModuleAttribute => "StandardModuleAttribute",
-            Self::Utils => "Utils",
-            Self::LikeOperator => "LikeOperator",
-            Self::ProjectData => "ProjectData",
-            Self::ObjectFlowControl => "ObjectFlowControl",
-            Self::StaticLocalInitFlag => "StaticLocalInitFlag",
-            Self::StringType => "StringType",
-            Self::IncompleteInitialization => "IncompleteInitialization",
-            Self::Versioned => "Versioned",
-        }
+        strip_arity(self.into())
     }
 }
 
-static MICROSOFT_VISUALBASIC_APPLICATIONSERVICES: phf::Map<
-    &'static str,
-    MicrosoftVisualBasicApplicationServicesType,
-> = phf_map! {
-    "ApplicationBase" => MicrosoftVisualBasicApplicationServicesType::ApplicationBase,
-    "WindowsFormsApplicationBase" => MicrosoftVisualBasicApplicationServicesType::WindowsFormsApplicationBase,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum MicrosoftVisualBasicApplicationServicesType {
     ApplicationBase,
     WindowsFormsApplicationBase,
@@ -1252,31 +756,20 @@ pub enum MicrosoftVisualBasicApplicationServicesType {
 
 impl MicrosoftVisualBasicApplicationServicesType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        MICROSOFT_VISUALBASIC_APPLICATIONSERVICES.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::ApplicationBase => "ApplicationBase",
-            Self::WindowsFormsApplicationBase => "WindowsFormsApplicationBase",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_RUNTIME_INTEROPSERVICES_WINDOWSRUNTIME: phf::Map<
-    &'static str,
-    SystemRuntimeInteropServicesWindowsRuntimeType,
-> = phf_map! {
-    "EventRegistrationToken" => SystemRuntimeInteropServicesWindowsRuntimeType::EventRegistrationToken,
-    "EventRegistrationTokenTable`1" => SystemRuntimeInteropServicesWindowsRuntimeType::EventRegistrationTokenTable_1,
-    "WindowsRuntimeMarshal" => SystemRuntimeInteropServicesWindowsRuntimeType::WindowsRuntimeMarshal,
-    "RuntimeClass" => SystemRuntimeInteropServicesWindowsRuntimeType::RuntimeClass,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemRuntimeInteropServicesWindowsRuntimeType {
     EventRegistrationToken,
+    #[strum(serialize = "EventRegistrationTokenTable`1")]
     EventRegistrationTokenTable_1,
     WindowsRuntimeMarshal,
     RuntimeClass,
@@ -1284,61 +777,40 @@ pub enum SystemRuntimeInteropServicesWindowsRuntimeType {
 
 impl SystemRuntimeInteropServicesWindowsRuntimeType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_RUNTIME_INTEROPSERVICES_WINDOWSRUNTIME
-            .get(name)
-            .copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::EventRegistrationToken => "EventRegistrationToken",
-            Self::EventRegistrationTokenTable_1 => "EventRegistrationTokenTable",
-            Self::WindowsRuntimeMarshal => "WindowsRuntimeMarshal",
-            Self::RuntimeClass => "RuntimeClass",
-        }
+        strip_arity(self.into())
     }
 }
 
-static WINDOWS_FOUNDATION: phf::Map<&'static str, WindowsFoundationType> = phf_map! {
-    "IAsyncAction" => WindowsFoundationType::IAsyncAction,
-    "IAsyncActionWithProgress`1" => WindowsFoundationType::IAsyncActionWithProgress_1,
-    "IAsyncOperation`1" => WindowsFoundationType::IAsyncOperation_1,
-    "IAsyncOperationWithProgress`2" => WindowsFoundationType::IAsyncOperationWithProgress_2,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum WindowsFoundationType {
     IAsyncAction,
+    #[strum(serialize = "IAsyncActionWithProgress`1")]
     IAsyncActionWithProgress_1,
+    #[strum(serialize = "IAsyncOperation`1")]
     IAsyncOperation_1,
+    #[strum(serialize = "IAsyncOperationWithProgress`2")]
     IAsyncOperationWithProgress_2,
 }
 
 impl WindowsFoundationType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        WINDOWS_FOUNDATION.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::IAsyncAction => "IAsyncAction",
-            Self::IAsyncActionWithProgress_1 => "IAsyncActionWithProgress",
-            Self::IAsyncOperation_1 => "IAsyncOperation",
-            Self::IAsyncOperationWithProgress_2 => "IAsyncOperationWithProgress",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_COMPONENTMODEL: phf::Map<&'static str, SystemComponentModelType> = phf_map! {
-    "DesignerSerializationVisibilityAttribute" => SystemComponentModelType::DesignerSerializationVisibilityAttribute,
-    "INotifyPropertyChanged" => SystemComponentModelType::INotifyPropertyChanged,
-    "EditorBrowsableAttribute" => SystemComponentModelType::EditorBrowsableAttribute,
-    "EditorBrowsableState" => SystemComponentModelType::EditorBrowsableState,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemComponentModelType {
     DesignerSerializationVisibilityAttribute,
     INotifyPropertyChanged,
@@ -1348,68 +820,43 @@ pub enum SystemComponentModelType {
 
 impl SystemComponentModelType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_COMPONENTMODEL.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::DesignerSerializationVisibilityAttribute => {
-                "DesignerSerializationVisibilityAttribute"
-            }
-            Self::INotifyPropertyChanged => "INotifyPropertyChanged",
-            Self::EditorBrowsableAttribute => "EditorBrowsableAttribute",
-            Self::EditorBrowsableState => "EditorBrowsableState",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_LINQ: phf::Map<&'static str, SystemLinqType> = phf_map! {
-    "Enumerable" => SystemLinqType::Enumerable,
-    "IQueryable" => SystemLinqType::IQueryable,
-    "IQueryable`1" => SystemLinqType::IQueryable_1,
-    "SystemCore_EnumerableDebugView" => SystemLinqType::SystemCore_EnumerableDebugView,
-    "SystemCore_EnumerableDebugView`1" => SystemLinqType::SystemCore_EnumerableDebugView_1,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemLinqType {
     Enumerable,
     IQueryable,
+    #[strum(serialize = "IQueryable`1")]
     IQueryable_1,
     SystemCore_EnumerableDebugView,
+    #[strum(serialize = "SystemCore_EnumerableDebugView`1")]
     SystemCore_EnumerableDebugView_1,
 }
 
 impl SystemLinqType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_LINQ.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Enumerable => "Enumerable",
-            Self::IQueryable => "IQueryable",
-            Self::IQueryable_1 => "IQueryable",
-            Self::SystemCore_EnumerableDebugView => "SystemCore_EnumerableDebugView",
-            Self::SystemCore_EnumerableDebugView_1 => "SystemCore_EnumerableDebugView",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_LINQ_EXPRESSIONS: phf::Map<&'static str, SystemLinqExpressionsType> = phf_map! {
-    "Expression" => SystemLinqExpressionsType::Expression,
-    "Expression`1" => SystemLinqExpressionsType::Expression_1,
-    "ParameterExpression" => SystemLinqExpressionsType::ParameterExpression,
-    "ElementInit" => SystemLinqExpressionsType::ElementInit,
-    "MemberBinding" => SystemLinqExpressionsType::MemberBinding,
-    "ExpressionType" => SystemLinqExpressionsType::ExpressionType,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemLinqExpressionsType {
     Expression,
+    #[strum(serialize = "Expression`1")]
     Expression_1,
     ParameterExpression,
     ElementInit,
@@ -1419,38 +866,17 @@ pub enum SystemLinqExpressionsType {
 
 impl SystemLinqExpressionsType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_LINQ_EXPRESSIONS.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Expression => "Expression",
-            Self::Expression_1 => "Expression",
-            Self::ParameterExpression => "ParameterExpression",
-            Self::ElementInit => "ElementInit",
-            Self::MemberBinding => "MemberBinding",
-            Self::ExpressionType => "ExpressionType",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_XML_LINQ: phf::Map<&'static str, SystemXmlLinqType> = phf_map! {
-    "Extensions" => SystemXmlLinqType::Extensions,
-    "XAttribute" => SystemXmlLinqType::XAttribute,
-    "XCData" => SystemXmlLinqType::XCData,
-    "XComment" => SystemXmlLinqType::XComment,
-    "XContainer" => SystemXmlLinqType::XContainer,
-    "XDeclaration" => SystemXmlLinqType::XDeclaration,
-    "XDocument" => SystemXmlLinqType::XDocument,
-    "XElement" => SystemXmlLinqType::XElement,
-    "XName" => SystemXmlLinqType::XName,
-    "XNamespace" => SystemXmlLinqType::XNamespace,
-    "XObject" => SystemXmlLinqType::XObject,
-    "XProcessingInstruction" => SystemXmlLinqType::XProcessingInstruction,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemXmlLinqType {
     Extensions,
     XAttribute,
@@ -1468,58 +894,34 @@ pub enum SystemXmlLinqType {
 
 impl SystemXmlLinqType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_XML_LINQ.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Extensions => "Extensions",
-            Self::XAttribute => "XAttribute",
-            Self::XCData => "XCData",
-            Self::XComment => "XComment",
-            Self::XContainer => "XContainer",
-            Self::XDeclaration => "XDeclaration",
-            Self::XDocument => "XDocument",
-            Self::XElement => "XElement",
-            Self::XName => "XName",
-            Self::XNamespace => "XNamespace",
-            Self::XObject => "XObject",
-            Self::XProcessingInstruction => "XProcessingInstruction",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_SECURITY: phf::Map<&'static str, SystemSecurityType> = phf_map! {
-    "UnverifiableCodeAttribute" => SystemSecurityType::UnverifiableCodeAttribute,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemSecurityType {
     UnverifiableCodeAttribute,
 }
 
 impl SystemSecurityType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_SECURITY.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::UnverifiableCodeAttribute => "UnverifiableCodeAttribute",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_SECURITY_PERMISSIONS: phf::Map<&'static str, SystemSecurityPermissionsType> = phf_map! {
-    "SecurityAction" => SystemSecurityPermissionsType::SecurityAction,
-"SecurityAttribute" => SystemSecurityPermissionsType::SecurityAttribute,
-"SecurityPermissionAttribute" => SystemSecurityPermissionsType::SecurityPermissionAttribute,
-"PermissionSetAttribute" => SystemSecurityPermissionsType::PermissionSetAttribute,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemSecurityPermissionsType {
     SecurityAction,
     SecurityAttribute,
@@ -1529,26 +931,17 @@ pub enum SystemSecurityPermissionsType {
 
 impl SystemSecurityPermissionsType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_SECURITY_PERMISSIONS.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::SecurityAction => "SecurityAction",
-            Self::SecurityAttribute => "SecurityAttribute",
-            Self::SecurityPermissionAttribute => "SecurityPermissionAttribute",
-            Self::PermissionSetAttribute => "PermissionSetAttribute",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_WINDOWS_FORMS: phf::Map<&'static str, SystemWindowsFormsType> = phf_map! {
-    "Form" => SystemWindowsFormsType::Form,
-    "Application" => SystemWindowsFormsType::Application,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemWindowsFormsType {
     Form,
     Application,
@@ -1556,91 +949,68 @@ pub enum SystemWindowsFormsType {
 
 impl SystemWindowsFormsType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_WINDOWS_FORMS.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Form => "Form",
-            Self::Application => "Application",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_RUNTIME: phf::Map<&'static str, SystemRuntimeType> = phf_map! {
-    "GCLatencyMode" => SystemRuntimeType::GCLatencyMode,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemRuntimeType {
     GCLatencyMode,
 }
 
 impl SystemRuntimeType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_RUNTIME.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::GCLatencyMode => "GCLatencyMode",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_TEXT: phf::Map<&'static str, SystemTextType> = phf_map! {
-    "Encoding" => SystemTextType::Encoding,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemTextType {
     Encoding,
 }
 
 impl SystemTextType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_TEXT.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Encoding => "Encoding",
-        }
+        strip_arity(self.into())
     }
 }
 
-static SYSTEM_THREADING_TASKS_SOURCES: phf::Map<&'static str, SystemThreadingTasksSourcesType> = phf_map! {
-    "ManualResetValueTaskSourceCore`1" => SystemThreadingTasksSourcesType::ManualResetValueTaskSourceCore_1,
-    "ValueTaskSourceStatus" => SystemThreadingTasksSourcesType::ValueTaskSourceStatus,
-    "ValueTaskSourceOnCompletedFlags" => SystemThreadingTasksSourcesType::ValueTaskSourceOnCompletedFlags,
-    "IValueTaskSource`1" => SystemThreadingTasksSourcesType::IValueTaskSource_1,
-    "IValueTaskSource" => SystemThreadingTasksSourcesType::IValueTaskSource,
-};
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemThreadingTasksSourcesType {
+    #[strum(serialize = "ManualResetValueTaskSourceCore`1")]
     ManualResetValueTaskSourceCore_1,
     ValueTaskSourceStatus,
     ValueTaskSourceOnCompletedFlags,
+    #[strum(serialize = "IValueTaskSource`1")]
     IValueTaskSource_1,
     IValueTaskSource,
 }
 
 impl SystemThreadingTasksSourcesType {
     pub fn from_type_name(name: &str) -> Option<Self> {
-        SYSTEM_THREADING_TASKS_SOURCES.get(name).copied()
+        name.parse().ok()
     }
 
+    /// The type name without the generic arity suffix.
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::ManualResetValueTaskSourceCore_1 => "ManualResetValueTaskSourceCore",
-            Self::ValueTaskSourceStatus => "ValueTaskSourceStatus",
-            Self::ValueTaskSourceOnCompletedFlags => "ValueTaskSourceOnCompletedFlags",
-            Self::IValueTaskSource_1 => "IValueTaskSource",
-            Self::IValueTaskSource => "IValueTaskSource",
-        }
+        strip_arity(self.into())
     }
 }
