@@ -1318,7 +1318,7 @@ impl<'a> ReadData<ManifestResourceTableRow> for TablesStreamReader<'a> {
     fn read(&mut self) -> Result<ManifestResourceTableRow> {
         Ok(ManifestResourceTableRow {
             offset: self.read()?,
-            flags: ManifestResourceFlags::from_bits_truncate(self.read()?),
+            flags: ManifestResourceFlags::from_bits_retain(self.read()?),
             name: self.read()?,
             implementation: self.read()?,
         })

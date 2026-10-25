@@ -67,7 +67,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 pub struct TableRowCount(pub u32);
 
 impl TableRowCount {
@@ -90,7 +90,7 @@ impl PartialEq<usize> for TableRowCount {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TableRows {
     pub module: TableRowCount,
     pub type_ref: TableRowCount,
