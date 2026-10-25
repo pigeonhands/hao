@@ -158,3 +158,58 @@ fn rewrite_ready_to_run() {
     assert!(dirs.exception_table.is_null());
     Module::from_bytes(&written).unwrap();
 }
+
+#[test]
+fn import_helpers() {
+    use hao::dotnet::signature::{MethodSig, TypeSig};
+
+    let mut module = Module::from_bytes(SAMPLE).unwrap();
+    let refs = module.member_refs.len();
+
+    let write_line = module
+        .import_method("System.Console", "WriteLine", MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]))
+        .unwrap();
+    assert_eq!(module.member_refs.len(), refs, "existing reference should be reused");
+
+    let write = module
+        .import_method("System.Console", "Write", MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]))
+        .unwrap();
+    assert_eq!(module.member_refs.len(), refs + 1);
+
+    let local = module
+        .import_method("Sample.Calc", "Add", MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32, TypeSig::INT32]))
+        .unwrap();
+    assert!(matches!(local, hao::dotnet::il::MemberToken::Method(_)));
+
+    let main = module.entry_point.clone().unwrap();
+    main.edit_body(|body| {
+        body.insert(
+            0,
+            [
+                Instruction::ldstr("imported "),
+                Instruction::call(write),
+                Instruction::ldc_i4(1000),
+                Instruction::ldc_i4(2),
+                Instruction::call(local),
+                Instruction::pop(),
+                Instruction::ldstr("ok"),
+                Instruction::call(write_line),
+            ],
+        );
+    });
+
+    let dir = out_dir("imported");
+    module.write_to_path(dir.join("Sample.dll")).unwrap();
+    if let Some(output) = run(&dir) {
+        assert_eq!(output, format!("imported ok\n{}", EXPECTED_OUTPUT));
+    }
+}
+
+#[test]
+fn shortest_instruction_forms() {
+    assert_eq!(Instruction::ldc_i4(-1).opcode, OpCode::Ldc_I4_M1);
+    assert_eq!(Instruction::ldc_i4(100).opcode, OpCode::Ldc_I4_S);
+    assert_eq!(Instruction::ldc_i4(1000).opcode, OpCode::Ldc_I4);
+    assert_eq!(Instruction::ldarg(2).opcode, OpCode::Ldarg_2);
+    assert_eq!(Instruction::ldloc(300).opcode, OpCode::Ldloc);
+}

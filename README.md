@@ -58,29 +58,32 @@ installed .NET shared framework. Use `Module::from_path_no_resolve` to skip that
 ## Patching IL
 
 ```rust
-use hao::{dotnet::il::{Instruction, OpCode, Operand}, Module};
+use hao::{
+    dotnet::{il::{Instruction, OpCode}, signature::{MethodSig, TypeSig}},
+    Module,
+};
 
-let module = Module::from_path_no_resolve("Sample.dll")?;
-let calc = module.find_type("Sample", "Calc").unwrap();
-let add = calc.get().find_method("Add").unwrap();
+let mut module = Module::from_path_no_resolve("Sample.dll")?;
 
-{
-    let mut add = add.get_mut();
-    let body = add.body.as_mut().unwrap();
+let write_line = module.import_method(
+    "System.Console",
+    "WriteLine",
+    MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]),
+)?;
+
+let add = module.find_method("Sample.Calc", "Add").unwrap();
+add.edit_body(|body| {
     let index = body.position(|i| i.opcode == OpCode::Add).unwrap();
     body.instructions[index] = Instruction::simple(OpCode::Mul);
-    body.insert(0, [
-        Instruction::new(OpCode::Ldstr, Operand::String("hi".into())),
-        Instruction::simple(OpCode::Pop),
-    ]);
-}
+    body.insert(0, [Instruction::ldstr("Add called"), Instruction::call(write_line)]);
+});
 
 module.write_to_path("Sample.patched.dll")?;
 ```
 
-New type, member and assembly references used by the patched code are added to the metadata
-automatically. See [`examples/patch_method.rs`](examples/patch_method.rs) for a complete example
-that adds a `Console.WriteLine` call.
+`import_type`/`import_method`/`import_field` reuse existing references or definitions and add new
+ones when needed. `insert` and `remove` keep branch targets and exception ranges pointing at the
+same instructions. See [`examples/patch_method.rs`](examples/patch_method.rs).
 
 ## C# output
 
@@ -89,6 +92,7 @@ use hao::dotnet::csharp::{CSharpOptions, WriteCSharp};
 
 println!("{}", module.to_csharp());
 println!("{}", method.csharp());
+println!("{}", method.get().body.as_ref().unwrap().csharp()); // IL listing
 
 let with_il = module.to_csharp_with(CSharpOptions { il_bodies: true, ..Default::default() });
 ```

@@ -41,6 +41,27 @@ impl From<TypeDefOrRef> for MemberToken {
     }
 }
 
+macro_rules! member_token_from {
+    ($($variant:ident),*) => {$(
+        impl From<Entry<$variant>> for MemberToken {
+            fn from(value: Entry<$variant>) -> Self {
+                Self::$variant(value)
+            }
+        }
+    )*};
+}
+
+member_token_from!(TypeDef, TypeRef, TypeSpec, Field, Method, MemberRef, MethodSpec);
+
+impl From<crate::dotnet::entries::MethodDefOrRef> for MemberToken {
+    fn from(value: crate::dotnet::entries::MethodDefOrRef) -> Self {
+        match value {
+            crate::dotnet::entries::MethodDefOrRef::Method(m) => Self::Method(m),
+            crate::dotnet::entries::MethodDefOrRef::MemberRef(m) => Self::MemberRef(m),
+        }
+    }
+}
+
 impl MemberToken {
     pub fn as_type(&self) -> Option<TypeDefOrRef> {
         Some(match self {
@@ -91,6 +112,24 @@ pub enum Operand {
     Sig(MethodSig),
 }
 
+impl From<&str> for Operand {
+    fn from(value: &str) -> Self {
+        Self::String(value.into())
+    }
+}
+
+impl From<String> for Operand {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+
+impl From<MemberToken> for Operand {
+    fn from(value: MemberToken) -> Self {
+        Self::Token(value)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Instruction {
     pub opcode: OpCode,
@@ -104,6 +143,87 @@ impl Instruction {
 
     pub fn simple(opcode: OpCode) -> Self {
         Self::new(opcode, Operand::None)
+    }
+
+    pub fn pop() -> Self {
+        Self::simple(OpCode::Pop)
+    }
+
+    pub fn ret() -> Self {
+        Self::simple(OpCode::Ret)
+    }
+
+    pub fn ldstr(value: impl Into<String>) -> Self {
+        Self::new(OpCode::Ldstr, Operand::String(value.into()))
+    }
+
+    pub fn call(method: impl Into<MemberToken>) -> Self {
+        Self::new(OpCode::Call, Operand::Token(method.into()))
+    }
+
+    pub fn callvirt(method: impl Into<MemberToken>) -> Self {
+        Self::new(OpCode::Callvirt, Operand::Token(method.into()))
+    }
+
+    pub fn newobj(constructor: impl Into<MemberToken>) -> Self {
+        Self::new(OpCode::Newobj, Operand::Token(constructor.into()))
+    }
+
+    /// `ldc.i4` using the shortest encoding for `value`.
+    pub fn ldc_i4(value: i32) -> Self {
+        const SHORT: [OpCode; 10] = [
+            OpCode::Ldc_I4_M1,
+            OpCode::Ldc_I4_0,
+            OpCode::Ldc_I4_1,
+            OpCode::Ldc_I4_2,
+            OpCode::Ldc_I4_3,
+            OpCode::Ldc_I4_4,
+            OpCode::Ldc_I4_5,
+            OpCode::Ldc_I4_6,
+            OpCode::Ldc_I4_7,
+            OpCode::Ldc_I4_8,
+        ];
+        match value {
+            -1..=8 => Self::simple(SHORT[(value + 1) as usize]),
+            -128..=127 => Self::new(OpCode::Ldc_I4_S, Operand::Int32(value)),
+            _ => Self::new(OpCode::Ldc_I4, Operand::Int32(value)),
+        }
+    }
+
+    /// `ldarg` using the shortest encoding for `index`.
+    pub fn ldarg(index: u16) -> Self {
+        match index {
+            0 => Self::simple(OpCode::Ldarg_0),
+            1 => Self::simple(OpCode::Ldarg_1),
+            2 => Self::simple(OpCode::Ldarg_2),
+            3 => Self::simple(OpCode::Ldarg_3),
+            4..=255 => Self::new(OpCode::Ldarg_S, Operand::Arg(index)),
+            _ => Self::new(OpCode::Ldarg, Operand::Arg(index)),
+        }
+    }
+
+    /// `ldloc` using the shortest encoding for `index`.
+    pub fn ldloc(index: u16) -> Self {
+        match index {
+            0 => Self::simple(OpCode::Ldloc_0),
+            1 => Self::simple(OpCode::Ldloc_1),
+            2 => Self::simple(OpCode::Ldloc_2),
+            3 => Self::simple(OpCode::Ldloc_3),
+            4..=255 => Self::new(OpCode::Ldloc_S, Operand::Local(index)),
+            _ => Self::new(OpCode::Ldloc, Operand::Local(index)),
+        }
+    }
+
+    /// `stloc` using the shortest encoding for `index`.
+    pub fn stloc(index: u16) -> Self {
+        match index {
+            0 => Self::simple(OpCode::Stloc_0),
+            1 => Self::simple(OpCode::Stloc_1),
+            2 => Self::simple(OpCode::Stloc_2),
+            3 => Self::simple(OpCode::Stloc_3),
+            4..=255 => Self::new(OpCode::Stloc_S, Operand::Local(index)),
+            _ => Self::new(OpCode::Stloc, Operand::Local(index)),
+        }
     }
 
     /// Encoded size in bytes.
@@ -199,6 +319,18 @@ impl MethodBody {
     pub fn remove(&mut self, index: usize) -> Instruction {
         self.remap_labels(|l| if l > index { l - 1 } else { l });
         self.instructions.remove(index)
+    }
+
+    /// Replaces every operand equal to `from`, returning how many were replaced.
+    pub fn replace_operand(&mut self, from: &Operand, to: Operand) -> usize {
+        let mut count = 0;
+        for instruction in &mut self.instructions {
+            if instruction.operand == *from {
+                instruction.operand = to.clone();
+                count += 1;
+            }
+        }
+        count
     }
 
     /// Index of the first instruction matching `f`.

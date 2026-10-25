@@ -153,6 +153,13 @@ impl Default for TypeSig {
 
 impl TypeSig {
     pub const VOID: Self = Self::Primitive(PrimitiveType::Void);
+    pub const BOOL: Self = Self::Primitive(PrimitiveType::Boolean);
+    pub const CHAR: Self = Self::Primitive(PrimitiveType::Char);
+    pub const INT32: Self = Self::Primitive(PrimitiveType::I4);
+    pub const INT64: Self = Self::Primitive(PrimitiveType::I8);
+    pub const FLOAT64: Self = Self::Primitive(PrimitiveType::R8);
+    pub const STRING: Self = Self::Primitive(PrimitiveType::String);
+    pub const OBJECT: Self = Self::Primitive(PrimitiveType::Object);
 
     pub fn is_void(&self) -> bool {
         matches!(self, Self::Primitive(PrimitiveType::Void))

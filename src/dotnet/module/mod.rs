@@ -1,3 +1,4 @@
+mod import;
 mod loaded;
 mod loader;
 pub mod resolver;
