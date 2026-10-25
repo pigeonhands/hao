@@ -1,5 +1,6 @@
 use super::Module;
 use crate::{
+    dotnet::md::streams::tables_stream::AssemblyFlags,
     dotnet::{
         entries::*,
         il::MemberToken,
@@ -32,6 +33,52 @@ impl Module {
             .iter()
             .find(|a| a.get().name.eq_ignore_ascii_case(name))
             .cloned()
+    }
+
+    /// Adds a reference to the assembly `name`, or returns the existing one.
+    ///
+    /// `public_key_token` is the 8 byte token, e.g. `b03f5f7f11d50a3a` for
+    /// most framework assemblies. Pass an empty slice for unsigned assemblies.
+    pub fn add_assembly_ref(&mut self, name: &str, version: Version, public_key_token: &[u8]) -> Entry<AssemblyRef> {
+        if let Some(existing) = self.find_assembly_ref(name) {
+            return existing;
+        }
+        let assembly_ref = Entry::new(AssemblyRef {
+            version,
+            name: name.into(),
+            public_key_or_token: public_key_token.to_vec(),
+            ..Default::default()
+        });
+        self.assembly_refs.push(assembly_ref.clone());
+        assembly_ref
+    }
+
+    /// Adds a reference to the assembly `other` was loaded from, e.g. a mod
+    /// referencing its loader. Returns the existing reference if there is one.
+    pub fn add_reference_to(&mut self, other: &Module) -> Result<Entry<AssemblyRef>> {
+        let assembly = other
+            .assembly
+            .as_ref()
+            .ok_or_else(|| not_found(format!("{} has no assembly manifest", other.name())))?
+            .get();
+        if let Some(existing) = self.find_assembly_ref(&assembly.name) {
+            return Ok(existing);
+        }
+        let flags = if assembly.public_key.is_empty() {
+            AssemblyFlags::empty()
+        } else {
+            AssemblyFlags::PublicKey
+        };
+        let assembly_ref = Entry::new(AssemblyRef {
+            version: assembly.version,
+            flags,
+            public_key_or_token: assembly.public_key.clone(),
+            name: assembly.name.clone(),
+            culture: assembly.culture.clone(),
+            ..Default::default()
+        });
+        self.assembly_refs.push(assembly_ref.clone());
+        Ok(assembly_ref)
     }
 
     /// Gets a reference to a type for use in signatures and instructions.
@@ -108,7 +155,14 @@ impl Module {
     /// let call = Instruction::call(write_line);
     /// ```
     pub fn import_method(&mut self, type_full_name: &str, name: &str, signature: MethodSig) -> Result<MemberToken> {
-        match self.import_type(type_full_name)? {
+        let ty = self.import_type(type_full_name)?;
+        self.import_method_on(&ty, name, signature)
+    }
+
+    /// Like [`Module::import_method`] for a type you already have, such as one from
+    /// [`Module::import_type_from`] or a generic instance [`TypeSpec`].
+    pub fn import_method_on(&mut self, ty: &TypeDefOrRef, name: &str, signature: MethodSig) -> Result<MemberToken> {
+        match ty {
             TypeDefOrRef::TypeDef(def) => def
                 .get()
                 .methods
@@ -116,9 +170,9 @@ impl Module {
                 .find(|m| m.get().name == name && m.get().signature == signature)
                 .cloned()
                 .map(MemberToken::Method)
-                .ok_or_else(|| not_found(format!("{}::{} with that signature", type_full_name, name))),
+                .ok_or_else(|| not_found(format!("{}::{} with that signature", ty.full_name(), name))),
             parent => Ok(MemberToken::MemberRef(self.import_member_ref(
-                parent,
+                parent.clone(),
                 name,
                 MemberRefSig::Method(signature),
             ))),

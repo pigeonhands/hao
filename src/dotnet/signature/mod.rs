@@ -161,6 +161,26 @@ impl TypeSig {
     pub const STRING: Self = Self::Primitive(PrimitiveType::String);
     pub const OBJECT: Self = Self::Primitive(PrimitiveType::Object);
 
+    pub fn class(ty: TypeDefOrRef) -> Self {
+        Self::Class(ty)
+    }
+
+    pub fn value_type(ty: TypeDefOrRef) -> Self {
+        Self::ValueType(ty)
+    }
+
+    /// `ty<args...>` for a generic class, e.g. `IEnumerable<int>`.
+    pub fn generic_class(ty: TypeDefOrRef, args: Vec<TypeSig>) -> Self {
+        Self::GenericInst {
+            generic: Box::new(Self::Class(ty)),
+            args,
+        }
+    }
+
+    pub fn sz_array(element: TypeSig) -> Self {
+        Self::SzArray(Box::new(element))
+    }
+
     pub fn is_void(&self) -> bool {
         matches!(self, Self::Primitive(PrimitiveType::Void))
     }

@@ -210,3 +210,79 @@ fn shortest_instruction_forms() {
     assert_eq!(Instruction::ldarg(2).opcode, OpCode::Ldarg_2);
     assert_eq!(Instruction::ldloc(300).opcode, OpCode::Ldloc);
 }
+
+/// Adds a reference to an assembly Sample doesn't use and calls generic code in it.
+#[test]
+fn reference_new_assembly() {
+    use hao::dotnet::{entries::Version, signature::{MethodSig, TypeSig}};
+
+    let sample = sample!();
+    let mut module = Module::from_bytes(&sample.bytes).unwrap();
+    assert!(module.find_assembly_ref("System.Linq").is_none());
+
+    let version = Version { major: 9, minor: 0, build: 0, revision: 0 };
+    let token = [0xb0, 0x3f, 0x5f, 0x7f, 0x11, 0xd5, 0x0a, 0x3a];
+    module.add_assembly_ref("System.Linq", version, &token);
+    let again = module.add_assembly_ref("System.Linq", version, &token);
+    assert_eq!(module.assembly_refs.iter().filter(|a| a.ptr_eq(&again)).count(), 1);
+
+    let enumerable = module.import_type_from("System.Linq", "System.Linq.Enumerable").unwrap();
+    let ienumerable = module
+        .import_type_from("System.Runtime", "System.Collections.Generic.IEnumerable`1")
+        .unwrap();
+    let ints = TypeSig::generic_class(ienumerable, vec![TypeSig::INT32]);
+
+    let range = module
+        .import_method_on(&enumerable, "Range", MethodSig::new_static(ints.clone(), vec![TypeSig::INT32, TypeSig::INT32]))
+        .unwrap();
+    let sum = module
+        .import_method_on(&enumerable, "Sum", MethodSig::new_static(TypeSig::INT32, vec![ints]))
+        .unwrap();
+    let write_line = module
+        .import_method("System.Console", "WriteLine", MethodSig::new_static(TypeSig::VOID, vec![TypeSig::INT32]))
+        .unwrap();
+
+    module.entry_point.clone().unwrap().edit_body(|body| {
+        body.insert(
+            0,
+            [
+                Instruction::ldc_i4(1),
+                Instruction::ldc_i4(3),
+                Instruction::call(range),
+                Instruction::call(sum),
+                Instruction::call(write_line),
+            ],
+        );
+    });
+
+    let dir = out_dir(sample, "new_assembly_ref");
+    module.write_to_path(dir.join("Sample.dll")).unwrap();
+    assert_eq!(run(&dir), format!("6\n{}", sample.expected_output));
+}
+
+#[test]
+fn reference_from_manifest() {
+    use hao::dotnet::md::streams::tables_stream::AssemblyFlags;
+
+    let Some(dir) = hao::resolver::PathAssemblyResolver::find_framework_dir() else {
+        return;
+    };
+    let loader = Module::from_path_no_resolve(dir.join("System.Linq.dll")).unwrap();
+    let sample = sample!();
+    let mut module = Module::from_bytes(&sample.bytes).unwrap();
+
+    let reference = module.add_reference_to(&loader).unwrap();
+    {
+        let r = reference.get();
+        let manifest = loader.assembly.as_ref().unwrap().get();
+        assert_eq!(r.name, "System.Linq");
+        assert_eq!(r.version, manifest.version);
+        assert!(r.flags.contains(AssemblyFlags::PublicKey));
+        assert_eq!(r.public_key_or_token, manifest.public_key);
+    }
+    assert!(module.add_reference_to(&loader).unwrap().ptr_eq(&reference));
+
+    let written = Module::from_bytes(&module.write().unwrap()).unwrap();
+    let r = written.find_assembly_ref("System.Linq").unwrap();
+    assert!(r.get().flags.contains(AssemblyFlags::PublicKey));
+}

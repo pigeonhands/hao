@@ -39,13 +39,22 @@ fn main() -> hao::error::Result<()> {
         body.instructions[index] = Instruction::simple(OpCode::Mul);
 
         // Console.WriteLine("Add called") at the start of the method.
-        body.insert(0, [Instruction::ldstr("Add called"), Instruction::call(write_line)]);
+        body.insert(
+            0,
+            [
+                Instruction::ldstr("Add called"),
+                Instruction::call(write_line),
+            ],
+        );
     });
     println!("after:\n{}", add.get().body.as_ref().unwrap().csharp());
 
     let main = module.entry_point.clone().expect("entry point");
     main.edit_body(|body| {
-        body.replace_operand(&"Hello from hao".into(), "Hello from a patched assembly".into())
+        body.replace_operand(
+            &"Hello from hao".into(),
+            "Hello from a patched assembly".into(),
+        )
     });
 
     if let Some(dir) = std::path::Path::new(&output).parent() {
