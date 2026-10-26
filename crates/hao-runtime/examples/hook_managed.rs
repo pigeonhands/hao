@@ -1,6 +1,6 @@
 //! Hooks managed methods with Rust functions, like Harmony prefixes and
 //! postfixes: hao rewrites the methods' IL to call into Rust through a native
-//! function pointer (`calli`), then the hooked assembly is loaded into CoreCLR.
+//! function pointer, then the hooked assembly is loaded into CoreCLR.
 //!
 //! ```sh
 //! cargo run -p hao-runtime --example hook_managed
@@ -10,14 +10,14 @@
 //! each method once. To hook an assembly an app loads itself, edit its bytes
 //! before they're loaded.
 
-mod common;
-
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use hao::{
     dotnet::{
-        il::{Instruction, OpCode, Operand},
-        signature::{CallingConvention, MethodSig, TypeSig},
+        entries::{Method, TypeDef},
+        il::{Emitter, Instruction, OpCode},
+        module::{ModuleKind, TargetRuntime},
+        signature::{MethodSig, TypeSig},
     },
     Module,
 };
@@ -42,37 +42,83 @@ extern "C" fn after_score(score: i32) -> i32 {
     score + 50
 }
 
-/// Instructions that call `function`, a native function with signature `ret(params)`.
-fn call_native(function: usize, ret: TypeSig, params: Vec<TypeSig>) -> [Instruction; 3] {
-    let signature = MethodSig {
-        calling_convention: CallingConvention::C,
-        ret,
-        params,
-        ..Default::default()
+/// The assembly being patched, standing in for one read from a file:
+///
+/// ```csharp
+/// public static class Game.Player {
+///     public static int TakeDamage(int health, int amount) => health - amount;
+///     public static int Score(int kills) => kills * 100;
+///     // Entry points for native code.
+///     [UnmanagedCallersOnly] public static int Hit(int health, int amount) => TakeDamage(health, amount);
+///     [UnmanagedCallersOnly] public static int GetScore(int kills) => Score(kills);
+/// }
+/// ```
+fn game_assembly() -> hao::error::Result<Vec<u8>> {
+    let mut module = Module::new(
+        "Game",
+        ModuleKind::Dll,
+        TargetRuntime::NetCoreImplementation(8),
+    );
+    let player = module.add_static_class("Game", "Player")?;
+    let uco =
+        module.corlib_attribute("System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute")?;
+    let signature =
+        |params: u16| MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32; params as usize]);
+
+    let add = |name, params, body| {
+        TypeDef::add_method(
+            &player,
+            Method::public_static(name, signature(params)).with_body(body),
+        )
     };
-    [
-        Instruction::new(OpCode::Ldc_I8, Operand::Int64(function as i64)),
-        Instruction::simple(OpCode::Conv_I),
-        Instruction::new(OpCode::Calli, Operand::Sig(signature)),
-    ]
+    let take_damage = add(
+        "TakeDamage",
+        2,
+        Emitter::build(|e| {
+            e.ldarg(0).ldarg(1).op(OpCode::Sub).ret();
+        }),
+    );
+    let score = add(
+        "Score",
+        1,
+        Emitter::build(|e| {
+            e.ldarg(0).ldc_i4(100).op(OpCode::Mul).ret();
+        }),
+    );
+    for (name, params, target) in [("Hit", 2, take_damage), ("GetScore", 1, score)] {
+        let body = Emitter::build(|e| {
+            (0..params).for_each(|i| {
+                e.ldarg(i);
+            });
+            e.call(target).ret();
+        });
+        let entry = Method::public_static(name, signature(params))
+            .with_attribute(uco.clone())
+            .with_body(body);
+        TypeDef::add_method(&player, entry);
+    }
+    module.write()
 }
 
 fn main() -> hao_runtime::Result<()> {
-    let module = Module::from_bytes(&common::game_assembly()).expect("a valid assembly");
+    let module =
+        Module::from_bytes(&game_assembly().expect("a valid assembly")).expect("a valid assembly");
 
     // amount = before_take_damage(health, amount);
     module
         .find_method("Game.Player", "TakeDamage")
         .unwrap()
         .edit_body(|body| {
-            let mut prefix = vec![Instruction::ldarg(0), Instruction::ldarg(1)];
-            prefix.extend(call_native(
-                before_take_damage as *const () as usize,
-                TypeSig::INT32,
-                vec![TypeSig::INT32, TypeSig::INT32],
-            ));
-            prefix.push(Instruction::new(OpCode::Starg_S, Operand::Arg(1)));
-            body.insert(0, prefix);
+            let signature = MethodSig::native(TypeSig::INT32, vec![TypeSig::INT32, TypeSig::INT32]);
+            body.prefix(
+                Emitter::build(|e| {
+                    e.ldarg(0)
+                        .ldarg(1)
+                        .call_native(before_take_damage as *const () as usize, signature)
+                        .starg(1);
+                })
+                .instructions,
+            );
         });
 
     // return after_score(<original result>);
@@ -80,19 +126,10 @@ fn main() -> hao_runtime::Result<()> {
         .find_method("Game.Player", "Score")
         .unwrap()
         .edit_body(|body| {
-            let rets: Vec<usize> = (0..body.instructions.len())
-                .filter(|&i| body.instructions[i].opcode == OpCode::Ret)
-                .collect();
-            for ret in rets.into_iter().rev() {
-                // The `ret` becomes the postfix's first instruction, so branches to it run the postfix.
-                let [load, convert, call] = call_native(
-                    after_score as *const () as usize,
-                    TypeSig::INT32,
-                    vec![TypeSig::INT32],
-                );
-                body.instructions[ret] = load;
-                body.insert(ret + 1, [convert, call, Instruction::ret()]);
-            }
+            body.postfix(|| {
+                let signature = MethodSig::native(TypeSig::INT32, vec![TypeSig::INT32]);
+                Instruction::call_native(after_score as *const () as usize, signature).to_vec()
+            });
         });
 
     let runtime = Runtime::coreclr()?;

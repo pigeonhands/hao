@@ -4,16 +4,14 @@
 //! cargo run -p hao-runtime --example generate_and_call
 //! ```
 
-mod common;
-
 use hao::{
     dotnet::{
-        entries::TypeDef,
-        il::{Emitter, Instruction, OpCode, Operand},
-        md::streams::tables_stream::TypeAttributes,
+        entries::{Method, TypeDef},
+        il::{Emitter, OpCode},
         module::{ModuleKind, TargetRuntime},
         signature::{MethodSig, TypeSig},
     },
+    error::Result,
     Module,
 };
 use hao_runtime::Runtime;
@@ -29,85 +27,62 @@ use hao_runtime::Runtime;
 ///     }
 /// }
 /// ```
-fn calc_module() -> Module {
+fn calc_module() -> Result<Module> {
     let mut module = Module::new(
         "Generated",
         ModuleKind::Dll,
         TargetRuntime::NetCoreImplementation(8),
     );
-    let object = module.corlib_type("System.Object").unwrap();
-    let calc = module.add_type(TypeDef::new(
-        TypeAttributes::Public | TypeAttributes::Abstract | TypeAttributes::Sealed,
-        "Generated",
-        "Calc",
-        Some(object),
-    ));
+    let calc = module.add_static_class("Generated", "Calc")?;
+    // CoreCLR can only call methods marked [UnmanagedCallersOnly] from native code.
+    let uco =
+        module.corlib_attribute("System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute")?;
+    let int_method = |name: &str, params: usize| {
+        Method::public_static(
+            name,
+            MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32; params]),
+        )
+        .with_attribute(uco.clone())
+    };
 
-    let add = common::static_method(
-        &calc,
-        "Add",
-        2,
-        vec![
-            Instruction::ldarg(0),
-            Instruction::ldarg(1),
-            Instruction::simple(OpCode::Add),
-            Instruction::ret(),
-        ],
-    );
+    let mut add = Emitter::new();
+    add.ldarg(0).ldarg(1).op(OpCode::Add).ret();
+    TypeDef::add_method(&calc, int_method("Add", 2).with_body(add.finish()));
 
     // Calls into the .NET class library.
-    let math = module.corlib_type("System.Math").unwrap();
-    let math_max = module
-        .import_method_on(
-            &math,
-            "Max",
-            MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32, TypeSig::INT32]),
-        )
-        .unwrap();
-    let max = common::static_method(
-        &calc,
+    let math_max = module.import_corlib_method(
+        "System.Math",
         "Max",
-        2,
-        vec![
-            Instruction::ldarg(0),
-            Instruction::ldarg(1),
-            Instruction::call(math_max),
-            Instruction::ret(),
-        ],
+        MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32; 2]),
+    )?;
+    let mut max = Emitter::new();
+    max.ldarg(0).ldarg(1).call(math_max).ret();
+    TypeDef::add_method(&calc, int_method("Max", 2).with_body(max.finish()));
+
+    // Locals and a loop.
+    let mut factorial = Emitter::new();
+    let result = factorial.declare_local(TypeSig::INT32);
+    factorial.ldc_i4(1).stloc(result);
+    factorial.while_loop(
+        |e| {
+            e.ldarg(0).ldc_i4(1).op(OpCode::Cgt);
+        },
+        |e| {
+            e.ldloc(result).ldarg(0).op(OpCode::Mul).stloc(result);
+            e.ldarg(0).ldc_i4(1).op(OpCode::Sub).starg(0);
+        },
     );
-
-    // Branches and locals with the emitter.
-    let mut e = Emitter::new();
-    let result = e.declare_local(TypeSig::INT32);
-    let (top, done) = (e.label(), e.label());
-    e.emit(Instruction::ldc_i4(1))
-        .emit(Instruction::stloc(result));
-    e.mark(top);
-    e.emit(Instruction::ldarg(0)).emit(Instruction::ldc_i4(1));
-    e.branch(OpCode::Ble, done);
-    e.emit(Instruction::ldloc(result))
-        .emit(Instruction::ldarg(0))
-        .op(OpCode::Mul)
-        .emit(Instruction::stloc(result));
-    e.emit(Instruction::ldarg(0))
-        .emit(Instruction::ldc_i4(1))
-        .op(OpCode::Sub)
-        .emit(Instruction::new(OpCode::Starg_S, Operand::Arg(0)));
-    e.branch(OpCode::Br, top);
-    e.mark(done);
-    e.emit(Instruction::ldloc(result)).emit(Instruction::ret());
-    let factorial = common::static_method(&calc, "Factorial", 1, vec![]);
-    factorial.get_mut().body = Some(e.finish());
-
-    for method in [&add, &max, &factorial] {
-        common::unmanaged_callers_only(&mut module, method);
-    }
-    module
+    factorial.ldloc(result).ret();
+    TypeDef::add_method(
+        &calc,
+        int_method("Factorial", 1).with_body(factorial.finish()),
+    );
+    Ok(module)
 }
 
 fn main() -> hao_runtime::Result<()> {
     let runtime = Runtime::coreclr()?;
-    runtime.load_module(&calc_module())?;
+    runtime.load_module(&calc_module().expect("a valid module"))?;
 
     let function = |name| runtime.function_pointer("Generated", "Generated.Calc", name);
     let add: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(function("Add")?) };

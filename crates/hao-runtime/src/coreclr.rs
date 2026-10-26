@@ -322,114 +322,62 @@ const LOADER: &str = "Hao.Loader";
 fn loader_assembly(major: u16) -> Result<Vec<u8>> {
     use hao::{
         dotnet::{
-            entries::{
-                CustomAttribute, CustomAttributeCtor, CustomAttributeValue, Method, TypeDef,
-            },
-            il::{Emitter, Instruction, MemberToken, OpCode},
-            md::streams::tables_stream::{MethodFlags, TypeAttributes},
+            entries::{Method, TypeDef},
+            il::Emitter,
             module::{ModuleKind, TargetRuntime},
-            signature::{MethodSig, PrimitiveType, TypeSig},
+            signature::{MethodSig, TypeSig},
         },
         Module,
     };
-    let hao = |e: hao::error::HaoError| {
-        Error::Other(format!("could not build the loader assembly: {}", e))
-    };
-
-    let mut module = Module::new(
-        LOADER,
-        ModuleKind::Dll,
-        TargetRuntime::NetCoreImplementation(major),
-    );
-    let object = module.corlib_type("System.Object").map_err(hao)?;
-    let attribute = module
-        .corlib_type("System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute")
-        .map_err(hao)?;
-    let MemberToken::MemberRef(attribute_ctor) = module
-        .import_method_on(
-            &attribute,
-            ".ctor",
-            MethodSig::new_instance(TypeSig::VOID, vec![]),
-        )
-        .map_err(hao)?
-    else {
-        unreachable!()
-    };
-    let marshal = module
-        .corlib_type("System.Runtime.InteropServices.Marshal")
-        .map_err(hao)?;
-    let to_string = module
-        .import_method_on(
-            &marshal,
+    let build = || -> hao::error::Result<Vec<u8>> {
+        let mut module = Module::new(
+            LOADER,
+            ModuleKind::Dll,
+            TargetRuntime::NetCoreImplementation(major),
+        );
+        let uco = module
+            .corlib_attribute("System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute")?;
+        let to_string = module.import_corlib_method(
+            "System.Runtime.InteropServices.Marshal",
             "PtrToStringAuto",
-            MethodSig::new_static(TypeSig::STRING, vec![TypeSig::Primitive(PrimitiveType::I)]),
-        )
-        .map_err(hao)?;
-    let assembly = module
-        .corlib_type("System.Reflection.Assembly")
-        .map_err(hao)?;
-    let load_from = module
-        .import_method_on(
+            MethodSig::new_static(TypeSig::STRING, vec![TypeSig::NATIVE_INT]),
+        )?;
+        let assembly = module.corlib_type("System.Reflection.Assembly")?;
+        let load_from = module.import_method_on(
             &assembly,
             "LoadFrom",
             MethodSig::new_static(TypeSig::class(assembly.clone()), vec![TypeSig::STRING]),
-        )
-        .map_err(hao)?;
-    let exception = module.corlib_type("System.Exception").map_err(hao)?;
-    let hresult = module
-        .import_method_on(
+        )?;
+        let exception = module.corlib_type("System.Exception")?;
+        let hresult = module.import_method_on(
             &exception,
             "get_HResult",
             MethodSig::new_instance(TypeSig::INT32, vec![]),
-        )
-        .map_err(hao)?;
+        )?;
 
-    let mut e = Emitter::new();
-    let result = e.declare_local(TypeSig::INT32);
-    let (try_start, handler_start, end) = (e.label(), e.label(), e.label());
-    e.mark(try_start);
-    e.emit(Instruction::ldarg(0))
-        .emit(Instruction::call(to_string))
-        .emit(Instruction::call(load_from))
-        .emit(Instruction::pop());
-    e.branch(OpCode::Leave, end);
-    e.mark(handler_start);
-    e.emit(Instruction::callvirt(hresult))
-        .emit(Instruction::stloc(result));
-    e.branch(OpCode::Leave, end);
-    e.mark(end);
-    e.emit(Instruction::ldloc(result)).emit(Instruction::ret());
-    e.exception_handler(
-        Some(exception),
-        try_start,
-        handler_start,
-        handler_start,
-        end,
-    );
+        // try { Assembly.LoadFrom(Marshal.PtrToStringAuto(path)); } catch (Exception e) { result = e.HResult; }
+        let mut e = Emitter::new();
+        let result = e.declare_local(TypeSig::INT32);
+        e.try_catch(
+            exception,
+            |e| {
+                e.ldarg(0).call(to_string).call(load_from).pop();
+            },
+            |e| {
+                e.callvirt(hresult).stloc(result);
+            },
+        );
+        e.ldloc(result).ret();
 
-    let loader = module.add_type(TypeDef::new(
-        TypeAttributes::Public | TypeAttributes::Abstract | TypeAttributes::Sealed,
-        "Hao",
-        "Loader",
-        Some(object),
-    ));
-    let method = TypeDef::add_method(
-        &loader,
-        Method::new(
-            MethodFlags::Public | MethodFlags::Static | MethodFlags::HideBySig,
-            "LoadFrom",
-            MethodSig::new_static(TypeSig::INT32, vec![TypeSig::Primitive(PrimitiveType::I)]),
-        ),
-    );
-    let mut method = method.get_mut();
-    method.custom_attributes.push(
-        CustomAttribute::new(
-            CustomAttributeCtor::MemberRef(attribute_ctor),
-            &CustomAttributeValue::default(),
-        )
-        .map_err(hao)?,
-    );
-    method.body = Some(e.finish());
-    drop(method);
-    module.write().map_err(hao)
+        let loader = module.add_static_class("Hao", "Loader")?;
+        let signature = MethodSig::new_static(TypeSig::INT32, vec![TypeSig::NATIVE_INT]);
+        TypeDef::add_method(
+            &loader,
+            Method::public_static("LoadFrom", signature)
+                .with_attribute(uco)
+                .with_body(e.finish()),
+        );
+        module.write()
+    };
+    build().map_err(|e| Error::Other(format!("could not build the loader assembly: {}", e)))
 }
