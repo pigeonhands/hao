@@ -75,17 +75,25 @@ impl EguiState {
     }
 
     fn frame(&mut self, ui: &(impl Fn(&egui::Context) + ?Sized)) -> Result<()> {
+        // Step logs: whichever appears last in Player.log before a managed
+        // exception is the call that threw. Enable with RUST_LOG=debug.
+        tracing::debug!("egui frame: screen size");
         let (w, h) = screen::size()?;
         let (w, h) = (w.max(1) as f32, h.max(1) as f32);
 
-        let output = self.ctx.run(self.raw_input(w, h)?, |ctx| ui(ctx));
+        tracing::debug!("egui frame: input");
+        let input = self.raw_input(w, h)?;
+        tracing::debug!("egui frame: run ui");
+        let output = self.ctx.run(input, |ctx| ui(ctx));
         for (id, delta) in output.textures_delta.set {
             // Only the egui font atlas (managed texture 0) is handled here.
             if matches!(id, egui::TextureId::Managed(_)) {
+                tracing::debug!(size = ?delta.image.size(), "egui frame: upload texture");
                 self.update_texture(&delta)?;
             }
         }
         let primitives = self.ctx.tessellate(output.shapes, 1.0);
+        tracing::debug!(primitives = primitives.len(), "egui frame: render");
         self.render(w, h, &primitives)
     }
 
