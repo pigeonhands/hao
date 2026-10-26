@@ -19,27 +19,28 @@ Read Unity Il2Cpp games, with the goal of generating .NET proxy assemblies for t
 - [ ] runtime proxy assemblies that call into the game, like Il2CppInterop
 
 ```rust
-use hao_il2cpp::Metadata;
+use hao_il2cpp::Game;
 
-let metadata = Metadata::from_path("Game_Data/il2cpp_data/Metadata/global-metadata.dat")?;
-for image in &metadata.images {
-    println!("{} ({} types)", metadata.image_name(image), image.type_count);
+let game = Game::open("path/to/game")?; // the folder with GameAssembly.so and <Game>_Data
+
+let health = game.find_type("Assets.Scripts.Inventory__Items__Pickups.PlayerHealth").unwrap();
+println!("{} in {}", health.full_name(), health.image_name());
+for field in health.fields() {
+    println!("    {}", field); // `static int maxMaxHp`, `float shield`, ...
 }
+for method in health.methods() {
+    println!("    {}", method); // `int Heal(float amount, bool allowOverheal)`, ...
+}
+
+// One declaration assembly per image, for ILSpy or to compile against.
+game.write_assemblies("out")?;
 ```
 
-```rust
-use hao_il2cpp::{generate, Binary, ElfImage, Metadata};
-
-let metadata = Metadata::from_path("Game_Data/il2cpp_data/Metadata/global-metadata.dat")?;
-let data = std::fs::read("GameAssembly.so")?;
-let binary = Binary::read(&ElfImage::parse(&data)?, &metadata)?;
-for assembly in generate(&metadata, &binary)? {
-    assembly.module.write_to_path(format!("out/{}", assembly.file_name))?;
-}
-```
+`Game` is built on the lower level `Metadata` (`global-metadata.dat`) and `Binary` (the
+`Il2CppType` table from `GameAssembly`), which are public for anything the views don't cover.
 
 ```sh
-cargo run -p hao-il2cpp --example il2cpp_info -- path/to/global-metadata.dat System.String path/to/GameAssembly.so
+cargo run --release -p hao-il2cpp --example game_info -- path/to/game System.String
 cargo run --release -p hao-il2cpp --example generate_dlls -- path/to/game out
 ```
 

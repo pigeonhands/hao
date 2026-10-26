@@ -14,6 +14,10 @@ pub enum Error {
     BadIndex(&'static str, i64),
     #[error("binary: {0}")]
     Binary(String),
+    #[error("could not find {0}")]
+    NotFound(String),
+    #[error(transparent)]
+    Hao(#[from] hao::error::HaoError),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
