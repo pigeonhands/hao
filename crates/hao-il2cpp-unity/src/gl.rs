@@ -23,7 +23,10 @@
 use hao_il2cpp_runtime::Result;
 
 use crate::{
-    bindings::{GL_BEGIN, GL_COLOR, GL_END, GL_LOAD_ORTHO, GL_LOAD_PIXEL_MATRIX, GL_VERTEX3},
+    bindings::{
+        GL_BEGIN, GL_COLOR, GL_END, GL_LOAD_ORTHO, GL_LOAD_PIXEL_MATRIX, GL_POP_MATRIX,
+        GL_PUSH_MATRIX, GL_VERTEX3,
+    },
     Color,
 };
 
@@ -77,4 +80,13 @@ pub fn load_pixel_matrix(left: f32, right: f32, bottom: f32, top: f32) -> Result
 /// Sets up an orthographic projection with coordinates from (0, 0) to (1, 1).
 pub fn load_ortho() -> Result<()> {
     GL_LOAD_ORTHO.call(())
+}
+
+/// Saves the projection/model-view matrix; restore with [`pop_matrix`].
+pub fn push_matrix() -> Result<()> {
+    GL_PUSH_MATRIX.call(())
+}
+
+pub fn pop_matrix() -> Result<()> {
+    GL_POP_MATRIX.call(())
 }

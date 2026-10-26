@@ -69,6 +69,9 @@ options.
 - [`scene_overlay`](examples/scene_overlay.rs): draws a live overlay over the game with the
   current scene, scenes loaded and a smoothed FPS, refreshed every frame via `on_update`. Works
   in most Unity games with TextMeshPro.
+- [`render_overlay`](examples/render_overlay.rs): draws a crosshair and a panel over the game with
+  `GL` immediate mode from the `on_render` hook (using a `Hidden/Internal-Colored` material),
+  toggled with F1.
 - [`heal_mod`](examples/heal_mod.rs): doubles healing by hooking the game's own
   `PlayerHealth.Heal`, reads the player's `hp` field and logs to `Player.log`.
 

@@ -188,6 +188,45 @@ component_type!(
     /// `UnityEngine.Camera`, passed to [`on_render`](crate::on_render) callbacks.
     Camera = "UnityEngine.CoreModule" "UnityEngine" "Camera"
 );
+object_type!(
+    /// `UnityEngine.Shader`.
+    Shader = "UnityEngine.CoreModule" "UnityEngine" "Shader"
+);
+object_type!(
+    /// `UnityEngine.Material`, e.g. for a [`gl`](crate::gl) drawing pass.
+    Material = "UnityEngine.CoreModule" "UnityEngine" "Material"
+);
+
+impl Shader {
+    /// `Shader.Find(name)`, or `None` if the shader isn't present.
+    pub fn find(name: &str) -> Result<Option<Shader>> {
+        let shader = SHADER_FIND.call((il2cpp()?.string(name)?,))?;
+        Ok((!shader.is_null()).then_some(shader))
+    }
+}
+
+impl Material {
+    /// `new Material(shader)`.
+    pub fn new(shader: Shader) -> Result<Material> {
+        let object = Material(
+            il2cpp()?
+                .class(Self::ASSEMBLY, Self::NAMESPACE, Self::NAME)?
+                .new_object(),
+        );
+        MATERIAL_CTOR.call((object, shader))?;
+        Ok(object)
+    }
+
+    /// Activates pass `pass` for drawing (returns whether it can be rendered).
+    /// Call this before a [`gl`](crate::gl) primitive so it has a material.
+    pub fn set_pass(&self, pass: i32) -> Result<bool> {
+        MATERIAL_SET_PASS.call((*self, pass))
+    }
+
+    pub fn set_color(&self, color: Color) -> Result<()> {
+        MATERIAL_SET_COLOR.call((*self, color))
+    }
+}
 
 impl GameObject {
     /// `new GameObject(name)`.

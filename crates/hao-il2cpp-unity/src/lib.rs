@@ -41,7 +41,7 @@ use hao_il2cpp_runtime::{Error, Il2Cpp, Result};
 pub use lifecycle::{on_render, on_update};
 pub use objects::{
     find_object_of_type, find_objects_of_type, Camera, Canvas, Component, ComponentType,
-    GameObject, RectTransform, TextMeshPro, Transform, UnityObject,
+    GameObject, Material, RectTransform, Shader, TextMeshPro, Transform, UnityObject,
 };
 pub use overlay::TextOverlay;
 pub use scene::{on_scene_loaded, Scene};

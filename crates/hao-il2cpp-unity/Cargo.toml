@@ -24,3 +24,7 @@ crate-type = ["cdylib"]
 [[example]]
 name = "scene_overlay"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "render_overlay"
+crate-type = ["cdylib"]
