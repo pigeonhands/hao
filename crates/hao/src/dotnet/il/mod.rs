@@ -173,6 +173,16 @@ impl Instruction {
         Self::new(OpCode::Callvirt, Operand::Token(method.into()))
     }
 
+    /// Calls the native function at `address` with the arguments on the stack.
+    /// `signature` is usually [`MethodSig::native`].
+    pub fn call_native(address: usize, signature: MethodSig) -> [Self; 3] {
+        [
+            Self::new(OpCode::Ldc_I8, Operand::Int64(address as i64)),
+            Self::simple(OpCode::Conv_I),
+            Self::new(OpCode::Calli, Operand::Sig(signature)),
+        ]
+    }
+
     pub fn newobj(constructor: impl Into<MemberToken>) -> Self {
         Self::new(OpCode::Newobj, Operand::Token(constructor.into()))
     }
@@ -323,6 +333,27 @@ impl MethodBody {
         self.instructions.splice(index..index, new);
     }
 
+    /// Runs `instructions` when the method starts, before its original code.
+    pub fn prefix(&mut self, instructions: impl IntoIterator<Item = Instruction>) {
+        self.insert(0, instructions);
+    }
+
+    /// Runs the instructions from `postfix` before every `ret`, with the return
+    /// value (if any) on the stack; they must leave the value to return. Branches
+    /// to a `ret` run the postfix too.
+    pub fn postfix(&mut self, postfix: impl Fn() -> Vec<Instruction>) {
+        let rets: Vec<usize> = (0..self.instructions.len())
+            .filter(|&i| self.instructions[i].opcode == OpCode::Ret)
+            .collect();
+        for ret in rets.into_iter().rev() {
+            let mut code = postfix().into_iter();
+            let Some(first) = code.next() else { return };
+            // The `ret` becomes the postfix's first instruction, so branches to it run the postfix.
+            self.instructions[ret] = first;
+            self.insert(ret + 1, code.chain([Instruction::ret()]));
+        }
+    }
+
     /// Removes the instruction at `index`. Branches to it now target the next instruction.
     pub fn remove(&mut self, index: usize) -> Instruction {
         self.remap_labels(|l| if l > index { l - 1 } else { l });
@@ -350,6 +381,34 @@ impl MethodBody {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn postfix_runs_before_every_return() {
+        let mut body = MethodBody {
+            instructions: vec![
+                Instruction::ldarg(0),
+                Instruction::new(OpCode::Brtrue_S, Operand::Target(Label(3))),
+                Instruction::ldc_i4(1),
+                Instruction::ret(),
+            ],
+            ..Default::default()
+        };
+        body.postfix(|| vec![Instruction::ldc_i4(5), Instruction::simple(OpCode::Add)]);
+        let opcodes: Vec<OpCode> = body.instructions.iter().map(|i| i.opcode).collect();
+        assert_eq!(
+            opcodes,
+            [
+                OpCode::Ldarg_0,
+                OpCode::Brtrue_S,
+                OpCode::Ldc_I4_1,
+                OpCode::Ldc_I4_5,
+                OpCode::Add,
+                OpCode::Ret
+            ]
+        );
+        // The branch to the old `ret` now runs the postfix.
+        assert_eq!(body.instructions[1].operand, Operand::Target(Label(3)));
+    }
 
     #[test]
     fn insert_and_remove_keep_branch_targets() {

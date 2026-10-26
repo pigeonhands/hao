@@ -261,6 +261,16 @@ impl MethodSig {
         }
     }
 
+    /// The signature of a native function with the C calling convention, for `calli`.
+    pub fn native(ret: TypeSig, params: Vec<TypeSig>) -> Self {
+        Self {
+            calling_convention: CallingConvention::C,
+            ret,
+            params,
+            ..Default::default()
+        }
+    }
+
     pub fn new_instance(ret: TypeSig, params: Vec<TypeSig>) -> Self {
         Self {
             flags: SignatureFlags::HAS_THIS,

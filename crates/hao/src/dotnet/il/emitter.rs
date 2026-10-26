@@ -135,8 +135,59 @@ impl Emitter {
         ))
     }
 
+    /// Calls the native function at `address` with the arguments on the stack,
+    /// e.g. a Rust `extern "C" fn` cast to `usize`.
+    pub fn call_native(&mut self, address: usize, signature: MethodSig) -> &mut Self {
+        for instruction in Instruction::call_native(address, signature) {
+            self.emit(instruction);
+        }
+        self
+    }
+
     pub fn ret(&mut self) -> &mut Self {
         self.emit(Instruction::ret())
+    }
+
+    /// Emits `if (<value on the stack>) { then } else { otherwise }`. The value
+    /// is a bool, integer or reference, and counts as true when non-zero/non-null.
+    pub fn if_else(
+        &mut self,
+        then: impl FnOnce(&mut Self),
+        otherwise: impl FnOnce(&mut Self),
+    ) -> &mut Self {
+        let (else_start, end) = (self.label(), self.label());
+        self.branch(OpCode::Brfalse, else_start);
+        then(self);
+        self.branch(OpCode::Br, end);
+        self.mark(else_start);
+        otherwise(self);
+        self.mark(end);
+        self
+    }
+
+    /// Emits `if (<value on the stack>) { then }`.
+    pub fn if_then(&mut self, then: impl FnOnce(&mut Self)) -> &mut Self {
+        let end = self.label();
+        self.branch(OpCode::Brfalse, end);
+        then(self);
+        self.mark(end);
+        self
+    }
+
+    /// Emits `while (condition) { body }`, where `condition` pushes a bool.
+    pub fn while_loop(
+        &mut self,
+        condition: impl FnOnce(&mut Self),
+        body: impl FnOnce(&mut Self),
+    ) -> &mut Self {
+        let (top, end) = (self.label(), self.label());
+        self.mark(top);
+        condition(self);
+        self.branch(OpCode::Brfalse, end);
+        body(self);
+        self.branch(OpCode::Br, top);
+        self.mark(end);
+        self
     }
 
     /// Emits `try { body } catch (catch_type) { handler }`. The exception is on
