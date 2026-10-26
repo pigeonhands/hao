@@ -1,9 +1,11 @@
 //! CIL method bodies (ECMA-335 II.25.4, III).
 
+mod emitter;
 mod opcodes;
 mod reader;
 mod writer;
 
+pub use emitter::{EmitLabel, Emitter};
 pub use opcodes::*;
 pub(crate) use reader::{BodyReader, BodyResolver};
 pub(crate) use writer::{encode_body, BodyEncoder};
