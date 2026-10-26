@@ -1,11 +1,6 @@
-//! `hao` is a library for reading and writing .net modules and assemblies in rust.
+//! `hao` reads, edits, creates and writes .NET assemblies.
 //!
-//! Currently, `hao` is quite struct with the binaries it recieved, erroring with malfomed
-//! binaries rather than attempting to ignore the issues. Though the plan is to impliment
-//! a feature flag that can optionally continue parsing the file and expose the raw, non-sanitary
-//! parts that it encounters.
-//!
-//! The entrypoint for this library is the [`Module`] struct:
+//! The entry point is [`Module`]:
 //!
 //! ```no_run
 //! use hao::Module;
@@ -21,8 +16,21 @@
 //! }
 //! ```
 //!
-//! Entries are shared handles ([`dotnet::entries::Entry`]) backed by `Rc<RefCell<_>>`,
-//! or `Arc<RwLock<_>>` with the `sync` feature.
+//! - [`dotnet::entries`]: types, methods, fields and the other metadata entries, as shared
+//!   [`Entry`](dotnet::entries::Entry) handles, plus custom attribute values.
+//! - [`dotnet::signature`]: type and method signatures.
+//! - [`dotnet::il`]: method bodies, opcodes, and the [`Emitter`](dotnet::il::Emitter) for
+//!   building new ones.
+//! - [`dotnet::module`]: creating modules ([`Module::new`]), importing references and resolving
+//!   assemblies.
+//! - [`dotnet::csharp`]: C#-like output of declarations and IL.
+//! - [`dotnet::md`]: the raw metadata tables and heaps.
+//!
+//! Modules are written with [`Module::write`], which rebuilds the metadata from the entries.
+//!
+//! Entries are backed by `Rc<RefCell<_>>`, or `Arc<RwLock<_>>` with the `sync` feature.
+//!
+//! Loading is strict: malformed metadata is an error rather than being skipped.
 
 pub mod dotnet;
 pub mod error;

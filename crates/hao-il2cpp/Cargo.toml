@@ -6,6 +6,7 @@ edition = "2021"
 description = "Read Unity Il2Cpp metadata and generate .net proxy assemblies with hao"
 license = "MIT"
 repository = "https://github.com/pigeonhands/hao"
+readme = "README.md"
 keywords = ["unity", "il2cpp", "dotnet", "modding"]
 
 [dependencies]

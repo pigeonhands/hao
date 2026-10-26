@@ -25,123 +25,23 @@ hao
 
 -----
 
-A library for reading, editing and writing .NET assemblies in Rust.
-
-- Loads every metadata table into a graph of shared [`Entry`] handles. Types own their
-  fields, methods, properties, events, nested types and generic parameters.
-- Decodes signatures and CIL method bodies. Branch targets are instruction indices and
-  operands are resolved to their entries, so edits don't need manual offset fixups.
-- Writes modules back out by rebuilding the metadata from scratch, like dnlib's `ModuleWriter`.
-  ReadyToRun images are converted back to IL only images.
-- Writes C#-like declarations (optionally with IL listings) through `CSharpWriter`.
-- Supports compressed (`#~`) and uncompressed (`#-`) metadata.
-
-## Crates
+Tools for working with .NET assemblies and runtimes from Rust.
 
 | crate | |
 |---|---|
-| [`hao`](crates/hao) | read, edit and write .NET assemblies |
-| [`hao-runtime`](crates/hao-runtime) | host CoreCLR (`coreclr` feature, .NET 8+) or Mono (`mono` feature) in a Rust process |
-| [`hao-runtime-macros`](crates/hao-runtime-macros) | `bind!` generates Rust bindings to a .NET assembly for `hao-runtime` |
+| [`hao`](crates/hao) | read, edit, create and write .NET assemblies (like dnlib / Mono.Cecil) |
+| [`hao-runtime`](crates/hao-runtime) | host CoreCLR or Mono in a Rust process and call managed code |
+| [`hao-runtime-macros`](crates/hao-runtime-macros) | `bind!` generates Rust bindings to a .NET assembly |
+| [`hao-il2cpp`](crates/hao-il2cpp) | read Unity Il2Cpp games (work in progress) |
+| [`hao-runtime-tests`](crates/hao-runtime-tests) | binding tests (not published) |
 
-## Loading
-
-```rust
-use hao::Module;
-
-let module = Module::from_path("Example.dll")?;
-
-for ty in module.all_types() {
-    let ty = ty.get();
-    println!("{}", ty.full_name());
-    for method in &ty.methods {
-        println!("    {}", method.get().name);
-    }
-}
-```
-
-`Module::from_path` also resolves referenced assemblies from the module's directory and the
-installed .NET shared framework. Use `Module::from_path_no_resolve` to skip that.
-
-## Patching IL
-
-```rust
-use hao::{
-    dotnet::{il::{Instruction, OpCode}, signature::{MethodSig, TypeSig}},
-    Module,
-};
-
-let mut module = Module::from_path_no_resolve("Sample.dll")?;
-
-let write_line = module.import_method(
-    "System.Console",
-    "WriteLine",
-    MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]),
-)?;
-
-let add = module.find_method("Sample.Calc", "Add").unwrap();
-add.edit_body(|body| {
-    let index = body.position(|i| i.opcode == OpCode::Add).unwrap();
-    body.instructions[index] = Instruction::simple(OpCode::Mul);
-    body.insert(0, [Instruction::ldstr("Add called"), Instruction::call(write_line)]);
-});
-
-module.write_to_path("Sample.patched.dll")?;
-```
-
-`import_type`/`import_method`/`import_field` reuse existing references or definitions and add new
-ones when needed. `insert` and `remove` keep branch targets and exception ranges pointing at the
-same instructions. See [`examples/patch_method.rs`](crates/hao/examples/patch_method.rs).
-
-## C# output
-
-```rust
-use hao::dotnet::csharp::{CSharpOptions, WriteCSharp};
-
-println!("{}", module.to_csharp());
-println!("{}", method.csharp());
-println!("{}", method.get().body.as_ref().unwrap().csharp()); // IL listing
-
-let with_il = module.to_csharp_with(CSharpOptions { il_bodies: true, ..Default::default() });
-```
-
-```sh
-crates/hao/tests/fixtures/build.sh
-cargo run --example dump_csharp -- crates/hao/tests/fixtures/out/Sample.dll --il
-```
-
-## Calling .NET from Rust
-
-`bind!` reads an assembly with hao and generates a struct per public class. Calls go through
-a small thunk assembly the macro builds and embeds, so there's no reflection at runtime.
-
-```rust
-mod my_lib {
-    hao_runtime_macros::bind! { assembly = "dotnet/MyLib.dll" }
-}
-
-let runtime = hao_runtime::Runtime::coreclr()?; // or Runtime::mono(&MonoOptions::default())
-let calculator = my_lib::my_lib::Calculator::new(&runtime, 10)?;
-assert_eq!(calculator.add(5)?, 15);
-assert_eq!(calculator.describe("total=")?.as_deref(), Some("total=15"));
-```
-
-Primitives, strings and classes can be passed and returned. Exceptions come back as
-`hao_runtime::Error::Managed`. Generic types and methods, structs and arrays aren't bound yet.
-
-## Thread safety
-
-Entries use `Rc<RefCell<T>>` by default. Enable the `sync` feature to use `Arc<RwLock<T>>`
-instead, which makes `Module` `Send + Sync`.
+hao's PE handling comes from [pewter](https://github.com/pigeonhands/pewter).
 
 ## Tests
 
-The tests build `crates/hao/tests/fixtures/Sample` with the dotnet SDK and run the rewritten assemblies with
-it. Tests that need the sample are skipped when the SDK is not installed. The ignored tests
-load and rewrite every assembly in the installed shared framework:
-
 ```sh
-cargo test --release -- --include-ignored
+cargo test --workspace
+cargo test --workspace --release -- --include-ignored   # also rewrites the installed .NET framework
 ```
 
-[`Entry`]: https://docs.rs/hao/latest/hao/dotnet/entries/struct.Entry.html
+Tests that need the dotnet SDK, Mono, or game files skip themselves when those aren't available.

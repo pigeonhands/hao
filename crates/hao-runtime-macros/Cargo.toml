@@ -6,6 +6,7 @@ edition = "2021"
 description = "Generate rust bindings to .net assemblies for hao-runtime"
 license = "MIT"
 repository = "https://github.com/pigeonhands/hao"
+readme = "README.md"
 
 [lib]
 proc-macro = true

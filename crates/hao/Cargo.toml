@@ -10,7 +10,7 @@ description = ".net binary reader"
 license = "MIT"
 repository = "https://github.com/pigeonhands/hao"
 documentation = "https://docs.rs/hao"
-readme = "../../README.md"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
