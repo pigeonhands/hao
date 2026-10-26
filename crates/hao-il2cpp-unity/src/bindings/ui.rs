@@ -3,11 +3,14 @@
 use hao_il2cpp_runtime::{Il2CppString, Object};
 
 use crate::{
-    binding::bindings, Canvas, Color, RawImage, RectTransform, RenderMode, TextMeshPro, Vector2,
+    binding::bindings, Canvas, Color, Material, RawImage, RectTransform, RenderMode, TextMeshPro,
+    Vector2,
 };
 
 bindings! { ui_checks;
     RAW_IMAGE_SET_TEXTURE: "UnityEngine.UI" "UnityEngine.UI" "RawImage" "set_texture" (RawImage, Object) -> ();
+    // set_material is declared on Graphic, which RawImage derives from.
+    GRAPHIC_SET_MATERIAL: "UnityEngine.UI" "UnityEngine.UI" "Graphic" "set_material" (RawImage, Material) -> ();
 
     RECT_SET_ANCHOR_MIN: "UnityEngine.CoreModule" "UnityEngine" "RectTransform" "set_anchorMin" (RectTransform, Vector2) -> ();
     RECT_SET_ANCHOR_MAX: "UnityEngine.CoreModule" "UnityEngine" "RectTransform" "set_anchorMax" (RectTransform, Vector2) -> ();
