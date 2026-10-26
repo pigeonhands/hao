@@ -46,6 +46,14 @@ impl Emitter {
         Self::default()
     }
 
+    /// Builds a body in one expression:
+    /// `Emitter::build(|e| { e.ldarg(0).ldarg(1).op(OpCode::Add).ret(); })`.
+    pub fn build(f: impl FnOnce(&mut Self)) -> MethodBody {
+        let mut e = Self::new();
+        f(&mut e);
+        e.finish()
+    }
+
     pub fn label(&mut self) -> EmitLabel {
         self.labels.push(None);
         EmitLabel(self.labels.len() - 1)
