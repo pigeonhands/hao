@@ -30,7 +30,7 @@ extern "C" fn heal(this: Object, amount: f32, allow_overheal: bool, method: Meth
 }
 
 /// Runs when the library is loaded into the game.
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn load() {
     hao_il2cpp_runtime::on_init(|il2cpp| {
         let health = il2cpp.class("Assembly-CSharp", "Assets.Scripts.Inventory__Items__Pickups", "PlayerHealth")?;

@@ -11,8 +11,8 @@ keywords = ["unity", "il2cpp", "modding", "hooking"]
 
 [dependencies]
 hooking = "0.5"
-libloading = "0.8"
-thiserror = "1.0.35"
+libloading = "0.9"
+thiserror = "2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -22,5 +22,5 @@ name = "heal_mod"
 crate-type = ["cdylib"]
 
 [dev-dependencies]
-ctor = "0.2"
+ctor = "1"
 libc = "0.2"

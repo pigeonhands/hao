@@ -10,8 +10,8 @@ readme = "README.md"
 keywords = ["dotnet", "coreclr", "mono", "hosting", "interop"]
 
 [dependencies]
-libloading = "0.8"
-thiserror = "1.0.35"
+libloading = "0.9"
+thiserror = "2"
 
 [dev-dependencies]
 hao = { path = "../hao" }
