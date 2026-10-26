@@ -393,6 +393,23 @@ impl Field {
     pub fn is_static(&self) -> bool {
         unsafe { (self.il2cpp.api.il2cpp_field_get_flags)(self.ptr) & FIELD_STATIC != 0 }
     }
+
+    /// Reads this instance field's value from `object`.
+    ///
+    /// # Safety
+    /// `T` must match the field's layout, and `object` must be an instance of
+    /// the field's class.
+    pub unsafe fn read<T: Copy>(&self, object: Object) -> T {
+        unsafe { read_field(object, self.offset()) }
+    }
+
+    /// Writes this instance field's value on `object`.
+    ///
+    /// # Safety
+    /// As for [`Field::read`].
+    pub unsafe fn write<T: Copy>(&self, object: Object, value: T) {
+        unsafe { write_field(object, self.offset(), value) }
+    }
 }
 
 /// Keeps an object alive and findable after the garbage collector moves or

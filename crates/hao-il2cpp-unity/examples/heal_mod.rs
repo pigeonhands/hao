@@ -11,7 +11,7 @@
 //! Method and field names come from the game's metadata, e.g. with
 //! `cargo run -p hao-il2cpp --example game_info -- <game folder> <type>`.
 
-use hao_il2cpp_unity::runtime::{read_field, Object, Original};
+use hao_il2cpp_unity::runtime::{Object, Original};
 
 /// Runs `load` when the game loads the library, like a C constructor.
 #[used]
@@ -37,13 +37,13 @@ extern "C" fn load() {
             "Assets.Scripts.Inventory__Items__Pickups",
             "PlayerHealth",
         )?;
-        let hp = health.field_offset("hp")?;
+        let hp = health.field("hp")?;
         // `int PlayerHealth.Heal(float amount, bool allowOverheal)`, checked against
         // the closure's types when the hook is installed.
         health.method("Heal", 2)?.hook(
             move |this: Object, amount: f32, overheal: bool, original: Original<_, i32>| {
                 let healed = original.call((this, amount * 2.0, overheal));
-                let hp: i32 = unsafe { read_field(this, hp) };
+                let hp: i32 = unsafe { hp.read(this) };
                 // Shows up in the game's Player.log.
                 let _ = hao_il2cpp_unity::log(&format!(
                     "[heal_mod] healed {} instead of {}, hp is now {}",
