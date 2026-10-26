@@ -31,6 +31,11 @@ let runtime = Runtime::mono(&MonoOptions {
 })?;
 ```
 
+- `method_pointer` returns a native-callable pointer to a static method whether or not it is
+  `[UnmanagedCallersOnly]`, by JIT-compiling it (via reflection on CoreCLR, `mono_compile_method`
+  on Mono). IL you patch before loading takes effect when the method is compiled. Unlike
+  `function_pointer` it has no trailing exception argument, so a managed exception crosses it
+  unhandled.
 - `load_assembly_bytes` loads an assembly from memory, and `load_module` (the `hao` feature, on
   with `coreclr`) loads a [`hao`](../hao) `Module` you built or edited without writing a file.
 - CoreCLR is configured in memory: nothing is written to disk, and no `.runtimeconfig.json` is
@@ -59,3 +64,4 @@ cargo run -p hao-runtime --features mono --example mono
 - [`hook_managed`](examples/hook_managed.rs): hooks managed methods with Rust functions, like
   Harmony prefixes and postfixes, by rewriting their IL to call a native function pointer.
 - [`mono`](examples/mono.rs): the Mono backend, including a call that throws.
+- [`call_any_method`](examples/call_any_method.rs): calls plain static methods (no `[UnmanagedCallersOnly]`) with `method_pointer`, including one whose IL was patched before loading.

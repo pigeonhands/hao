@@ -156,4 +156,27 @@ impl Runtime {
             Inner::Mono(mono) => mono.function_pointer(assembly, type_name, method),
         }
     }
+
+    /// A native-callable pointer to a static method, whether or not it is
+    /// `[UnmanagedCallersOnly]`. The method is JIT-compiled first, so IL patched
+    /// before the assembly was loaded takes effect.
+    ///
+    /// The pointer uses the managed calling convention, which matches a plain
+    /// `extern "C" fn(args) -> ret` for static methods with primitive and
+    /// pointer arguments. Unlike [`function_pointer`](Self::function_pointer),
+    /// it takes no trailing exception argument on either backend, so a managed
+    /// exception crosses it as an unhandled error.
+    pub fn method_pointer(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+    ) -> Result<*const c_void> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.method_pointer(assembly, type_name, method),
+            #[cfg(feature = "mono")]
+            Inner::Mono(mono) => mono.method_pointer(assembly, type_name, method),
+        }
+    }
 }

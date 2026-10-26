@@ -38,6 +38,7 @@ struct Api {
     class_from_name: unsafe extern "C" fn(Ptr, *const c_char, *const c_char) -> Ptr,
     class_get_method_from_name: unsafe extern "C" fn(Ptr, *const c_char, c_int) -> Ptr,
     method_get_unmanaged_thunk: unsafe extern "C" fn(Ptr) -> Ptr,
+    compile_method: unsafe extern "C" fn(Ptr) -> Ptr,
 }
 
 pub(crate) struct Mono {
@@ -102,6 +103,7 @@ impl Mono {
             class_from_name: symbol!("mono_class_from_name"),
             class_get_method_from_name: symbol!("mono_class_get_method_from_name"),
             method_get_unmanaged_thunk: symbol!("mono_method_get_unmanaged_thunk"),
+            compile_method: symbol!("mono_compile_method"),
         };
 
         let assemblies = options
@@ -201,12 +203,8 @@ impl Mono {
         }
     }
 
-    pub fn function_pointer(
-        &self,
-        assembly: &str,
-        type_name: &str,
-        method: &str,
-    ) -> Result<*const c_void> {
+    /// Resolves `type_name::method` to a `MonoMethod*`.
+    fn resolve_method(&self, assembly: &str, type_name: &str, method: &str) -> Result<Ptr> {
         self.attach_thread();
         let image = *self
             .images
@@ -229,14 +227,44 @@ impl Mono {
             if method_ptr.is_null() {
                 return Err(Error::NotFound(format!("method {}::{}", type_name, method)));
             }
-            let thunk = (self.api.method_get_unmanaged_thunk)(method_ptr);
-            if thunk.is_null() {
-                return Err(Error::Other(format!(
-                    "no unmanaged thunk for {}::{}",
-                    type_name, method
-                )));
-            }
-            Ok(thunk)
+            Ok(method_ptr)
         }
+    }
+
+    pub fn function_pointer(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+    ) -> Result<*const c_void> {
+        let method_ptr = self.resolve_method(assembly, type_name, method)?;
+        let thunk = unsafe { (self.api.method_get_unmanaged_thunk)(method_ptr) };
+        if thunk.is_null() {
+            return Err(Error::Other(format!(
+                "no unmanaged thunk for {}::{}",
+                type_name, method
+            )));
+        }
+        Ok(thunk)
+    }
+
+    /// The method's JIT-compiled native code, callable with the managed calling
+    /// convention and with no trailing exception argument. Mono can do this for
+    /// any static method, so there is no `[UnmanagedCallersOnly]` requirement.
+    pub fn method_pointer(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+    ) -> Result<*const c_void> {
+        let method_ptr = self.resolve_method(assembly, type_name, method)?;
+        let code = unsafe { (self.api.compile_method)(method_ptr) };
+        if code.is_null() {
+            return Err(Error::Other(format!(
+                "could not compile {}::{}",
+                type_name, method
+            )));
+        }
+        Ok(code)
     }
 }

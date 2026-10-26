@@ -64,6 +64,7 @@ type GetFunctionPointer = unsafe extern "system" fn(
 type LoadAssemblyBytes =
     unsafe extern "system" fn(*const u8, usize, *const u8, usize, *mut c_void, *mut c_void) -> i32;
 type LoadFrom = unsafe extern "system" fn(*const CharT) -> i32;
+type GetMethod = unsafe extern "system" fn(*const CharT, *const CharT) -> *mut c_void;
 
 /// `GetFunctionPointer`'s sentinel for a `[UnmanagedCallersOnly]` method.
 const UNMANAGED_CALLERS_ONLY: *const CharT = usize::MAX as *const CharT;
@@ -265,13 +266,18 @@ impl Host {
     }
 }
 
+/// The `Hao.Loader` helpers, built and loaded on first use.
+struct Loader {
+    load_from: LoadFrom,
+    get_method: GetMethod,
+}
+
 pub(crate) struct CoreClr {
     _coreclr: Library,
     major: u16,
     get_function_pointer: GetFunctionPointer,
     load_assembly_bytes: LoadAssemblyBytes,
-    /// `Assembly.LoadFrom`, built on first use for loading assemblies by path.
-    load_from: OnceLock<LoadFrom>,
+    loader: OnceLock<Loader>,
 }
 
 // The ComponentActivator delegates are thread safe.
@@ -289,27 +295,57 @@ impl CoreClr {
             major: framework.major,
             get_function_pointer: host.activator_delegate("GetFunctionPointer")?,
             load_assembly_bytes: host.activator_delegate("LoadAssemblyBytes")?,
-            load_from: OnceLock::new(),
+            loader: OnceLock::new(),
             _coreclr: coreclr,
         })
+    }
+
+    /// The `Hao.Loader` helpers, generated with hao and loaded once.
+    fn loader(&self) -> Result<&Loader> {
+        if let Some(loader) = self.loader.get() {
+            return Ok(loader);
+        }
+        self.load_assembly_bytes(&loader_assembly(self.major)?)?;
+        let load_from = self.function_pointer(LOADER, "Hao.Loader", "LoadFrom")?;
+        let get_method = self.function_pointer(LOADER, "Hao.Loader", "GetMethod")?;
+        Ok(self.loader.get_or_init(|| unsafe {
+            Loader {
+                load_from: std::mem::transmute::<*const c_void, LoadFrom>(load_from),
+                get_method: std::mem::transmute::<*const c_void, GetMethod>(get_method),
+            }
+        }))
     }
 
     /// Loads with `Assembly.LoadFrom`, so dependencies next to the assembly
     /// are found. `ComponentActivator.LoadAssembly` would need hostfxr.
     pub fn load_assembly(&self, path: &Path) -> Result<()> {
-        let load_from = match self.load_from.get() {
-            Some(f) => *f,
-            None => {
-                self.load_assembly_bytes(&loader_assembly(self.major)?)?;
-                let f = self.function_pointer(LOADER, "Hao.Loader", "LoadFrom")?;
-                *self
-                    .load_from
-                    .get_or_init(|| unsafe { std::mem::transmute::<*const c_void, LoadFrom>(f) })
-            }
-        };
+        let load_from = self.loader()?.load_from;
         check("Assembly.LoadFrom", unsafe {
             load_from(wide(&path.to_string_lossy()).as_ptr())
         })
+    }
+
+    /// A native-callable pointer to a static method, whether or not it is
+    /// `[UnmanagedCallersOnly]`. The method is JIT-compiled first (so IL patched
+    /// before the assembly was loaded takes effect), and the pointer uses the
+    /// managed calling convention, which matches the C ABI for static methods
+    /// with primitive and pointer arguments.
+    pub fn method_pointer(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+    ) -> Result<*const c_void> {
+        let full_name = wide(&format!("{}, {}", type_name, assembly));
+        let name = wide(method);
+        let pointer = unsafe { (self.loader()?.get_method)(full_name.as_ptr(), name.as_ptr()) };
+        if pointer.is_null() {
+            return Err(Error::NotFound(format!(
+                "method {}::{} (is it a unique static method?)",
+                type_name, method
+            )));
+        }
+        Ok(pointer)
     }
 
     pub fn load_assembly_bytes(&self, bytes: &[u8]) -> Result<()> {
@@ -353,13 +389,17 @@ impl CoreClr {
 
 const LOADER: &str = "Hao.Loader";
 
-/// `static class Hao.Loader { [UnmanagedCallersOnly] static int LoadFrom(IntPtr path) }`, which
-/// calls `Assembly.LoadFrom` and returns the exception's HResult on failure.
+/// A small `Hao.Loader` assembly with two `[UnmanagedCallersOnly]` helpers:
+///
+/// - `int LoadFrom(IntPtr path)`: `Assembly.LoadFrom`, returning the exception's HResult on failure.
+/// - `IntPtr GetMethod(IntPtr fullName, IntPtr name)`: looks up a static method by reflection,
+///   JIT-compiles it and returns its native entry point (0 on failure), so any method can be
+///   called, not only `[UnmanagedCallersOnly]` ones.
 fn loader_assembly(major: u16) -> Result<Vec<u8>> {
     use hao::{
         dotnet::{
             entries::{Method, TypeDef},
-            il::Emitter,
+            il::{Emitter, OpCode},
             module::{ModuleKind, TargetRuntime},
             signature::{MethodSig, TypeSig},
         },
@@ -378,26 +418,27 @@ fn loader_assembly(major: u16) -> Result<Vec<u8>> {
             "PtrToStringAuto",
             MethodSig::new_static(TypeSig::STRING, vec![TypeSig::NATIVE_INT]),
         )?;
+        let exception = module.corlib_type("System.Exception")?;
+
+        // int LoadFrom(IntPtr path):
+        //   try { Assembly.LoadFrom(Marshal.PtrToStringAuto(path)); } catch (Exception e) { result = e.HResult; }
         let assembly = module.corlib_type("System.Reflection.Assembly")?;
         let load_from = module.import_method_on(
             &assembly,
             "LoadFrom",
             MethodSig::new_static(TypeSig::class(assembly.clone()), vec![TypeSig::STRING]),
         )?;
-        let exception = module.corlib_type("System.Exception")?;
         let hresult = module.import_method_on(
             &exception,
             "get_HResult",
             MethodSig::new_instance(TypeSig::INT32, vec![]),
         )?;
-
-        // try { Assembly.LoadFrom(Marshal.PtrToStringAuto(path)); } catch (Exception e) { result = e.HResult; }
-        let body = Emitter::build(|e| {
+        let load_from_body = Emitter::build(|e| {
             let result = e.declare_local(TypeSig::INT32);
             e.try_catch(
-                exception,
+                exception.clone(),
                 |e| {
-                    e.ldarg(0).call(to_string).call(load_from).pop();
+                    e.ldarg(0).call(&to_string).call(load_from).pop();
                 },
                 |e| {
                     e.callvirt(hresult).stloc(result);
@@ -406,13 +447,95 @@ fn loader_assembly(major: u16) -> Result<Vec<u8>> {
             e.ldloc(result).ret();
         });
 
+        // IntPtr GetMethod(IntPtr fullName, IntPtr name):
+        //   var m = Type.GetType(fullName).GetMethod(name, flags);
+        //   RuntimeHelpers.PrepareMethod(m.MethodHandle);
+        //   return m.MethodHandle.GetFunctionPointer();   // 0 on any exception
+        let type_ty = module.corlib_type("System.Type")?;
+        let method_info = module.corlib_type("System.Reflection.MethodInfo")?;
+        let method_base = module.corlib_type("System.Reflection.MethodBase")?;
+        let handle_ty = module.corlib_type("System.RuntimeMethodHandle")?;
+        let binding_flags = module.corlib_type("System.Reflection.BindingFlags")?;
+        let get_type = module.import_method_on(
+            &type_ty,
+            "GetType",
+            MethodSig::new_static(TypeSig::class(type_ty.clone()), vec![TypeSig::STRING]),
+        )?;
+        let get_method = module.import_method_on(
+            &type_ty,
+            "GetMethod",
+            MethodSig::new_instance(
+                TypeSig::class(method_info.clone()),
+                vec![TypeSig::STRING, TypeSig::value_type(binding_flags)],
+            ),
+        )?;
+        let method_handle = module.import_method_on(
+            &method_base,
+            "get_MethodHandle",
+            MethodSig::new_instance(TypeSig::value_type(handle_ty.clone()), vec![]),
+        )?;
+        let prepare = module.import_corlib_method(
+            "System.Runtime.CompilerServices.RuntimeHelpers",
+            "PrepareMethod",
+            MethodSig::new_static(TypeSig::VOID, vec![TypeSig::value_type(handle_ty.clone())]),
+        )?;
+        // GetFunctionPointer returns `nint`, encoded as the native-int primitive, not System.IntPtr.
+        let function_pointer = module.import_method_on(
+            &handle_ty,
+            "GetFunctionPointer",
+            MethodSig::new_instance(TypeSig::NATIVE_INT, vec![]),
+        )?;
+
+        // Instance | Static | Public | NonPublic
+        const BINDING_FLAGS: i32 = 4 | 8 | 16 | 32;
+        let get_method_body = Emitter::build(|e| {
+            let found_type = e.declare_local(TypeSig::class(type_ty.clone()));
+            let method = e.declare_local(TypeSig::class(method_info.clone()));
+            let handle = e.declare_local(TypeSig::value_type(handle_ty.clone()));
+            let result = e.declare_local(TypeSig::NATIVE_INT);
+            e.ldc_i4(0).op(OpCode::Conv_I).stloc(result);
+            e.try_catch(
+                exception,
+                |e| {
+                    e.ldarg(0).call(&to_string).call(get_type).stloc(found_type);
+                    e.ldloc(found_type)
+                        .ldarg(1)
+                        .call(&to_string)
+                        .ldc_i4(BINDING_FLAGS)
+                        .callvirt(get_method)
+                        .stloc(method);
+                    e.ldloc(method).callvirt(method_handle).stloc(handle);
+                    e.ldloc(handle).call(prepare);
+                    e.ldloca(handle).call(function_pointer).stloc(result);
+                },
+                |e| {
+                    e.pop(); // discard the exception; result stays 0
+                },
+            );
+            e.ldloc(result).ret();
+        });
+
         let loader = module.add_static_class("Hao", "Loader")?;
-        let signature = MethodSig::new_static(TypeSig::INT32, vec![TypeSig::NATIVE_INT]);
         TypeDef::add_method(
             &loader,
-            Method::public_static("LoadFrom", signature)
-                .with_attribute(uco)
-                .with_body(body),
+            Method::public_static(
+                "LoadFrom",
+                MethodSig::new_static(TypeSig::INT32, vec![TypeSig::NATIVE_INT]),
+            )
+            .with_attribute(uco.clone())
+            .with_body(load_from_body),
+        );
+        TypeDef::add_method(
+            &loader,
+            Method::public_static(
+                "GetMethod",
+                MethodSig::new_static(
+                    TypeSig::NATIVE_INT,
+                    vec![TypeSig::NATIVE_INT, TypeSig::NATIVE_INT],
+                ),
+            )
+            .with_attribute(uco)
+            .with_body(get_method_body),
         );
         module.write()
     };
