@@ -1,16 +1,20 @@
-//! Runs against a real game's metadata. Set `HAO_IL2CPP_METADATA` to a
-//! `global-metadata.dat` (v29), otherwise an installed Megabonk is used if found.
+//! Runs against a real game's metadata. Set `HAO_IL2CPP_METADATA` to a v29
+//! `global-metadata.dat`, or `HAO_IL2CPP_GAME` to the game's folder. Skipped otherwise.
 
 use hao_il2cpp::Metadata;
 
 fn metadata() -> Option<Metadata> {
-    let path = std::env::var("HAO_IL2CPP_METADATA").ok().unwrap_or_else(|| {
-        "/games/SteamLibrary/steamapps/common/Megabonk/Megabonk_Data/il2cpp_data/Metadata/global-metadata.dat".into()
+    let path = std::env::var_os("HAO_IL2CPP_METADATA").map(std::path::PathBuf::from).or_else(|| {
+        let game = std::env::var_os("HAO_IL2CPP_GAME")?;
+        std::fs::read_dir(game)
+            .ok()?
+            .filter_map(|e| e.ok().map(|e| e.path().join("il2cpp_data/Metadata/global-metadata.dat")))
+            .find(|p| p.exists())
     });
-    if !std::path::Path::new(&path).exists() {
-        eprintln!("skipping: no il2cpp metadata at {} (set HAO_IL2CPP_METADATA)", path);
+    let Some(path) = path else {
+        eprintln!("skipping: set HAO_IL2CPP_METADATA or HAO_IL2CPP_GAME to test against a game");
         return None;
-    }
+    };
     Some(Metadata::from_path(path).unwrap())
 }
 

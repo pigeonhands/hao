@@ -45,6 +45,12 @@ cargo run --release -p hao-il2cpp --example generate_dlls -- path/to/game out
 
 ## Tests
 
-The tests need a real game: `HAO_IL2CPP_METADATA` (a v29 `global-metadata.dat`) and
-`HAO_IL2CPP_GAME` (a game folder with a v29 `GameAssembly.so`). Without them they skip
-themselves. Game files are never committed.
+The tests need a real game, which you point them at:
+
+```sh
+HAO_IL2CPP_GAME=/path/to/game cargo test --release -p hao-il2cpp
+```
+
+`HAO_IL2CPP_GAME` is a game folder with a v29 `GameAssembly.so` and `*_Data/il2cpp_data`.
+`HAO_IL2CPP_METADATA` can point the metadata tests at a `global-metadata.dat` directly. Without
+either the tests skip themselves. Game files are never committed.

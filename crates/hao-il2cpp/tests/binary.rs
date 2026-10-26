@@ -1,5 +1,5 @@
 //! Runs against a real game. Set `HAO_IL2CPP_GAME` to an Il2Cpp game folder with a
-//! v29 `GameAssembly.so`, otherwise an installed Megabonk is used if found.
+//! v29 `GameAssembly.so`. Skipped otherwise.
 
 use hao_il2cpp::{binary::TypeKind, Binary, ElfImage, Metadata};
 
@@ -9,7 +9,10 @@ struct Game {
 }
 
 fn game() -> Option<Game> {
-    let dir = std::env::var("HAO_IL2CPP_GAME").unwrap_or_else(|_| "/games/SteamLibrary/steamapps/common/Megabonk".into());
+    let Some(dir) = std::env::var_os("HAO_IL2CPP_GAME") else {
+        eprintln!("skipping: set HAO_IL2CPP_GAME to an Il2Cpp game folder");
+        return None;
+    };
     let dir = std::path::Path::new(&dir);
     let binary = dir.join("GameAssembly.so");
     let metadata = std::fs::read_dir(dir)
