@@ -330,10 +330,33 @@ impl EguiState {
             );
         }
 
+        // egui's content bounding box, so the readback samples where the UI is.
+        if trace {
+            let mut min = (f32::MAX, f32::MAX);
+            let mut max = (f32::MIN, f32::MIN);
+            for p in primitives {
+                if let egui::epaint::Primitive::Mesh(m) = &p.primitive {
+                    for v in &m.vertices {
+                        min = (min.0.min(v.pos.x), min.1.min(v.pos.y));
+                        max = (max.0.max(v.pos.x), max.1.max(v.pos.y));
+                    }
+                }
+            }
+            tracing::info!(?min, ?max, "egui content bounds (egui coords)");
+        }
+
         // Draw into our render target, then restore whatever the camera was using
         // even if a step fails, so the game's own rendering is left untouched.
         let previous = RenderTexture::active()?;
         RenderTexture::set_active(Some(rt))?;
+        if trace {
+            // Confirm our target is actually the active render target now.
+            let active = RenderTexture::active()?;
+            tracing::info!(
+                bound = active.map(|a| a.object() == rt.object()).unwrap_or(false),
+                "render target set active"
+            );
+        }
         let result = (|| {
             // Start transparent so last frame's UI doesn't linger.
             gl::clear(false, Color::CLEAR)?;
@@ -386,20 +409,24 @@ impl EguiState {
                 tex
             }
         };
-        // egui's window default_pos is near (24, 24) from the top; the target is
-        // bottom-left origin, so flip y. Sample a bit inside the window body.
-        let (px, py) = (80.0, h - 80.0);
-        readback.read_pixels(crate::Rect::new(px, py, 1.0, 1.0), 0, 0)?;
-        let c = readback.get_pixel(0, 0)?;
-        tracing::info!(
-            r = c.r,
-            g = c.g,
-            b = c.b,
-            a = c.a,
-            px,
-            py,
-            "target pixel (window area)"
-        );
+        // Sample inside the window (egui default_pos ~24,24 from top-left, body a
+        // bit in). ReadPixels' Y origin can differ by platform, so read the same
+        // X at both the straight and the flipped Y and log both.
+        let px = 90.0;
+        for (label, py) in [("top-origin", 90.0), ("bottom-origin", h - 90.0)] {
+            readback.read_pixels(crate::Rect::new(px, py, 1.0, 1.0), 0, 0)?;
+            let c = readback.get_pixel(0, 0)?;
+            tracing::info!(
+                r = c.r,
+                g = c.g,
+                b = c.b,
+                a = c.a,
+                px,
+                py,
+                origin = label,
+                "target pixel"
+            );
+        }
         Ok(())
     }
 }
