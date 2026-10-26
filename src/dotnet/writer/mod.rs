@@ -11,10 +11,13 @@ mod tables;
 use std::collections::HashMap;
 
 use pewter::pe::{
-    coff::ImageFileMachine,
+    coff::{ImageFileCharacteristics, ImageFileMachine},
     definition::{align_up, PEImageDef},
-    optional_header::data_directories::ImageDataDirectory,
-    sections::{cor20::Cor20Flags, SectionFlags},
+    optional_header::{data_directories::ImageDataDirectory, ImageSubsystem, OptionalHeader},
+    sections::{
+        cor20::{Cor20Flags, ImageCor20Header},
+        SectionFlags,
+    },
 };
 
 use heaps::*;
@@ -30,6 +33,7 @@ use crate::{
         },
         signature::{MethodSig, SignatureWriter, TokenEncoder, TypeSig},
     },
+    dotnet::module::ModuleKind,
     error::{HaoError, Result},
     Module,
 };
@@ -1114,7 +1118,11 @@ pub(crate) fn write_module(module: &Module) -> Result<Vec<u8>> {
         return Err(err("mixed mode assemblies (vtable fixups) are not supported"));
     }
 
-    let mut image = PEImageDef::parse(&module.image).map_err(HaoError::PeError)?;
+    let mut image = if module.image.is_empty() {
+        new_image(module.kind)
+    } else {
+        PEImageDef::parse(&module.image).map_err(HaoError::PeError)?
+    };
     let cor20_rva = image.optional_header.data_directories.clr_runtime_header.virtual_address;
     let section_rva = image.sections.next_virtual_address(image.section_alignment()) as u32;
 
@@ -1181,6 +1189,35 @@ pub(crate) fn write_module(module: &Module) -> Result<Vec<u8>> {
     image.strip_certificate();
 
     image.write_file().map_err(HaoError::PeError)
+}
+
+/// An AnyCPU, IL only image holding just a placeholder cor20 header.
+fn new_image(kind: ModuleKind) -> PEImageDef {
+    let mut characteristics =
+        ImageFileCharacteristics::EXECUTABLE_IMAGE | ImageFileCharacteristics::LARGE_ADDRESS_AWARE;
+    let (subsystem, image_base) = match kind {
+        ModuleKind::Dll => {
+            characteristics |= ImageFileCharacteristics::FILE_DLL;
+            (ImageSubsystem::WindowsCui, 0x1000_0000)
+        }
+        ModuleKind::Console => (ImageSubsystem::WindowsCui, 0x40_0000),
+        ModuleKind::Windows => (ImageSubsystem::WindowsGui, 0x40_0000),
+    };
+    let mut image = PEImageDef::new(
+        ImageFileMachine::I386,
+        characteristics,
+        OptionalHeader::new_pe32(subsystem, image_base),
+    );
+    let text = image.new_section(
+        ".text",
+        SectionFlags::CNT_CODE | SectionFlags::MEM_EXECUTE | SectionFlags::MEM_READ,
+    );
+    let rva = text.add_data(&[0; ImageCor20Header::SIZE]) as u32;
+    image.optional_header.data_directories.clr_runtime_header = ImageDataDirectory {
+        virtual_address: rva,
+        size: ImageCor20Header::SIZE as u32,
+    };
+    image
 }
 
 /// ReadyToRun images XOR the machine type with an OS specific value.

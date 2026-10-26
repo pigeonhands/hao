@@ -44,6 +44,8 @@ pub struct Module {
     pub runtime_version: String,
     pub(crate) image: Vec<u8>,
     pub(crate) cor20: ImageCor20Header,
+    /// Used when writing a module that wasn't loaded from an image.
+    pub(crate) kind: super::ModuleKind,
 }
 
 impl Module {
@@ -106,6 +108,7 @@ impl Module {
             runtime_version: metadata.version.clone(),
             image: metadata.data.to_vec(),
             cor20: metadata.cor20_header.clone(),
+            kind: super::ModuleKind::Dll,
         })
     }
 

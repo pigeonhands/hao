@@ -15,10 +15,10 @@ documentation = "https://docs.rs/hao"
 
 [dependencies]
 thiserror = "1.0.35"
-pewter = "0.0.4"
+pewter = { version = "0.0.5", path = "../pewter" }
 strum = { version = "0.26", features = ["derive"] }
 bitflags = "2.2.1"
-uuid = "1.3.1"
+uuid = { version = "1.3.1", features = ["v4"] }
 
 [features]
 default = []

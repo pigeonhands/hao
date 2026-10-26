@@ -1,0 +1,119 @@
+use pewter::pe::sections::cor20::{Cor20Flags, ImageCor20Header};
+
+use super::Module;
+use crate::dotnet::{
+    entries::*,
+    md::streams::tables_stream::{AssemblyFlags, TypeAttributes},
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ModuleKind {
+    #[default]
+    Dll,
+    Console,
+    Windows,
+}
+
+/// The core library new modules reference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetRuntime {
+    /// .NET (Core) 5+, referencing `System.Runtime` with the given major version.
+    NetCore(u16),
+    /// .NET Framework 4.x and Mono (including Unity), referencing `mscorlib`.
+    NetFramework,
+}
+
+impl TargetRuntime {
+    fn corlib(self) -> AssemblyRef {
+        let (name, version, token) = match self {
+            Self::NetCore(major) => (
+                "System.Runtime",
+                Version { major, ..Default::default() },
+                [0xb0, 0x3f, 0x5f, 0x7f, 0x11, 0xd5, 0x0a, 0x3a],
+            ),
+            Self::NetFramework => (
+                "mscorlib",
+                Version { major: 4, ..Default::default() },
+                [0xb7, 0x7a, 0x5c, 0x56, 0x19, 0x34, 0xe0, 0x89],
+            ),
+        };
+        AssemblyRef {
+            name: name.into(),
+            version,
+            public_key_or_token: token.to_vec(),
+            ..Default::default()
+        }
+    }
+
+    /// The public key token framework assemblies other than the core library use.
+    pub fn framework_token(self) -> [u8; 8] {
+        [0xb0, 0x3f, 0x5f, 0x7f, 0x11, 0xd5, 0x0a, 0x3a]
+    }
+}
+
+impl Module {
+    /// A new, empty assembly. `name` is the assembly name without an extension.
+    ///
+    /// ```
+    /// use hao::{Module, dotnet::module::{ModuleKind, TargetRuntime}};
+    ///
+    /// let module = Module::new("Generated", ModuleKind::Dll, TargetRuntime::NetCore(9));
+    /// assert_eq!(module.name(), "Generated.dll");
+    /// ```
+    pub fn new(name: &str, kind: ModuleKind, runtime: TargetRuntime) -> Self {
+        let extension = if kind == ModuleKind::Dll { "dll" } else { "exe" };
+        let global_type = TypeDef {
+            flags: TypeAttributes::empty(),
+            name: "<Module>".into(),
+            ..Default::default()
+        };
+        let mut module = Self::default();
+        module.module = Entry::new(ModuleDef {
+            name: format!("{}.{}", name, extension),
+            mvid: uuid::Uuid::new_v4(),
+            ..Default::default()
+        });
+        module.assembly = Some(Entry::new(Assembly {
+            hash_alg_id: 0x8004,
+            version: Version {
+                major: 1,
+                ..Default::default()
+            },
+            flags: AssemblyFlags::empty(),
+            name: name.into(),
+            ..Default::default()
+        }));
+        module.types = vec![Entry::new(global_type)];
+        module.assembly_refs = vec![Entry::new(runtime.corlib())];
+        module.runtime_version = "v4.0.30319".into();
+        module.kind = kind;
+        module.cor20 = ImageCor20Header {
+            major_rt_version: 2,
+            minor_rt_version: 5,
+            flags: Cor20Flags::IL_ONLY,
+            ..Default::default()
+        };
+        module
+    }
+
+    /// The reference to the core library (`System.Runtime`, `mscorlib`, ...).
+    pub fn corlib(&self) -> Option<Entry<AssemblyRef>> {
+        self.assembly_refs.iter().find(|a| a.get().is_corlib()).cloned()
+    }
+
+    /// A type from the core library, e.g. `System.Object`.
+    pub fn corlib_type(&mut self, full_name: &str) -> crate::error::Result<TypeDefOrRef> {
+        let corlib = self
+            .corlib()
+            .ok_or(crate::error::HaoError::BadImageFormat("module has no core library reference"))?;
+        let name = corlib.get().name.clone();
+        self.import_type_from(&name, full_name)
+    }
+
+    /// Adds a new top level type.
+    pub fn add_type(&mut self, ty: TypeDef) -> Entry<TypeDef> {
+        let ty = Entry::new(ty);
+        self.types.push(ty.clone());
+        ty
+    }
+}
