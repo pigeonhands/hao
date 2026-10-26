@@ -8,25 +8,33 @@
 //! LD_PRELOAD=/path/to/target/release/examples/libegui_demo.so %command%
 //! ```
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use hao_il2cpp_unity::egui;
+use hao_il2cpp_unity::{egui, input, KeyCode};
 
 #[used]
 #[link_section = ".init_array"]
 static LOAD: extern "C" fn() = load;
 
 static FRAMES: AtomicU64 = AtomicU64::new(0);
+/// Shown by default; F1 toggles it.
+static VISIBLE: AtomicBool = AtomicBool::new(true);
 
 extern "C" fn load() {
     init_logging();
     hao_il2cpp_unity::on_init(|_| {
         egui::on_egui(|ctx| {
+            if input::key_down(KeyCode::F1).unwrap_or(false) {
+                VISIBLE.fetch_xor(true, Ordering::Relaxed);
+            }
+            if !VISIBLE.load(Ordering::Relaxed) {
+                return;
+            }
             let frames = FRAMES.fetch_add(1, Ordering::Relaxed);
             egui::Window::new("hao + egui")
                 .default_pos([24.0, 24.0])
                 .show(ctx, |ui| {
-                    ui.label("Drawn over the game with egui.");
+                    ui.label("Drawn over the game with egui. F1 to toggle.");
                     ui.label(format!("frames rendered: {}", frames));
                     ui.separator();
                     if ui.button("Click me").clicked() {
@@ -43,7 +51,7 @@ extern "C" fn load() {
                     });
                 });
         })?;
-        tracing::info!("egui overlay running");
+        tracing::info!("egui overlay running (F1 to toggle)");
         Ok(())
     });
 }
