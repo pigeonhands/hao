@@ -16,14 +16,3 @@ thiserror = "2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
-
-[[example]]
-name = "heal_mod"
-crate-type = ["cdylib"]
-
-[[example]]
-name = "scene_overlay"
-crate-type = ["cdylib"]
-
-[dev-dependencies]
-libc = "0.2"

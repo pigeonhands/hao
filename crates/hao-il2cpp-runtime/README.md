@@ -33,20 +33,25 @@ and `*mut c_void` for pointers and `ref` parameters. `Method::call` calls a meth
 and `Class::methods` lists every overload with its `Method::signature`. Managed exceptions pass
 through hooks.
 
+This crate is the engine-agnostic layer. [`hao-il2cpp-unity`](../hao-il2cpp-unity) builds typed
+wrappers for Unity on top of it (game objects, UI, scenes, logging) and has the example mods.
+
 ## Examples
 
-- [`heal_mod`](examples/heal_mod.rs): a Megabonk mod that doubles healing by hooking
-  `PlayerHealth.Heal` and reads the player's `hp` field.
-- [`scene_overlay`](examples/scene_overlay.rs): a Megabonk mod that hooks Unity's
-  `SceneManager.Internal_SceneLoaded` and adds a TextMeshPro text overlay to the game's UI with
-  the current scene's name. It shows creating `GameObject`s and components, passing Unity structs
-  (`Scene`, `Vector2`, `Color`) declared in Rust, and keeping objects alive with a `GcHandle`.
-- [`call_methods`](examples/call_methods.rs): starts a game's Il2Cpp runtime without Unity and
-  lists and calls methods. Run it with `cargo run -p hao-il2cpp-runtime --example call_methods --
-  <game folder>`.
+Both run a game's Il2Cpp runtime in a normal process, without Unity:
 
-The mods are loaded by adding `LD_PRELOAD=/path/to/libheal_mod.so %command%` to the game's Steam
-launch options. Class, method and field names come from the game's metadata, which
+```sh
+cargo run -p hao-il2cpp-runtime --example call_methods -- <game folder>
+cargo run -p hao-il2cpp-runtime --example hook_methods -- <game folder>
+```
+
+- [`call_methods`](examples/call_methods.rs): lists a class's methods with their signatures, picks
+  an overload and calls it.
+- [`hook_methods`](examples/hook_methods.rs): hooks `String.Concat` with closures that change
+  its arguments or replace its result, then removes the hooks.
+
+Mods are loaded by adding `LD_PRELOAD=/path/to/libmy_mod.so %command%` to the game's Steam launch
+options. Class, method and field names come from the game's metadata, which
 [`hao-il2cpp`](../hao-il2cpp)'s `game_info` example shows.
 
 Managed structs are passed as `#[repr(C)]` Rust structs that implement `Il2CppValue`:
@@ -83,6 +88,5 @@ Wine rather than `dlopen`, and uses the Windows calling convention.
 ## Tests
 
 `HAO_IL2CPP_GAME=/path/to/game cargo test -p hao-il2cpp-runtime` loads the game's Il2Cpp runtime
-into the test process, hooks `String.Concat` and `Int32.Parse` with raw and typed hooks, checks
-Unity struct and enum types, and (for Megabonk) checks the example mod installs its hook. Without
-the variable the tests skip.
+into the test process, hooks `String.Concat` and `Int32.Parse` with raw and typed hooks, and checks
+Unity struct and enum types. Without the variable the tests skip.

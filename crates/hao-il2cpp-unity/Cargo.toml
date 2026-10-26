@@ -1,0 +1,24 @@
+[package]
+name = "hao-il2cpp-unity"
+authors = ["Sam M."]
+version = "0.0.1"
+edition = "2021"
+description = "Typed Unity wrappers for mods of Unity Il2Cpp games"
+license = "MIT"
+repository = "https://github.com/pigeonhands/hao"
+readme = "README.md"
+keywords = ["unity", "il2cpp", "modding", "hooking"]
+
+[dependencies]
+hao-il2cpp-runtime = { version = "0.0.1", path = "../hao-il2cpp-runtime" }
+
+[dev-dependencies]
+libc = "0.2"
+
+[[example]]
+name = "heal_mod"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "scene_overlay"
+crate-type = ["cdylib"]

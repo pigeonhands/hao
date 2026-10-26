@@ -487,4 +487,13 @@ impl Method {
         self.check(&Args::parameters(), ValueCheck::of::<R>())?;
         Ok(unsafe { args.invoke(self.code(), self.ptr) })
     }
+
+    /// [`Method::call`] without the type check, for calls made often after
+    /// [`Method::check_types`] has passed once.
+    ///
+    /// # Safety
+    /// `Args` and `R` must pass [`Method::check_types`] for this method.
+    pub unsafe fn call_unchecked<Args: MethodArgs, R: Il2CppValue>(&self, args: Args) -> R {
+        unsafe { args.invoke(self.code(), self.ptr) }
+    }
 }
