@@ -25,7 +25,7 @@ use hao_il2cpp_runtime::Result;
 use crate::{
     bindings::{
         GL_BEGIN, GL_COLOR, GL_END, GL_LOAD_ORTHO, GL_LOAD_PIXEL_MATRIX, GL_POP_MATRIX,
-        GL_PUSH_MATRIX, GL_VERTEX3,
+        GL_PUSH_MATRIX, GL_TEXCOORD2, GL_VERTEX3,
     },
     Color,
 };
@@ -70,6 +70,11 @@ pub fn vertex3(x: f32, y: f32, z: f32) -> Result<()> {
 /// Emits a 2D vertex at z = 0.
 pub fn vertex(x: f32, y: f32) -> Result<()> {
     vertex3(x, y, 0.0)
+}
+
+/// Sets the texture coordinate for the next vertex.
+pub fn tex_coord(u: f32, v: f32) -> Result<()> {
+    GL_TEXCOORD2.call((u, v))
 }
 
 /// Sets up a pixel-space projection: `(left, bottom)` to `(right, top)` in pixels.

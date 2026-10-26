@@ -188,6 +188,10 @@ int_enum!(
     RenderMode = "UnityEngine" "RenderMode" { SCREEN_SPACE_OVERLAY = 0, SCREEN_SPACE_CAMERA = 1, WORLD_SPACE = 2 }
 );
 int_enum!(
+    /// `UnityEngine.TextureFormat`.
+    TextureFormat = "UnityEngine" "TextureFormat" { ALPHA8 = 1, RGBA32 = 4, ARGB32 = 5, RGB24 = 3 }
+);
+int_enum!(
     /// `UnityEngine.KeyCode`, for [`input`](crate::input). A few common keys are
     /// named; any other can be made with `KeyCode(value)`.
     KeyCode = "UnityEngine" "KeyCode" {

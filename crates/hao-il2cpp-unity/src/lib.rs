@@ -27,6 +27,14 @@
 
 mod binding;
 mod bindings;
+#[cfg(feature = "egui")]
+pub mod egui {
+    //! egui integration (requires the `egui` feature). See [`on_egui`].
+    pub use crate::egui_backend::on_egui;
+    pub use ::egui::*;
+}
+#[cfg(feature = "egui")]
+mod egui_backend;
 pub mod gl;
 mod lifecycle;
 mod objects;
@@ -41,11 +49,13 @@ use hao_il2cpp_runtime::{Error, Il2Cpp, Result};
 pub use lifecycle::{on_render, on_update};
 pub use objects::{
     find_object_of_type, find_objects_of_type, Camera, Canvas, Component, ComponentType,
-    GameObject, Material, RectTransform, Shader, TextMeshPro, Transform, UnityObject,
+    GameObject, Material, RectTransform, Shader, TextMeshPro, Texture2D, Transform, UnityObject,
 };
 pub use overlay::TextOverlay;
 pub use scene::{on_scene_loaded, Scene};
-pub use values::{Color, KeyCode, LoadSceneMode, Quaternion, RenderMode, Vector2, Vector3};
+pub use values::{
+    Color, KeyCode, LoadSceneMode, Quaternion, RenderMode, TextureFormat, Vector2, Vector3,
+};
 
 impl Quaternion {
     /// A rotation from Euler angles in degrees (`Quaternion.Euler`).

@@ -226,6 +226,34 @@ impl Material {
     pub fn set_color(&self, color: Color) -> Result<()> {
         MATERIAL_SET_COLOR.call((*self, color))
     }
+
+    pub fn set_main_texture(&self, texture: Texture2D) -> Result<()> {
+        MATERIAL_SET_MAIN_TEXTURE.call((*self, texture.0))
+    }
+}
+
+object_type!(
+    /// `UnityEngine.Texture2D`.
+    Texture2D = "UnityEngine.CoreModule" "UnityEngine" "Texture2D"
+);
+
+impl Texture2D {
+    /// `new Texture2D(width, height, format, mipChain: false)`.
+    pub fn new(width: i32, height: i32, format: crate::TextureFormat) -> Result<Texture2D> {
+        let object = Texture2D(
+            il2cpp()?
+                .class(Self::ASSEMBLY, Self::NAMESPACE, Self::NAME)?
+                .new_object(),
+        );
+        TEXTURE2D_CTOR.call((object, width, height, format, false))?;
+        Ok(object)
+    }
+
+    /// Uploads raw pixel bytes (matching the texture's format), then applies them.
+    pub fn load_raw(&self, bytes: &[u8]) -> Result<()> {
+        TEXTURE2D_LOAD_RAW.call((*self, il2cpp()?.byte_array(bytes)?))?;
+        TEXTURE2D_APPLY.call((*self,))
+    }
 }
 
 impl GameObject {

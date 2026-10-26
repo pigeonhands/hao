@@ -220,6 +220,22 @@ impl Il2Cpp {
         })))
     }
 
+    /// A new managed `byte[]` holding a copy of `bytes`, e.g. to pass to
+    /// `Texture2D.LoadRawTextureData`.
+    pub fn byte_array(&'static self, bytes: &[u8]) -> Result<Object> {
+        let class = self.class("mscorlib", "System", "Byte")?;
+        let array = unsafe { (self.api.il2cpp_array_new)(class.as_ptr(), bytes.len()) };
+        if array.is_null() {
+            return Err(Error::NotFound("could not allocate a byte[]".into()));
+        }
+        // Array elements follow the header (object header, bounds, length): 4 pointers.
+        let base = 4 * std::mem::size_of::<usize>();
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), (array as *mut u8).add(base), bytes.len());
+        }
+        Ok(Object(array))
+    }
+
     /// Reads a managed string, `None` for null.
     ///
     /// # Safety

@@ -1,8 +1,8 @@
 //! The render pipeline hook, `UnityEngine.GL` drawing, and `Shader`/`Material`.
 
-use hao_il2cpp_runtime::Il2CppString;
+use hao_il2cpp_runtime::{Il2CppString, Object};
 
-use crate::{binding::bindings, Camera, Color, Material, Shader};
+use crate::{binding::bindings, Camera, Color, Material, Shader, Texture2D, TextureFormat};
 
 bindings! { rendering_checks;
     // Unity calls FireOnPostRender from native after each camera renders.
@@ -17,8 +17,16 @@ bindings! { rendering_checks;
     GL_PUSH_MATRIX: "UnityEngine.CoreModule" "UnityEngine" "GL" "PushMatrix" () -> ();
     GL_POP_MATRIX: "UnityEngine.CoreModule" "UnityEngine" "GL" "PopMatrix" () -> ();
 
+    GL_TEXCOORD2: "UnityEngine.CoreModule" "UnityEngine" "GL" "TexCoord2" (f32, f32) -> ();
+
     SHADER_FIND: "UnityEngine.CoreModule" "UnityEngine" "Shader" "Find" (Il2CppString) -> Shader;
     MATERIAL_CTOR: "UnityEngine.CoreModule" "UnityEngine" "Material" ".ctor" (Material, Shader) -> ();
     MATERIAL_SET_PASS: "UnityEngine.CoreModule" "UnityEngine" "Material" "SetPass" (Material, i32) -> bool;
     MATERIAL_SET_COLOR: "UnityEngine.CoreModule" "UnityEngine" "Material" "set_color" (Material, Color) -> ();
+    MATERIAL_SET_MAIN_TEXTURE: "UnityEngine.CoreModule" "UnityEngine" "Material" "set_mainTexture" (Material, Object) -> ();
+
+    // The (width, height, format, mipChain) constructor.
+    TEXTURE2D_CTOR: "UnityEngine.CoreModule" "UnityEngine" "Texture2D" ".ctor" (Texture2D, i32, i32, TextureFormat, bool) -> ();
+    TEXTURE2D_LOAD_RAW: "UnityEngine.CoreModule" "UnityEngine" "Texture2D" "LoadRawTextureData" (Texture2D, Object) -> ();
+    TEXTURE2D_APPLY: "UnityEngine.CoreModule" "UnityEngine" "Texture2D" "Apply" (Texture2D) -> ();
 }
