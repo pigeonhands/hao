@@ -20,7 +20,8 @@ bindings! { rendering_checks;
     GL_POP_MATRIX: "UnityEngine.CoreModule" "UnityEngine" "GL" "PopMatrix" () -> ();
 
     GL_TEXCOORD2: "UnityEngine.CoreModule" "UnityEngine" "GL" "TexCoord2" (f32, f32) -> ();
-    GL_CLEAR: "UnityEngine.CoreModule" "UnityEngine" "GL" "Clear" (bool, bool, Color) -> ();
+    // The 3-arg overload is a managed wrapper IL2CPP strips; this is the native one.
+    GL_CLEAR: "UnityEngine.CoreModule" "UnityEngine" "GL" "Clear" (bool, bool, Color, f32) -> ();
 
     // An off-screen render target, so egui can draw into a texture and then be
     // shown on a top-most overlay canvas (above screen-space UI).

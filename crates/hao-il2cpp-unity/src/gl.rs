@@ -89,7 +89,7 @@ pub fn load_ortho() -> Result<()> {
 
 /// Clears the active render target to `color` (and optionally the depth buffer).
 pub fn clear(clear_depth: bool, color: Color) -> Result<()> {
-    GL_CLEAR.call((clear_depth, true, color))
+    GL_CLEAR.call((clear_depth, true, color, 1.0))
 }
 
 /// Saves the projection/model-view matrix; restore with [`pop_matrix`].
