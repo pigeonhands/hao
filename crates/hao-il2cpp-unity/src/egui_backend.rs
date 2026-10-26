@@ -62,6 +62,8 @@ impl EguiState {
                 hao_il2cpp_runtime::Error::NotFound("a sprite/UI shader for egui".into())
             })?;
         let material = Material::new(shader)?;
+        // Survive scene loads; otherwise Unity destroys it and later calls throw NRE.
+        material.dont_destroy_on_load()?;
         Ok(Self {
             ctx,
             material: GcHandle::new(il2cpp, material.object()),
@@ -159,6 +161,8 @@ impl EguiState {
     fn ensure_texture(&mut self, size: [usize; 2]) -> Result<()> {
         if self.texture.as_ref().map(|(_, s)| *s) != Some(size) {
             let texture = Texture2D::new(size[0] as i32, size[1] as i32, TextureFormat::RGBA32)?;
+            // Survive scene loads, as for the material.
+            texture.dont_destroy_on_load()?;
             let handle = GcHandle::new(crate::il2cpp()?, texture.object());
             self.texture = Some((handle, size));
         }
