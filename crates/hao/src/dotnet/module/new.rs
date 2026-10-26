@@ -60,6 +60,23 @@ impl TargetRuntime {
     }
 }
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+fn new_mvid(_name: &str) -> uuid::Uuid {
+    uuid::Uuid::new_v4()
+}
+
+/// Browser wasm has no randomness, so derive the id from the name (FNV-1a).
+/// Set `module.module.get_mut().mvid` if it has to be unique.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn new_mvid(name: &str) -> uuid::Uuid {
+    let mut hash: u128 = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d;
+    for byte in name.bytes() {
+        hash ^= byte as u128;
+        hash = hash.wrapping_mul(0x0000_0000_0100_0000_0000_0000_0000_013B);
+    }
+    uuid::Builder::from_random_bytes(hash.to_le_bytes()).into_uuid()
+}
+
 impl Module {
     /// A new, empty assembly. `name` is the assembly name without an extension.
     ///
@@ -79,7 +96,7 @@ impl Module {
         let mut module = Self::default();
         module.module = Entry::new(ModuleDef {
             name: format!("{}.{}", name, extension),
-            mvid: uuid::Uuid::new_v4(),
+            mvid: new_mvid(name),
             ..Default::default()
         });
         module.assembly = Some(Entry::new(Assembly {

@@ -19,6 +19,10 @@ thiserror = "2"
 pewter = "0.0.5"
 strum = { version = "0.28", features = ["derive"] }
 bitflags = "2.13"
+uuid = "1.29"
+
+# Browser wasm has no source of randomness, so new module ids are derived from their name there.
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 uuid = { version = "1.29", features = ["v4"] }
 
 [features]
