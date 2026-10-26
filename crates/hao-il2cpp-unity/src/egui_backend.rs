@@ -73,15 +73,26 @@ struct EguiState {
     rt: Option<(GcHandle, [i32; 2])>,
     /// The `RawImage` on the overlay canvas that displays `rt` on top of the game.
     raw_image: Option<GcHandle>,
+    /// A 1x1 texture used to read a pixel back from the target for debugging.
+    readback: Option<GcHandle>,
+    /// Counts rendered frames, to throttle the debug pixel log.
+    frame_index: u64,
 }
 
 /// Builds the egui material: a textured, vertex-coloured, alpha-blended shader.
 /// `HideAndDontSave` keeps Unity from destroying it (and throwing NRE on later
 /// use) when a scene loads, which `DontDestroyOnLoad` does not do for assets.
 fn make_material() -> Result<Material> {
-    let shader = Shader::find("Sprites/Default")?
-        .or(Shader::find("UI/Default")?)
-        .ok_or_else(|| hao_il2cpp_runtime::Error::NotFound("a sprite/UI shader for egui".into()))?;
+    let (name, shader) = match Shader::find("Sprites/Default")? {
+        Some(shader) => ("Sprites/Default", shader),
+        None => (
+            "UI/Default",
+            Shader::find("UI/Default")?.ok_or_else(|| {
+                hao_il2cpp_runtime::Error::NotFound("a sprite/UI shader for egui".into())
+            })?,
+        ),
+    };
+    tracing::info!(shader = name, "egui material shader");
     let material = Material::new(shader)?;
     material.set_hide_flags(crate::HideFlags::HIDE_AND_DONT_SAVE)?;
     Ok(material)
@@ -100,6 +111,8 @@ impl EguiState {
             pointer_down: [false; 2],
             rt: None,
             raw_image: None,
+            readback: None,
+            frame_index: 0,
         })
     }
 
@@ -273,20 +286,54 @@ impl EguiState {
         Ok(())
     }
 
-    fn render(&self, w: f32, h: f32, primitives: &[egui::ClippedPrimitive]) -> Result<()> {
+    fn render(&mut self, w: f32, h: f32, primitives: &[egui::ClippedPrimitive]) -> Result<()> {
         let Some((texture, _)) = &self.texture else {
             return Ok(());
         };
         let Some((rt, _)) = &self.rt else {
             return Ok(());
         };
+        let rt = RenderTexture(rt.target());
         let material = self.material();
         material.set_main_texture(Texture2D(texture.target()))?;
+
+        self.frame_index += 1;
+        // Log the pipeline state once a second or so (at ~60fps), without spamming.
+        let trace = self.frame_index % 60 == 0;
+        if trace {
+            let (meshes, verts, mut max_a) = (
+                primitives.len(),
+                primitives
+                    .iter()
+                    .filter_map(|p| match &p.primitive {
+                        egui::epaint::Primitive::Mesh(m) => Some(m.vertices.len()),
+                        _ => None,
+                    })
+                    .sum::<usize>(),
+                0u8,
+            );
+            // The largest alpha egui emitted this frame: tells us whether the
+            // transparency is in egui's output or added later in the pipeline.
+            for p in primitives {
+                if let egui::epaint::Primitive::Mesh(m) = &p.primitive {
+                    for v in &m.vertices {
+                        max_a = max_a.max(v.color.to_array()[3]);
+                    }
+                }
+            }
+            tracing::info!(
+                meshes,
+                verts,
+                max_vertex_alpha = max_a,
+                screen = ?(w, h),
+                "egui draw"
+            );
+        }
 
         // Draw into our render target, then restore whatever the camera was using
         // even if a step fails, so the game's own rendering is left untouched.
         let previous = RenderTexture::active()?;
-        RenderTexture::set_active(Some(RenderTexture(rt.target())))?;
+        RenderTexture::set_active(Some(rt))?;
         let result = (|| {
             // Start transparent so last frame's UI doesn't linger.
             gl::clear(false, Color::CLEAR)?;
@@ -314,9 +361,45 @@ impl EguiState {
                 }
                 gl::end()?;
             }
+            // While the target is still active, read a pixel back from inside the
+            // window (near its top-left) to see what actually landed in the target.
+            if trace {
+                if let Err(e) = self.sample_target(w, h) {
+                    tracing::warn!("target readback failed: {}", e);
+                }
+            }
             gl::pop_matrix()
         })();
         RenderTexture::set_active(previous)?;
         result
+    }
+
+    /// Debug: reads one pixel of the active target (the window area) and logs its
+    /// colour, so we can tell where any transparency is introduced.
+    fn sample_target(&mut self, _w: f32, h: f32) -> Result<()> {
+        let readback = match &self.readback {
+            Some(handle) => Texture2D(handle.target()),
+            None => {
+                let tex = Texture2D::new(1, 1, crate::TextureFormat::RGBA32)?;
+                tex.set_hide_flags(crate::HideFlags::HIDE_AND_DONT_SAVE)?;
+                self.readback = Some(GcHandle::new(crate::il2cpp()?, tex.object()));
+                tex
+            }
+        };
+        // egui's window default_pos is near (24, 24) from the top; the target is
+        // bottom-left origin, so flip y. Sample a bit inside the window body.
+        let (px, py) = (80.0, h - 80.0);
+        readback.read_pixels(crate::Rect::new(px, py, 1.0, 1.0), 0, 0)?;
+        let c = readback.get_pixel(0, 0)?;
+        tracing::info!(
+            r = c.r,
+            g = c.g,
+            b = c.b,
+            a = c.a,
+            px,
+            py,
+            "target pixel (window area)"
+        );
+        Ok(())
     }
 }

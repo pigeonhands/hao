@@ -35,6 +35,21 @@ value_type!(
     /// `UnityEngine.Quaternion`, a rotation. Use [`Quaternion::euler`] to build one.
     Quaternion = "UnityEngine" "Quaternion" { x: f32, y: f32, z: f32, w: f32 }
 );
+value_type!(
+    /// `UnityEngine.Rect`, in pixels with the origin at the bottom left.
+    Rect = "UnityEngine" "Rect" { x: f32, y: f32, width: f32, height: f32 }
+);
+
+impl Rect {
+    pub const fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+}
 
 impl Vector2 {
     pub const ZERO: Self = Self::new(0.0, 0.0);
