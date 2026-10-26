@@ -1,5 +1,7 @@
 # hao-il2cpp
 
+[![crates.io](https://img.shields.io/crates/v/hao-il2cpp.svg)](https://crates.io/crates/hao-il2cpp) [![docs.rs](https://img.shields.io/docsrs/hao-il2cpp)](https://docs.rs/hao-il2cpp) [![license](https://img.shields.io/crates/l/hao-il2cpp.svg)](https://github.com/pigeonhands/hao)
+
 Read Unity Il2Cpp games, with the goal of generating .NET proxy assemblies for them with
 [`hao`](../hao), the way Il2CppInterop does for MelonLoader.
 

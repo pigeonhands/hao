@@ -1,5 +1,7 @@
 # hao
 
+[![crates.io](https://img.shields.io/crates/v/hao.svg)](https://crates.io/crates/hao) [![docs.rs](https://img.shields.io/docsrs/hao)](https://docs.rs/hao) [![license](https://img.shields.io/crates/l/hao.svg)](https://github.com/pigeonhands/hao)
+
 A library for reading, editing and writing .NET assemblies in Rust.
 
 - Loads every metadata table into a graph of shared [`Entry`] handles. Types own their

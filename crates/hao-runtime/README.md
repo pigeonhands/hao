@@ -1,5 +1,7 @@
 # hao-runtime
 
+[![crates.io](https://img.shields.io/crates/v/hao-runtime.svg)](https://crates.io/crates/hao-runtime) [![docs.rs](https://img.shields.io/docsrs/hao-runtime)](https://docs.rs/hao-runtime) [![license](https://img.shields.io/crates/l/hao-runtime.svg)](https://github.com/pigeonhands/hao)
+
 Host the .NET runtime in a Rust process and call into managed code.
 
 | feature | runtime | needs |

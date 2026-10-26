@@ -1,5 +1,7 @@
 # hao-runtime-macros
 
+[![crates.io](https://img.shields.io/crates/v/hao-runtime-macros.svg)](https://crates.io/crates/hao-runtime-macros) [![docs.rs](https://img.shields.io/docsrs/hao-runtime-macros)](https://docs.rs/hao-runtime-macros) [![license](https://img.shields.io/crates/l/hao-runtime-macros.svg)](https://github.com/pigeonhands/hao)
+
 `bind!` generates Rust bindings to a .NET assembly, for use with
 [`hao-runtime`](../hao-runtime).
 

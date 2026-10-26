@@ -1,5 +1,7 @@
 # hao-il2cpp-unity
 
+[![crates.io](https://img.shields.io/crates/v/hao-il2cpp-unity.svg)](https://crates.io/crates/hao-il2cpp-unity) [![docs.rs](https://img.shields.io/docsrs/hao-il2cpp-unity)](https://docs.rs/hao-il2cpp-unity) [![license](https://img.shields.io/crates/l/hao-il2cpp-unity.svg)](https://github.com/pigeonhands/hao)
+
 Typed Unity wrappers for mods of Unity Il2Cpp games, on top of
 [`hao-il2cpp-runtime`](../hao-il2cpp-runtime).
 

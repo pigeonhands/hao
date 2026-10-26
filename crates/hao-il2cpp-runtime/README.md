@@ -1,5 +1,7 @@
 # hao-il2cpp-runtime
 
+[![crates.io](https://img.shields.io/crates/v/hao-il2cpp-runtime.svg)](https://crates.io/crates/hao-il2cpp-runtime) [![docs.rs](https://img.shields.io/docsrs/hao-il2cpp-runtime)](https://docs.rs/hao-il2cpp-runtime) [![license](https://img.shields.io/crates/l/hao-il2cpp-runtime.svg)](https://github.com/pigeonhands/hao)
+
 Hook and call into a Unity Il2Cpp game from inside its process, the way MelonLoader mods do.
 
 A mod is a `cdylib` that gets loaded into the game. `on_init` runs once the game's Il2Cpp

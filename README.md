@@ -27,15 +27,15 @@ hao
 
 Tools for working with .NET assemblies and runtimes from Rust.
 
-| crate | |
-|---|---|
-| [`hao`](crates/hao) | read, edit, create and write .NET assemblies (like dnlib / Mono.Cecil) |
-| [`hao-runtime`](crates/hao-runtime) | host CoreCLR or Mono in a Rust process and call managed code |
-| [`hao-runtime-macros`](crates/hao-runtime-macros) | `bind!` generates Rust bindings to a .NET assembly |
-| [`hao-il2cpp`](crates/hao-il2cpp) | read Unity Il2Cpp games and generate assemblies for them (work in progress) |
-| [`hao-il2cpp-runtime`](crates/hao-il2cpp-runtime) | hook and call into Il2Cpp games from inside the game, like MelonLoader |
-| [`hao-il2cpp-unity`](crates/hao-il2cpp-unity) | typed Unity wrappers (game objects, UI, scenes) for Il2Cpp mods, and example mods |
-| [`hao-runtime-tests`](crates/hao-runtime-tests) | binding tests (not published) |
+| crate | version | |
+|---|---|---|
+| [`hao`](crates/hao) | [![](https://img.shields.io/crates/v/hao.svg?label=)](https://crates.io/crates/hao) | read, edit, create and write .NET assemblies (like dnlib / Mono.Cecil) |
+| [`hao-runtime`](crates/hao-runtime) | [![](https://img.shields.io/crates/v/hao-runtime.svg?label=)](https://crates.io/crates/hao-runtime) | host CoreCLR or Mono in a Rust process and call managed code |
+| [`hao-runtime-macros`](crates/hao-runtime-macros) | [![](https://img.shields.io/crates/v/hao-runtime-macros.svg?label=)](https://crates.io/crates/hao-runtime-macros) | `bind!` generates Rust bindings to a .NET assembly |
+| [`hao-il2cpp`](crates/hao-il2cpp) | [![](https://img.shields.io/crates/v/hao-il2cpp.svg?label=)](https://crates.io/crates/hao-il2cpp) | read Unity Il2Cpp games and generate assemblies for them (work in progress) |
+| [`hao-il2cpp-runtime`](crates/hao-il2cpp-runtime) | [![](https://img.shields.io/crates/v/hao-il2cpp-runtime.svg?label=)](https://crates.io/crates/hao-il2cpp-runtime) | hook and call into Il2Cpp games from inside the game, like MelonLoader |
+| [`hao-il2cpp-unity`](crates/hao-il2cpp-unity) | [![](https://img.shields.io/crates/v/hao-il2cpp-unity.svg?label=)](https://crates.io/crates/hao-il2cpp-unity) | typed Unity wrappers (game objects, UI, scenes) for Il2Cpp mods, and example mods |
+| [`hao-runtime-tests`](crates/hao-runtime-tests) | — | binding tests (not published) |
 
 hao's PE handling comes from [pewter](https://github.com/pigeonhands/pewter).
 
