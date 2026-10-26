@@ -84,6 +84,15 @@ fn hooks_il2cpp_code() {
         .methods()
         .find(|m| m.signature() == "static System.String Concat(System.String, System.String)")
         .unwrap();
+    // The signature's parts are available separately, not only as the string.
+    assert!(!method.is_instance());
+    assert_eq!(method.name(), "Concat");
+    assert_eq!(method.return_type_name(), "System.String");
+    assert_eq!(method.parameter_count(), 2);
+    let params: Vec<_> = method.parameters().collect();
+    assert_eq!(params.len(), 2);
+    assert!(params.iter().all(|p| p.type_name == "System.String"));
+    assert_eq!(method.parameter_type_name(0), "System.String");
     let concat: Concat = unsafe { std::mem::transmute(method.code()) };
     let call = |a: &str, b: &str| unsafe {
         il2cpp

@@ -39,8 +39,8 @@ pub use error::{Error, Result};
 #[cfg(unix)]
 pub use loader::on_init;
 pub use typed::{
-    element, HookCallback, Il2CppString, Il2CppValue, MethodArgs, Object, Original, Signature,
-    TypeInfo, ValueCheck,
+    element, HookCallback, Il2CppString, Il2CppValue, MethodArgs, Object, Original, Parameter,
+    Signature, TypeInfo, ValueCheck,
 };
 
 /// The hidden last argument of every Il2Cpp method (`const MethodInfo*`).

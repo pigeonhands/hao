@@ -35,6 +35,10 @@ and `*mut c_void` for pointers and `ref` parameters. `Method::call` calls a meth
 and `Class::methods` lists every overload with its `Method::signature`. Managed exceptions pass
 through hooks.
 
+A method's signature is also available in parts, not only as the string: `Method::name`,
+`is_instance`, `return_type_name`, and `parameters` (each a `Parameter` with its `name` and
+`type_name`, or `parameter_type_name(i)` / `parameter_name(i)`). `signature` is built from these.
+
 This crate is the engine-agnostic layer. [`hao-il2cpp-unity`](../hao-il2cpp-unity) builds typed
 wrappers for Unity on top of it (game objects, UI, scenes, logging) and has the example mods.
 

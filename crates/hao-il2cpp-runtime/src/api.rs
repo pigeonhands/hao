@@ -50,6 +50,7 @@ api! {
     il2cpp_string_length: fn(Ptr) -> i32;
     il2cpp_method_get_param_count: fn(Ptr) -> u32;
     il2cpp_method_get_param: fn(Ptr, u32) -> Ptr;
+    il2cpp_method_get_param_name: fn(Ptr, u32) -> *const c_char;
     il2cpp_method_get_return_type: fn(Ptr) -> Ptr;
     il2cpp_method_is_instance: fn(Ptr) -> bool;
     il2cpp_type_get_type: fn(Ptr) -> i32;

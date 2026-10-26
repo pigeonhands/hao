@@ -57,6 +57,15 @@ impl TypeInfo {
     }
 }
 
+/// A method parameter's name and managed type name, from [`Method::parameters`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Parameter {
+    /// The declared name, e.g. `amount` (often `arg0` in release builds).
+    pub name: String,
+    /// The managed type name, e.g. `System.Single`.
+    pub type_name: String,
+}
+
 /// A managed object reference (`Il2CppObject*`), possibly null.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -380,17 +389,39 @@ impl Method {
         unsafe { (self.il2cpp.api.il2cpp_method_get_param_count)(self.ptr) }
     }
 
-    /// The managed signature, e.g. `System.Int32 Heal(System.Single, System.Boolean)`.
+    /// The managed name of the return type, e.g. `System.Int32`.
+    pub fn return_type_name(&self) -> String {
+        self.type_name(unsafe { (self.il2cpp.api.il2cpp_method_get_return_type)(self.ptr) })
+    }
+
+    /// The managed type name of parameter `index`, e.g. `System.Single`.
+    pub fn parameter_type_name(&self, index: u32) -> String {
+        self.type_name(unsafe { (self.il2cpp.api.il2cpp_method_get_param)(self.ptr, index) })
+    }
+
+    /// The declared name of parameter `index`, e.g. `amount`. Release builds
+    /// often strip these to `arg0`, `arg1`, ...
+    pub fn parameter_name(&self, index: u32) -> String {
+        let name = unsafe { (self.il2cpp.api.il2cpp_method_get_param_name)(self.ptr, index) };
+        unsafe { crate::c_str(name) }.to_owned()
+    }
+
+    /// The parameters, each with its name and type name.
+    pub fn parameters(&self) -> impl Iterator<Item = Parameter> + '_ {
+        (0..self.parameter_count()).map(move |i| Parameter {
+            name: self.parameter_name(i),
+            type_name: self.parameter_type_name(i),
+        })
+    }
+
+    /// The managed signature, e.g. `System.Int32 Heal(System.Single, System.Boolean)`,
+    /// built from [`Method::return_type_name`], [`Method::name`] and [`Method::parameters`].
     pub fn signature(&self) -> String {
-        let api = &self.il2cpp.api;
-        let ret = self.type_name(unsafe { (api.il2cpp_method_get_return_type)(self.ptr) });
-        let params: Vec<String> = (0..self.parameter_count())
-            .map(|i| self.type_name(unsafe { (api.il2cpp_method_get_param)(self.ptr, i) }))
-            .collect();
+        let params: Vec<String> = self.parameters().map(|p| p.type_name).collect();
         format!(
             "{}{} {}({})",
             if self.is_instance() { "" } else { "static " },
-            ret,
+            self.return_type_name(),
             self.name(),
             params.join(", ")
         )
