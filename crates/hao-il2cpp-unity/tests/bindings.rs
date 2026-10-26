@@ -40,4 +40,15 @@ fn unity_methods_match_the_game() {
     // Hooks SceneManager.Internal_SceneLoaded. Nothing loads scenes without Unity.
     hao_il2cpp_unity::on_scene_loaded(|_, _| {}).unwrap();
     hao_il2cpp_unity::on_scene_loaded(|_, _| {}).unwrap();
+
+    // Hooks Time.frameCount. The target must exist with the expected signature;
+    // nothing drives frames without Unity, so the callback won't fire here.
+    let frame_count = il2cpp
+        .class("UnityEngine.CoreModule", "UnityEngine", "Time")
+        .unwrap()
+        .method("get_frameCount", 0)
+        .unwrap();
+    frame_count.check_types::<(), i32>().unwrap();
+    hao_il2cpp_unity::on_update(|| {}).unwrap();
+    hao_il2cpp_unity::on_update(|| {}).unwrap();
 }

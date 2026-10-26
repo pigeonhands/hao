@@ -11,7 +11,8 @@ common Unity functionality the same way for any Unity game:
 - `GameObject` (create, find, add components, activate), `Transform`, `RectTransform`, `Canvas`
   and TextMeshPro text, with `Vector2`, `Vector3` and `Color`
 - `TextOverlay`: a line of text drawn over the game in one call
-- `Scene` and `on_scene_loaded`, which runs code on Unity's main thread whenever a scene loads
+- `Scene` and `on_scene_loaded` (runs code when a scene loads), and `on_update` (runs code every
+  frame, e.g. to refresh an overlay)
 - `log`/`log_warning`/`log_error` (`Debug.Log`, to the game's `Player.log`) and `time`
 
 Each Unity method is looked up the first time it's used and checked against the game's real
@@ -48,8 +49,9 @@ Both are mods for Megabonk's Linux build. Build one, then add
 `LD_PRELOAD=/path/to/target/release/examples/lib<name>.so %command%` to the game's Steam launch
 options.
 
-- [`scene_overlay`](examples/scene_overlay.rs): draws text over the game with the current scene's
-  name and how many scenes have loaded. Works in most Unity games with TextMeshPro.
+- [`scene_overlay`](examples/scene_overlay.rs): draws a live overlay over the game with the
+  current scene, scenes loaded and a smoothed FPS, refreshed every frame via `on_update`. Works
+  in most Unity games with TextMeshPro.
 - [`heal_mod`](examples/heal_mod.rs): doubles healing by hooking the game's own
   `PlayerHealth.Heal`, reads the player's `hp` field and logs to `Player.log`.
 

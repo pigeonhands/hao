@@ -27,6 +27,7 @@
 
 mod binding;
 mod bindings;
+mod lifecycle;
 mod objects;
 mod overlay;
 mod scene;
@@ -36,6 +37,7 @@ pub use hao_il2cpp_runtime as runtime;
 #[cfg(unix)]
 pub use hao_il2cpp_runtime::on_init;
 use hao_il2cpp_runtime::{Error, Il2Cpp, Result};
+pub use lifecycle::on_update;
 pub use objects::{
     Canvas, Component, ComponentType, GameObject, RectTransform, TextMeshPro, Transform,
     UnityObject,
