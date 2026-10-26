@@ -4,7 +4,7 @@
 //! - [`Metadata`] reads `global-metadata.dat`: the names and shape of every type.
 //! - [`Binary`] reads the `Il2CppType` table from `GameAssembly`, which gives the
 //!   types of fields, parameters and return values.
-//! - [`generate`] builds a declaration assembly per image with hao.
+//! - [`generate()`] builds a declaration assembly per image with hao.
 //!
 //! ```no_run
 //! use hao_il2cpp::Metadata;
