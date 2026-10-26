@@ -4,9 +4,9 @@ authors = ["Sam M."]
 categories = ["parsing"]
 keywords = ["dotnet", "managed", "csharp", "netcore",  "dnlib"]
 
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
-description = ".net binary reader"
+description = "Read, edit, create and write .net assemblies"
 license = "MIT"
 repository = "https://github.com/pigeonhands/hao"
 documentation = "https://docs.rs/hao"
