@@ -14,8 +14,10 @@
 //! }
 //! ```
 
+pub mod binary;
 mod error;
 pub mod metadata;
 
 pub use error::{Error, Result};
+pub use binary::{Binary, BinaryImage, ElfImage};
 pub use metadata::Metadata;

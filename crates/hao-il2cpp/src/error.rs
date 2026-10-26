@@ -12,6 +12,8 @@ pub enum Error {
     BadSection(&'static str),
     #[error("index {1} is out of range for {0}")]
     BadIndex(&'static str, i64),
+    #[error("binary: {0}")]
+    Binary(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
