@@ -36,6 +36,21 @@ for method in health.methods() {
 game.write_assemblies("out")?;
 ```
 
+### Declaration assemblies
+
+An Il2Cpp game ships no .NET assemblies: its C# was compiled to C++ and then to native code in
+`GameAssembly`. What's left of the original assemblies is `global-metadata.dat`, which has every
+type, method and field name but no code. `write_assemblies` (and the `generate_dlls` example)
+rebuild one ordinary .NET assembly per original assembly from it: every type, field, constant,
+property, event and method signature, with method bodies that just throw. They're useful for:
+
+- browsing the game in ILSpy, dnSpy or Rider to find what a mod should hook or read
+  (for [`hao-il2cpp-runtime`](../hao-il2cpp-runtime)), with exact names and signatures
+- compiling C# against the game's API, since the declarations match the real types
+- comparing game versions to see what an update changed
+
+They contain no game logic: for that you'd disassemble `GameAssembly`.
+
 `Game` is built on the lower level `Metadata` (`global-metadata.dat`) and `Binary` (the
 `Il2CppType` table from `GameAssembly`), which are public for anything the views don't cover.
 
