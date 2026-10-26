@@ -12,6 +12,8 @@ pub enum Error {
     Host { function: &'static str, code: u32 },
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("managed exception: {0}")]
+    Managed(String),
     #[error("{0}")]
     Other(String),
 }

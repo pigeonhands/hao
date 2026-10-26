@@ -9,6 +9,7 @@
 //! static methods on CoreCLR, or any static method on Mono. Bindings generated
 //! by `hao-runtime-macros` produce such methods for you.
 
+pub mod bindings;
 #[cfg(feature = "coreclr")]
 mod coreclr;
 mod error;
@@ -17,6 +18,7 @@ mod mono;
 
 use std::{ffi::c_void, path::Path, sync::Arc};
 
+pub use bindings::{BoundAssembly, Object};
 pub use error::{Error, Result};
 
 #[cfg(feature = "coreclr")]
@@ -87,6 +89,17 @@ impl Runtime {
             Inner::CoreClr(_) => Backend::CoreClr,
             #[cfg(feature = "mono")]
             Inner::Mono(_) => Backend::Mono,
+        }
+    }
+
+    /// Lets the calling thread run managed code. Needed for Mono on threads it
+    /// didn't start, a no-op on CoreCLR. Binding calls do this automatically.
+    pub fn attach_thread(&self) {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(_) => {}
+            #[cfg(feature = "mono")]
+            Inner::Mono(mono) => mono.attach_thread(),
         }
     }
 
