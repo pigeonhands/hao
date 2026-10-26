@@ -81,14 +81,17 @@ impl MetadataRegistration {
         let word = |v: u64| image.pointer(v).unwrap_or(0);
         let pair = |v: u64| (word(v), word(v + p));
         let mut found = Vec::new();
-        for (start, end) in image.data_segments() {
-            let mut vaddr = start;
-            while vaddr + 4 * p <= end {
+        for segment in image.data_segments() {
+            let start = segment.0;
+            // Reads past the mapping just return 0, so the window needs no upper bound.
+            for vaddr in image
+                .pointer_slots(segment)
+                .filter(|v| *v >= start + 10 * p)
+            {
                 if word(vaddr) == count
                     && word(vaddr + 2 * p) == count
                     && image.is_mapped(word(vaddr + p))
                     && image.is_mapped(word(vaddr + 3 * p))
-                    && vaddr >= start + 10 * p
                 {
                     let base = vaddr - 10 * p;
                     let types = pair(base + 6 * p);
@@ -105,7 +108,6 @@ impl MetadataRegistration {
                         });
                     }
                 }
-                vaddr += p;
             }
         }
         match found.len() {
@@ -128,15 +130,12 @@ pub struct Binary {
 impl Binary {
     pub fn read(image: &impl LoadedImage, metadata: &Metadata) -> Result<Self> {
         let registration = MetadataRegistration::find(image, metadata)?;
-        let p = image.pointer_size();
         let (count, array) = registration.types;
-        let types = (0..count)
-            .map(|i| {
-                let address = image
-                    .pointer(array + i * p)
-                    .ok_or_else(|| Error::Binary(format!("type pointer {} is unmapped", i)))?;
-                read_type(image, address, 0)
-            })
+        let types = image
+            .pointers(array, count)
+            .ok_or_else(|| Error::Binary("the Il2CppType pointer table is unmapped".into()))?
+            .into_iter()
+            .map(|address| read_type(image, address, 0))
             .collect::<Result<Vec<_>>>()?;
         Ok(Self {
             metadata_registration: registration,
