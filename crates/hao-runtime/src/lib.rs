@@ -1,7 +1,7 @@
 //! Host the .NET runtime in a Rust process and call into managed code.
 //!
 //! Two backends are available behind features:
-//! - `coreclr` (default): .NET 8+ through hostfxr.
+//! - `coreclr` (default): .NET 8+, loading `libcoreclr` directly.
 //! - `mono`: the Mono embedding API, as used by Unity.
 //!
 //! Managed methods are called through native function pointers, so the
@@ -130,7 +130,12 @@ impl Runtime {
     ///
     /// On CoreCLR the method must be `[UnmanagedCallersOnly]`. On Mono the
     /// returned thunk takes an extra trailing `*mut *mut c_void` exception argument.
-    pub fn function_pointer(&self, assembly: &str, type_name: &str, method: &str) -> Result<*const c_void> {
+    pub fn function_pointer(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+    ) -> Result<*const c_void> {
         match &*self.0 {
             #[cfg(feature = "coreclr")]
             Inner::CoreClr(clr) => clr.function_pointer(assembly, type_name, method),

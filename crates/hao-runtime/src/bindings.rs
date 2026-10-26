@@ -124,7 +124,13 @@ impl BoundAssembly {
         Ok(functions[index] as *const c_void)
     }
 
-    fn call_helper(&self, runtime: &Runtime, index: usize, handle: isize, out: *mut c_void) -> Result<()> {
+    fn call_helper(
+        &self,
+        runtime: &Runtime,
+        index: usize,
+        handle: isize,
+        out: *mut c_void,
+    ) -> Result<()> {
         let f = self.function(runtime, index)?;
         let mut exception: isize = 0;
         if index == helper::FREE {
@@ -149,9 +155,19 @@ impl BoundAssembly {
             return Ok(None);
         }
         let mut length: i32 = 0;
-        self.call_helper(runtime, helper::STRING_LENGTH, handle, (&mut length as *mut i32).cast())?;
+        self.call_helper(
+            runtime,
+            helper::STRING_LENGTH,
+            handle,
+            (&mut length as *mut i32).cast(),
+        )?;
         let mut buffer = vec![0u16; length.max(0) as usize];
-        self.call_helper(runtime, helper::STRING_COPY, handle, buffer.as_mut_ptr().cast())?;
+        self.call_helper(
+            runtime,
+            helper::STRING_COPY,
+            handle,
+            buffer.as_mut_ptr().cast(),
+        )?;
         self.free(runtime, handle)?;
         Ok(Some(String::from_utf16_lossy(&buffer)))
     }
@@ -159,7 +175,12 @@ impl BoundAssembly {
     /// `ToString()` of the object behind `handle`, without freeing it.
     pub fn object_to_string(&self, runtime: &Runtime, handle: isize) -> Result<String> {
         let mut string: isize = 0;
-        self.call_helper(runtime, helper::TO_STRING, handle, (&mut string as *mut isize).cast())?;
+        self.call_helper(
+            runtime,
+            helper::TO_STRING,
+            handle,
+            (&mut string as *mut isize).cast(),
+        )?;
         Ok(self.take_string(runtime, string)?.unwrap_or_default())
     }
 
@@ -185,7 +206,11 @@ impl Object {
     ///
     /// # Safety
     /// `handle` must be a live `GCHandle` that nothing else will free.
-    pub unsafe fn from_handle(handle: isize, runtime: Runtime, assembly: &'static BoundAssembly) -> Self {
+    pub unsafe fn from_handle(
+        handle: isize,
+        runtime: Runtime,
+        assembly: &'static BoundAssembly,
+    ) -> Self {
         Self {
             handle,
             runtime,

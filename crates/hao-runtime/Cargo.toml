@@ -12,11 +12,12 @@ keywords = ["dotnet", "coreclr", "mono", "hosting", "interop"]
 [dependencies]
 libloading = "0.9"
 thiserror = "2"
+hao = { version = "0.0.4", path = "../hao", optional = true }
 
 [dev-dependencies]
 hao = { path = "../hao" }
 
 [features]
 default = ["coreclr"]
-coreclr = []
+coreclr = ["dep:hao"]
 mono = []

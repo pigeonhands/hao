@@ -51,8 +51,12 @@ fn call_generated_method_through_mono_thunk() {
             return;
         }
     };
-    runtime.load_assembly_bytes("MonoExports", &exports_assembly()).unwrap();
-    let add = runtime.function_pointer("MonoExports", "Native.Exports", "Add").unwrap();
+    runtime
+        .load_assembly_bytes("MonoExports", &exports_assembly())
+        .unwrap();
+    let add = runtime
+        .function_pointer("MonoExports", "Native.Exports", "Add")
+        .unwrap();
     let add: extern "C" fn(i32, i32, *mut *mut c_void) -> i32 = unsafe { std::mem::transmute(add) };
     let mut exception = std::ptr::null_mut();
     assert_eq!(add(40, 2, &mut exception), 42);

@@ -4,7 +4,7 @@ Host the .NET runtime in a Rust process and call into managed code.
 
 | feature | runtime | needs |
 |---|---|---|
-| `coreclr` (default) | .NET 8+ through hostfxr, like `dotnet` itself | a .NET install (`DOTNET_ROOT` or the standard locations) |
+| `coreclr` (default) | .NET 8+, loading `libcoreclr` directly | a .NET install (`DOTNET_ROOT` or the standard locations) |
 | `mono` | the Mono embedding API, as used by Unity | `libmonosgen-2.0` (system Mono, or a game's own Mono) |
 
 ```rust

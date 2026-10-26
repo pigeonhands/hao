@@ -184,17 +184,29 @@ impl Mono {
                 c_name.as_ptr(),
             );
             if image.is_null() {
-                return Err(Error::Other(format!("could not open image {} ({})", name, status)));
+                return Err(Error::Other(format!(
+                    "could not open image {} ({})",
+                    name, status
+                )));
             }
-            let assembly = (self.api.assembly_load_from_full)(image, c_name.as_ptr(), &mut status, 0);
+            let assembly =
+                (self.api.assembly_load_from_full)(image, c_name.as_ptr(), &mut status, 0);
             if assembly.is_null() {
-                return Err(Error::Other(format!("could not load assembly {} ({})", name, status)));
+                return Err(Error::Other(format!(
+                    "could not load assembly {} ({})",
+                    name, status
+                )));
             }
             self.register(name, assembly)
         }
     }
 
-    pub fn function_pointer(&self, assembly: &str, type_name: &str, method: &str) -> Result<*const c_void> {
+    pub fn function_pointer(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+    ) -> Result<*const c_void> {
         self.attach_thread();
         let image = *self
             .images
@@ -203,11 +215,15 @@ impl Mono {
             .get(assembly)
             .ok_or_else(|| Error::NotFound(format!("loaded assembly {}", assembly)))?;
         let (namespace, name) = type_name.rsplit_once('.').unwrap_or(("", type_name));
-        let (namespace, name, method_name) = (cstring(namespace)?, cstring(name)?, cstring(method)?);
+        let (namespace, name, method_name) =
+            (cstring(namespace)?, cstring(name)?, cstring(method)?);
         unsafe {
             let class = (self.api.class_from_name)(image as Ptr, namespace.as_ptr(), name.as_ptr());
             if class.is_null() {
-                return Err(Error::NotFound(format!("type {} in {}", type_name, assembly)));
+                return Err(Error::NotFound(format!(
+                    "type {} in {}",
+                    type_name, assembly
+                )));
             }
             let method_ptr = (self.api.class_get_method_from_name)(class, method_name.as_ptr(), -1);
             if method_ptr.is_null() {
@@ -215,7 +231,10 @@ impl Mono {
             }
             let thunk = (self.api.method_get_unmanaged_thunk)(method_ptr);
             if thunk.is_null() {
-                return Err(Error::Other(format!("no unmanaged thunk for {}::{}", type_name, method)));
+                return Err(Error::Other(format!(
+                    "no unmanaged thunk for {}::{}",
+                    type_name, method
+                )));
             }
             Ok(thunk)
         }
