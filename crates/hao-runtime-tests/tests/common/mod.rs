@@ -8,7 +8,7 @@ use hao_runtime::{Error, Runtime};
 use test_lib::test_lib::{greetings::Greeter, Calculator, Strings};
 
 pub fn exercise(runtime: &Runtime) {
-    let calculator = Calculator::new_1(runtime, 10).unwrap();
+    let calculator = Calculator::new_i32(runtime, 10).unwrap();
     assert_eq!(calculator.add(5).unwrap(), 15);
     assert_eq!(calculator.get_total().unwrap(), 15);
     assert!(calculator.is_positive().unwrap());

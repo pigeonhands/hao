@@ -100,7 +100,9 @@ impl BoundAssembly {
         if cache.get().is_some() {
             return Ok(());
         }
-        runtime.load_assembly(self.assembly_path)?;
+        if !self.assembly_path.is_empty() {
+            runtime.load_assembly(self.assembly_path)?;
+        }
         let thunks = match runtime.backend() {
             Backend::CoreClr => self.coreclr_thunks,
             Backend::Mono => self.mono_thunks,

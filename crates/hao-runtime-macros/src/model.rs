@@ -1,28 +1,18 @@
-//! Which types and methods of an assembly can be bound, and how their values
-//! cross the native boundary.
+//! Which types and methods of an assembly get bindings, and their Rust names.
 
 use hao::{
     dotnet::{
         entries::{Entry, Method, TypeDef, TypeDefOrRef},
-        md::streams::tables_stream::{MethodFlags, TypeAttributes},
-        signature::{PrimitiveType, TypeSig},
+        md::streams::tables_stream::TypeAttributes,
     },
     Module,
 };
 
-/// How a value is passed between Rust and a thunk.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Ty {
-    Void,
-    Bool,
-    Primitive(PrimitiveType),
-    String,
-    /// A reference type. `bound` is the index of its bound type, if any.
-    Object {
-        ty: Option<TypeDefOrRef>,
-        bound: Option<usize>,
-    },
-}
+use crate::{
+    names::{module_path, snake_case, type_name},
+    thunks::HELPER_COUNT,
+    ty::Ty,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MethodKind {
@@ -37,72 +27,38 @@ pub struct BoundMethod {
     pub params: Vec<(String, Ty)>,
     pub ret: Ty,
     pub rust_name: String,
+    /// Index of the method's thunk, `f{thunk}`.
     pub thunk: usize,
+}
+
+impl BoundMethod {
+    /// Whether the thunk writes a result through a pointer.
+    pub fn returns(&self) -> bool {
+        self.kind == MethodKind::Constructor || self.ret != Ty::Void
+    }
 }
 
 pub struct BoundType {
     pub ty: Entry<TypeDef>,
-    pub namespace: Vec<String>,
+    /// Rust modules, from the namespace.
+    pub module: Vec<String>,
     pub rust_name: String,
+    /// The nearest base class that is bound too.
+    pub base: Option<usize>,
     pub methods: Vec<BoundMethod>,
-}
-
-fn is_public(t: &TypeDef) -> bool {
-    let visibility = t.flags & TypeAttributes::VisibilityMask;
-    let public = visibility == TypeAttributes::Public || visibility == TypeAttributes::NestedPublic;
-    public
-        && t.declaring_type
-            .upgrade()
-            .is_none_or(|parent| is_public(&parent.get()))
-}
-
-fn bindable_type(t: &TypeDef) -> bool {
-    is_public(t)
-        && t.generic_params.is_empty()
-        && !t.is_value_type()
-        && !t.is_delegate()
-        && !t.name.starts_with('<')
-}
-
-pub fn snake_case(name: &str) -> String {
-    let mut out = String::new();
-    let chars: Vec<char> = name.chars().collect();
-    for (i, c) in chars.iter().enumerate() {
-        if c.is_uppercase() {
-            let prev_lower = i > 0 && (chars[i - 1].is_lowercase() || chars[i - 1].is_ascii_digit());
-            let next_lower = chars.get(i + 1).is_some_and(|n| n.is_lowercase());
-            let prev_upper = i > 0 && chars[i - 1].is_uppercase();
-            if !out.is_empty() && !out.ends_with('_') && (prev_lower || (prev_upper && next_lower)) {
-                out.push('_');
-            }
-            out.extend(c.to_lowercase());
-        } else if c.is_alphanumeric() || *c == '_' {
-            out.push(*c);
-        } else {
-            out.push('_');
-        }
-    }
-    out
-}
-
-fn rust_type_name(t: &TypeDef) -> String {
-    let own = t.name.split('`').next().unwrap_or(&t.name).replace(|c: char| !c.is_alphanumeric(), "_");
-    match t.declaring_type.upgrade() {
-        Some(parent) => format!("{}_{}", rust_type_name(&parent.get()), own),
-        None => own,
-    }
-}
-
-fn top_level_namespace(t: &Entry<TypeDef>) -> String {
-    match t.get().declaring_type.upgrade() {
-        Some(parent) => top_level_namespace(&parent),
-        None => t.get().namespace.clone(),
-    }
 }
 
 pub struct Model {
     pub types: Vec<BoundType>,
     pub thunk_count: usize,
+}
+
+fn bindable_type(t: &TypeDef) -> bool {
+    t.is_visible()
+        && t.generic_params.is_empty()
+        && !t.is_value_type()
+        && !t.is_delegate()
+        && !t.name.starts_with('<')
 }
 
 impl Model {
@@ -114,77 +70,75 @@ impl Model {
             .filter(|t| filter.is_none_or(|f| f.contains(&t.get().full_name().replace('/', "+"))))
             .collect();
 
-        let mut thunk = hao_runtime_thunk_base();
-        let mut bound_types = Vec::new();
-        for ty in &types {
-            let namespace = top_level_namespace(ty)
-                .split('.')
-                .filter(|s| !s.is_empty())
-                .map(snake_case)
-                .collect();
-            let mut methods: Vec<BoundMethod> = Vec::new();
-            for method in ty.get().methods.iter() {
-                let Some(mut bound) = bind_method(method, &types) else {
-                    continue;
-                };
-                let base = bound.rust_name.clone();
-                let mut n = 1;
-                while methods.iter().any(|m| m.rust_name == bound.rust_name) {
-                    bound.rust_name = format!("{}_{}", base, n);
-                    n += 1;
+        let mut thunk = HELPER_COUNT;
+        let bound = types
+            .iter()
+            .map(|ty| {
+                let mut methods: Vec<BoundMethod> = Vec::new();
+                for method in &ty.get().methods {
+                    let Some(mut bound) = bind_method(method, &types) else {
+                        continue;
+                    };
+                    bound.rust_name = overload_name(&bound, &methods);
+                    bound.thunk = thunk;
+                    thunk += 1;
+                    methods.push(bound);
                 }
-                bound.thunk = thunk;
-                thunk += 1;
-                methods.push(bound);
-            }
-            bound_types.push(BoundType {
-                ty: ty.clone(),
-                namespace,
-                rust_name: rust_type_name(&ty.get()),
-                methods,
-            });
-        }
+                BoundType {
+                    ty: ty.clone(),
+                    module: module_path(&ty.get().top_level_namespace()),
+                    rust_name: type_name(&ty.get()),
+                    base: bound_base(ty, &types),
+                    methods,
+                }
+            })
+            .collect();
         Self {
-            types: bound_types,
+            types: bound,
             thunk_count: thunk,
         }
     }
 }
 
-/// The number of helper thunks before the bound methods (`hao_runtime::bindings::helper::COUNT`).
-fn hao_runtime_thunk_base() -> usize {
-    4
+/// The first overload keeps the plain name, later ones are named after their
+/// parameter types: `append`, `append_i32`, `append_str_i32_i32`.
+fn overload_name(method: &BoundMethod, earlier: &[BoundMethod]) -> String {
+    let taken = |name: &str| earlier.iter().any(|m| m.rust_name == name);
+    if !taken(&method.rust_name) {
+        return method.rust_name.clone();
+    }
+    let suffix: Vec<String> = method.params.iter().map(|(_, ty)| ty.suffix()).collect();
+    let base = match suffix.is_empty() {
+        true => format!("{}_empty", method.rust_name),
+        false => format!("{}_{}", method.rust_name, suffix.join("_")),
+    };
+    let mut name = base.clone();
+    let mut n = 1;
+    while taken(&name) {
+        name = format!("{}_{}", base, n);
+        n += 1;
+    }
+    name
 }
 
-fn value_ty(sig: &TypeSig, types: &[Entry<TypeDef>]) -> Option<Ty> {
-    Some(match sig.unmodified() {
-        TypeSig::Primitive(PrimitiveType::Void) => Ty::Void,
-        TypeSig::Primitive(PrimitiveType::Boolean) => Ty::Bool,
-        TypeSig::Primitive(PrimitiveType::String) => Ty::String,
-        TypeSig::Primitive(PrimitiveType::Object) => Ty::Object { ty: None, bound: None },
-        TypeSig::Primitive(PrimitiveType::TypedByRef) => return None,
-        TypeSig::Primitive(p) => Ty::Primitive(*p),
-        TypeSig::Class(t) => {
-            let bound = match t {
-                TypeDefOrRef::TypeDef(def) => types.iter().position(|b| b.ptr_eq(def)),
-                _ => None,
-            };
-            if matches!(t, TypeDefOrRef::TypeSpec(_)) {
-                return None;
-            }
-            Ty::Object {
-                ty: Some(t.clone()),
-                bound,
-            }
+fn bound_base(ty: &Entry<TypeDef>, types: &[Entry<TypeDef>]) -> Option<usize> {
+    let mut current = ty.get().extends.clone();
+    while let Some(TypeDefOrRef::TypeDef(def)) = current {
+        if let Some(index) = types.iter().position(|t| t.ptr_eq(&def)) {
+            return Some(index);
         }
-        _ => return None,
-    })
+        current = def.get().extends.clone();
+    }
+    None
 }
 
 fn bind_method(method: &Entry<Method>, types: &[Entry<TypeDef>]) -> Option<BoundMethod> {
     let m = method.get();
-    let public = m.flags & MethodFlags::MemberAccessMask == MethodFlags::Public;
-    if !public || m.signature.generic_param_count > 0 || !m.signature.varargs.is_empty() || m.is_cctor() {
+    if !m.is_public()
+        || m.signature.generic_param_count > 0
+        || !m.signature.varargs.is_empty()
+        || m.is_cctor()
+    {
         return None;
     }
     let kind = if m.is_ctor() {
@@ -203,20 +157,18 @@ fn bind_method(method: &Entry<Method>, types: &[Entry<TypeDef>]) -> Option<Bound
         .params
         .iter()
         .enumerate()
-        .map(|(i, p)| {
-            let ty = value_ty(p, types)?;
-            (ty != Ty::Void).then(|| (snake_case(&m.param_name(i)), ty))
+        .map(|(i, p)| match Ty::from_sig(p, types)? {
+            Ty::Void => None,
+            ty => Some((snake_case(&m.param_name(i)), ty)),
         })
         .collect::<Option<Vec<_>>>()?;
-    let ret = if kind == MethodKind::Constructor {
-        Ty::Void
-    } else {
-        value_ty(&m.signature.ret, types)?
+    let ret = match kind {
+        MethodKind::Constructor => Ty::Void,
+        _ => Ty::from_sig(&m.signature.ret, types)?,
     };
-    let rust_name = if kind == MethodKind::Constructor {
-        "new".to_owned()
-    } else {
-        snake_case(&m.name)
+    let rust_name = match kind {
+        MethodKind::Constructor => "new".to_owned(),
+        _ => snake_case(&m.name),
     };
     Some(BoundMethod {
         method: method.clone(),

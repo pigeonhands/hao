@@ -1,19 +1,24 @@
-//! Builds the thunk assembly: static native callable wrappers around the bound
-//! methods, using the layout documented in `hao_runtime::bindings`.
+//! Builds the thunk assembly: native callable static wrappers around the bound
+//! methods, laid out as `hao_runtime::bindings` documents.
 
 use hao::{
     dotnet::{
-        entries::{CustomAttribute, CustomAttributeCtor, CustomAttributeValue, Method, TypeDef, TypeDefOrRef},
-        il::{Emitter, Instruction, MemberToken, OpCode, Operand},
-        md::streams::tables_stream::{MethodFlags, TypeAttributes},
+        entries::{CustomAttributeCtor, Entry, Method, TypeDef, TypeDefOrRef},
+        il::{Emitter, MemberToken, OpCode},
         module::{ModuleKind, TargetRuntime},
-        signature::{MethodSig, PrimitiveType, TypeSig},
+        signature::{MethodSig, TypeSig},
     },
     error::Result,
     Module,
 };
 
-use crate::model::{MethodKind, Model, Ty};
+use crate::{
+    model::{BoundMethod, MethodKind, Model},
+    ty::Ty,
+};
+
+/// The helper thunks before the bound methods, `hao_runtime::bindings::helper::COUNT`.
+pub const HELPER_COUNT: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
@@ -21,13 +26,11 @@ pub enum Target {
     Mono,
 }
 
-struct Ctx {
-    module: Module,
-    target: Target,
-    uco: Option<MemberToken>,
-    gchandle: TypeSig,
+/// Core library members the thunks use.
+struct Corlib {
     exception: TypeDefOrRef,
     string: TypeDefOrRef,
+    gchandle: TypeSig,
     alloc: MemberToken,
     to_int_ptr: MemberToken,
     from_int_ptr: MemberToken,
@@ -40,314 +43,319 @@ struct Ctx {
     to_string: MemberToken,
 }
 
-const NATIVE_INT: TypeSig = TypeSig::Primitive(PrimitiveType::I);
-
-fn native_ty(ty: &Ty) -> Vec<TypeSig> {
-    match ty {
-        Ty::Void => vec![],
-        Ty::Bool => vec![TypeSig::Primitive(PrimitiveType::U1)],
-        Ty::Primitive(PrimitiveType::Char) => vec![TypeSig::Primitive(PrimitiveType::U2)],
-        Ty::Primitive(p) => vec![TypeSig::Primitive(*p)],
-        Ty::String => vec![NATIVE_INT, TypeSig::INT32],
-        Ty::Object { .. } => vec![NATIVE_INT],
+impl Corlib {
+    fn import(module: &mut Module) -> Result<Self> {
+        const GC_HANDLE: &str = "System.Runtime.InteropServices.GCHandle";
+        let gchandle = TypeSig::ValueType(module.corlib_type(GC_HANDLE)?);
+        let chars = TypeSig::sz_array(TypeSig::CHAR);
+        let (int, nint) = (TypeSig::INT32, TypeSig::NATIVE_INT);
+        let r#static = MethodSig::new_static;
+        let instance = MethodSig::new_instance;
+        let mut import = |ty: &str, name: &str, sig| module.import_corlib_method(ty, name, sig);
+        Ok(Self {
+            alloc: import(
+                GC_HANDLE,
+                "Alloc",
+                r#static(gchandle.clone(), vec![TypeSig::OBJECT]),
+            )?,
+            to_int_ptr: import(
+                GC_HANDLE,
+                "ToIntPtr",
+                r#static(nint.clone(), vec![gchandle.clone()]),
+            )?,
+            from_int_ptr: import(
+                GC_HANDLE,
+                "FromIntPtr",
+                r#static(gchandle.clone(), vec![nint.clone()]),
+            )?,
+            get_target: import(GC_HANDLE, "get_Target", instance(TypeSig::OBJECT, vec![]))?,
+            free: import(GC_HANDLE, "Free", instance(TypeSig::VOID, vec![]))?,
+            string_ctor: import(
+                "System.String",
+                ".ctor",
+                instance(
+                    TypeSig::VOID,
+                    vec![TypeSig::ptr(TypeSig::CHAR), int.clone(), int.clone()],
+                ),
+            )?,
+            string_length: import("System.String", "get_Length", instance(int.clone(), vec![]))?,
+            to_char_array: import(
+                "System.String",
+                "ToCharArray",
+                instance(chars.clone(), vec![]),
+            )?,
+            marshal_copy: import(
+                "System.Runtime.InteropServices.Marshal",
+                "Copy",
+                r#static(TypeSig::VOID, vec![chars, int.clone(), nint, int]),
+            )?,
+            to_string: import(
+                "System.Object",
+                "ToString",
+                instance(TypeSig::STRING, vec![]),
+            )?,
+            exception: module.corlib_type("System.Exception")?,
+            string: module.corlib_type("System.String")?,
+            gchandle,
+        })
     }
 }
 
-fn store_op(ty: &Ty) -> OpCode {
-    match ty {
-        Ty::Bool => OpCode::Stind_I1,
-        Ty::Primitive(p) => match p {
-            PrimitiveType::I1 | PrimitiveType::U1 => OpCode::Stind_I1,
-            PrimitiveType::I2 | PrimitiveType::U2 | PrimitiveType::Char => OpCode::Stind_I2,
-            PrimitiveType::I4 | PrimitiveType::U4 => OpCode::Stind_I4,
-            PrimitiveType::I8 | PrimitiveType::U8 => OpCode::Stind_I8,
-            PrimitiveType::R4 => OpCode::Stind_R4,
-            PrimitiveType::R8 => OpCode::Stind_R8,
-            _ => OpCode::Stind_I,
-        },
-        _ => OpCode::Stind_I,
+/// Code generation inside one thunk.
+struct Thunk<'a> {
+    corlib: &'a Corlib,
+    e: &'a mut Emitter,
+    /// A `GCHandle` local for unwrapping handles.
+    gch: u16,
+}
+
+impl Thunk<'_> {
+    /// Pushes the object behind the handle in argument `arg`, `null` for 0.
+    fn load_object(&mut self, arg: u16, cast: Option<&TypeDefOrRef>) {
+        let (c, gch) = (self.corlib, self.gch);
+        self.e.ldarg(arg).if_else(
+            |e| {
+                e.ldarg(arg)
+                    .call(&c.from_int_ptr)
+                    .stloc(gch)
+                    .ldloca(gch)
+                    .call(&c.get_target);
+                if let Some(cast) = cast {
+                    e.castclass(cast.clone());
+                }
+            },
+            |e| {
+                e.ldnull();
+            },
+        );
+    }
+
+    /// Pushes a new string from the UTF-16 pointer and length in `arg` and `arg + 1`, `null` for a null pointer.
+    fn load_string(&mut self, arg: u16) {
+        let c = self.corlib;
+        self.e.ldarg(arg).if_else(
+            |e| {
+                e.ldarg(arg).ldc_i4(0).ldarg(arg + 1).newobj(&c.string_ctor);
+            },
+            |e| {
+                e.ldnull();
+            },
+        );
+    }
+
+    /// Replaces the object on the stack with a new handle to it, 0 for `null`.
+    fn store_object(&mut self) {
+        let c = self.corlib;
+        self.e.dup().if_else(
+            |e| {
+                e.call(&c.alloc).call(&c.to_int_ptr);
+            },
+            |e| {
+                e.pop().ldc_i4(0).op(OpCode::Conv_I);
+            },
+        );
+    }
+
+    /// Loads a parameter of type `ty` starting at argument `arg`, returning how many arguments it used.
+    fn load_param(&mut self, ty: &Ty, arg: u16, cast: Option<&TypeDefOrRef>) -> u16 {
+        match ty {
+            Ty::String => self.load_string(arg),
+            Ty::Object { .. } => self.load_object(arg, cast),
+            _ => {
+                self.e.ldarg(arg);
+            }
+        }
+        ty.native().len() as u16
+    }
+
+    /// Writes the result on the stack through the pointer pushed before the call.
+    fn store_result(&mut self, ty: &Ty) {
+        if ty.returned_as_handle() {
+            self.store_object();
+        }
+        self.e.op(ty.store_op());
     }
 }
 
-impl Ctx {
+struct Builder {
+    module: Module,
+    corlib: Corlib,
+    class: Entry<TypeDef>,
+    /// `[UnmanagedCallersOnly]` on CoreCLR.
+    attribute: Option<CustomAttributeCtor>,
+    count: usize,
+}
+
+impl Builder {
     fn new(name: &str, target: Target) -> Result<Self> {
         let runtime = match target {
             Target::CoreClr => TargetRuntime::NetCoreImplementation(8),
             Target::Mono => TargetRuntime::NetFramework,
         };
         let mut module = Module::new(name, ModuleKind::Dll, runtime);
-        let instance = |ret, params| MethodSig::new_instance(ret, params);
-        let r#static = |ret, params| MethodSig::new_static(ret, params);
-
-        let gchandle_type = module.corlib_type("System.Runtime.InteropServices.GCHandle")?;
-        let gchandle = TypeSig::ValueType(gchandle_type.clone());
-        let marshal = module.corlib_type("System.Runtime.InteropServices.Marshal")?;
-        let string = module.corlib_type("System.String")?;
-        let object = module.corlib_type("System.Object")?;
-        let exception = module.corlib_type("System.Exception")?;
-        let chars = TypeSig::sz_array(TypeSig::CHAR);
-
-        let uco = match target {
-            Target::CoreClr => {
-                let attribute = module.corlib_type("System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute")?;
-                Some(module.import_method_on(&attribute, ".ctor", instance(TypeSig::VOID, vec![]))?)
-            }
+        let attribute = match target {
+            Target::CoreClr => Some(module.corlib_attribute(
+                "System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute",
+            )?),
             Target::Mono => None,
         };
-
         Ok(Self {
-            alloc: module.import_method_on(&gchandle_type, "Alloc", r#static(gchandle.clone(), vec![TypeSig::OBJECT]))?,
-            to_int_ptr: module.import_method_on(&gchandle_type, "ToIntPtr", r#static(NATIVE_INT, vec![gchandle.clone()]))?,
-            from_int_ptr: module.import_method_on(&gchandle_type, "FromIntPtr", r#static(gchandle.clone(), vec![NATIVE_INT]))?,
-            get_target: module.import_method_on(&gchandle_type, "get_Target", instance(TypeSig::OBJECT, vec![]))?,
-            free: module.import_method_on(&gchandle_type, "Free", instance(TypeSig::VOID, vec![]))?,
-            string_ctor: module.import_method_on(
-                &string,
-                ".ctor",
-                instance(TypeSig::VOID, vec![TypeSig::Ptr(Box::new(TypeSig::CHAR)), TypeSig::INT32, TypeSig::INT32]),
-            )?,
-            string_length: module.import_method_on(&string, "get_Length", instance(TypeSig::INT32, vec![]))?,
-            to_char_array: module.import_method_on(&string, "ToCharArray", instance(chars.clone(), vec![]))?,
-            marshal_copy: module.import_method_on(
-                &marshal,
-                "Copy",
-                r#static(TypeSig::VOID, vec![chars, TypeSig::INT32, NATIVE_INT, TypeSig::INT32]),
-            )?,
-            to_string: module.import_method_on(&object, "ToString", instance(TypeSig::STRING, vec![]))?,
-            uco,
-            gchandle,
-            exception,
-            string,
+            corlib: Corlib::import(&mut module)?,
+            class: module.add_static_class("HaoThunks", "Thunks")?,
             module,
-            target,
+            attribute,
+            count: 0,
         })
     }
 
-    /// Converts the handle in argument `arg` to its object, or `null` for 0.
-    fn load_object(&self, e: &mut Emitter, arg: u16, gch: u16, cast: Option<&TypeDefOrRef>) {
-        let not_null = e.label();
-        let done = e.label();
-        e.emit(Instruction::ldarg(arg));
-        e.branch(OpCode::Brtrue, not_null);
-        e.op(OpCode::Ldnull);
-        e.branch(OpCode::Br, done);
-        e.mark(not_null);
-        e.emit(Instruction::ldarg(arg));
-        e.emit(Instruction::call(self.from_int_ptr.clone()));
-        e.emit(Instruction::stloc(gch));
-        e.emit(Instruction::new(OpCode::Ldloca_S, Operand::Local(gch)));
-        e.emit(Instruction::call(self.get_target.clone()));
-        if let Some(cast) = cast {
-            e.emit(Instruction::new(OpCode::Castclass, Operand::Token(cast.clone().into())));
-        }
-        e.mark(done);
-    }
-
-    /// Turns the object on the stack into a handle, 0 for `null`.
-    fn store_object(&self, e: &mut Emitter) {
-        let not_null = e.label();
-        let done = e.label();
-        e.op(OpCode::Dup);
-        e.branch(OpCode::Brtrue, not_null);
-        e.op(OpCode::Pop);
-        e.emit(Instruction::ldc_i4(0));
-        e.op(OpCode::Conv_I);
-        e.branch(OpCode::Br, done);
-        e.mark(not_null);
-        e.emit(Instruction::call(self.alloc.clone()));
-        e.emit(Instruction::call(self.to_int_ptr.clone()));
-        e.mark(done);
-    }
-
-    /// Adds `f{index}` to the thunk type. `body` emits the code inside the try
-    /// block; exceptions are stored through the last argument.
-    fn add_thunk(
-        &mut self,
-        thunks: &hao::dotnet::entries::Entry<TypeDef>,
-        index: usize,
-        params: Vec<TypeSig>,
-        body: impl FnOnce(&Self, &mut Emitter, u16),
-    ) -> Result<()> {
+    /// Adds the next thunk, `f{n}`. `body` runs inside a try block; a thrown
+    /// exception is returned as a handle through an extra last parameter.
+    fn add(&mut self, params: Vec<TypeSig>, body: impl FnOnce(&mut Thunk)) -> Result<()> {
         let exception_arg = params.len() as u16;
-        let mut all = params;
-        all.push(NATIVE_INT);
-
         let mut e = Emitter::new();
-        let gch = e.declare_local(self.gchandle.clone());
-        let ex = e.declare_local(TypeSig::OBJECT);
-        let (try_start, try_end, handler_end) = (e.label(), e.label(), e.label());
-        e.mark(try_start);
-        body(self, &mut e, gch);
-        e.branch(OpCode::Leave, handler_end);
-        e.mark(try_end);
-        e.emit(Instruction::stloc(ex));
-        e.emit(Instruction::ldarg(exception_arg));
-        e.emit(Instruction::ldloc(ex));
-        e.emit(Instruction::call(self.alloc.clone()));
-        e.emit(Instruction::call(self.to_int_ptr.clone()));
-        e.op(OpCode::Stind_I);
-        e.branch(OpCode::Leave, handler_end);
-        e.mark(handler_end);
-        e.emit(Instruction::ret());
-        e.exception_handler(Some(self.exception.clone()), try_start, try_end, try_end, handler_end);
-
-        let mut method = Method::new(
-            MethodFlags::Public | MethodFlags::Static | MethodFlags::HideBySig,
-            format!("f{}", index),
-            MethodSig::new_static(TypeSig::VOID, all),
+        let gch = e.declare_local(self.corlib.gchandle.clone());
+        let exception = e.declare_local(TypeSig::OBJECT);
+        let corlib = &self.corlib;
+        e.try_catch(
+            corlib.exception.clone(),
+            |e| body(&mut Thunk { corlib, e, gch }),
+            |e| {
+                e.stloc(exception).ldarg(exception_arg).ldloc(exception);
+                e.call(&corlib.alloc)
+                    .call(&corlib.to_int_ptr)
+                    .op(OpCode::Stind_I);
+            },
         );
-        method.body = Some(e.finish());
-        if let Some(MemberToken::MemberRef(ctor)) = &self.uco {
-            method.custom_attributes.push(CustomAttribute::new(
-                CustomAttributeCtor::MemberRef(ctor.clone()),
-                &CustomAttributeValue::default(),
-            )?);
+        e.ret();
+
+        let params = params.into_iter().chain([TypeSig::NATIVE_INT]).collect();
+        let mut method = Method::public_static(
+            format!("f{}", self.count),
+            MethodSig::new_static(TypeSig::VOID, params),
+        )
+        .with_body(e.finish());
+        if let Some(attribute) = &self.attribute {
+            method = method.with_attribute(attribute.clone());
         }
-        TypeDef::add_method(thunks, method);
+        TypeDef::add_method(&self.class, method);
+        self.count += 1;
         Ok(())
+    }
+
+    /// The helpers listed in `hao_runtime::bindings::helper`.
+    fn add_helpers(&mut self) -> Result<()> {
+        let nint = TypeSig::NATIVE_INT;
+        let string = self.corlib.string.clone();
+        // free(handle)
+        self.add(vec![nint.clone()], |t| {
+            let c = t.corlib;
+            t.e.ldarg(0)
+                .call(&c.from_int_ptr)
+                .stloc(t.gch)
+                .ldloca(t.gch)
+                .call(&c.free);
+        })?;
+        // string_length(handle, *mut i32)
+        self.add(vec![nint.clone(), nint.clone()], |t| {
+            t.e.ldarg(1);
+            t.load_object(0, Some(&string));
+            t.e.callvirt(&t.corlib.string_length).op(OpCode::Stind_I4);
+        })?;
+        // string_copy(handle, *mut u16)
+        self.add(vec![nint.clone(), nint.clone()], |t| {
+            t.load_object(0, Some(&string));
+            let length = t.e.declare_local(TypeSig::INT32);
+            let c = t.corlib;
+            t.e.callvirt(&c.to_char_array)
+                .dup()
+                .op(OpCode::Ldlen)
+                .op(OpCode::Conv_I4)
+                .stloc(length);
+            t.e.ldc_i4(0).ldarg(1).ldloc(length).call(&c.marshal_copy);
+        })?;
+        // to_string(handle, *mut handle)
+        self.add(vec![nint.clone(), nint], |t| {
+            t.e.ldarg(1);
+            t.load_object(0, None);
+            t.e.callvirt(&t.corlib.to_string);
+            t.store_result(&Ty::String);
+        })?;
+        assert_eq!(self.count, HELPER_COUNT);
+        Ok(())
+    }
+
+    fn add_method(
+        &mut self,
+        library: &Module,
+        declaring: &TypeDefOrRef,
+        method: &BoundMethod,
+    ) -> Result<()> {
+        let target = self.module.import_foreign_method(&method.method, library)?;
+        let mut casts = Vec::new();
+        for (_, ty) in &method.params {
+            casts.push(match ty {
+                Ty::Object { ty: Some(t), .. } if !t.full_name_is("System", "Object") => {
+                    Some(self.module.import_foreign_type(t, library)?)
+                }
+                _ => None,
+            });
+        }
+
+        let instance = method.kind == MethodKind::Instance;
+        let mut native = Vec::new();
+        if instance {
+            native.push(TypeSig::NATIVE_INT);
+        }
+        native.extend(method.params.iter().flat_map(|(_, ty)| ty.native()));
+        let result_arg = native.len() as u16;
+        if method.returns() {
+            native.push(TypeSig::NATIVE_INT);
+        }
+
+        self.add(native, |t| {
+            if method.returns() {
+                t.e.ldarg(result_arg);
+            }
+            let mut arg = 0;
+            if instance {
+                t.load_object(0, Some(declaring));
+                arg = 1;
+            }
+            for ((_, ty), cast) in method.params.iter().zip(&casts) {
+                arg += t.load_param(ty, arg, cast.as_ref());
+            }
+            match method.kind {
+                MethodKind::Constructor => {
+                    t.e.newobj(&target);
+                    t.store_result(&Ty::Object {
+                        ty: None,
+                        bound: None,
+                    });
+                }
+                MethodKind::Static => {
+                    t.e.call(&target);
+                }
+                MethodKind::Instance => {
+                    t.e.callvirt(&target);
+                }
+            }
+            if method.kind != MethodKind::Constructor && method.ret != Ty::Void {
+                t.store_result(&method.ret);
+            }
+        })
     }
 }
 
 pub fn build(library: &Module, model: &Model, name: &str, target: Target) -> Result<Vec<u8>> {
-    let mut ctx = Ctx::new(name, target)?;
-    let object = ctx.module.corlib_type("System.Object")?;
-    let thunks = ctx.module.add_type(TypeDef::new(
-        TypeAttributes::Public | TypeAttributes::Abstract | TypeAttributes::Sealed,
-        "HaoThunks",
-        "Thunks",
-        Some(object),
-    ));
-    let string = ctx.string.clone();
-
-    ctx.add_thunk(&thunks, 0, vec![NATIVE_INT], |c, e, gch| {
-        e.emit(Instruction::ldarg(0));
-        e.emit(Instruction::call(c.from_int_ptr.clone()));
-        e.emit(Instruction::stloc(gch));
-        e.emit(Instruction::new(OpCode::Ldloca_S, Operand::Local(gch)));
-        e.emit(Instruction::call(c.free.clone()));
-    })?;
-    ctx.add_thunk(&thunks, 1, vec![NATIVE_INT, NATIVE_INT], |c, e, gch| {
-        e.emit(Instruction::ldarg(1));
-        c.load_object(e, 0, gch, Some(&string));
-        e.emit(Instruction::callvirt(c.string_length.clone()));
-        e.op(OpCode::Stind_I4);
-    })?;
-    ctx.add_thunk(&thunks, 2, vec![NATIVE_INT, NATIVE_INT], |c, e, gch| {
-        c.load_object(e, 0, gch, Some(&string));
-        e.emit(Instruction::callvirt(c.to_char_array.clone()));
-        e.op(OpCode::Dup);
-        e.op(OpCode::Ldlen);
-        e.op(OpCode::Conv_I4);
-        let length = e.declare_local(TypeSig::INT32);
-        e.emit(Instruction::stloc(length));
-        e.emit(Instruction::ldc_i4(0));
-        e.emit(Instruction::ldarg(1));
-        e.emit(Instruction::ldloc(length));
-        e.emit(Instruction::call(c.marshal_copy.clone()));
-    })?;
-    ctx.add_thunk(&thunks, 3, vec![NATIVE_INT, NATIVE_INT], |c, e, gch| {
-        e.emit(Instruction::ldarg(1));
-        c.load_object(e, 0, gch, None);
-        e.emit(Instruction::callvirt(c.to_string.clone()));
-        c.store_object(e);
-        e.op(OpCode::Stind_I);
-    })?;
-
-    for bound_type in &model.types {
-        let declaring = ctx
+    let mut builder = Builder::new(name, target)?;
+    builder.add_helpers()?;
+    for bound in &model.types {
+        let declaring = builder
             .module
-            .import_foreign_type(&TypeDefOrRef::TypeDef(bound_type.ty.clone()), library)?;
-        for method in &bound_type.methods {
-            let target_method = ctx.module.import_foreign_method(&method.method, library)?;
-            let casts = method
-                .params
-                .iter()
-                .map(|(_, ty)| match ty {
-                    Ty::Object { ty: Some(t), .. } if !t.full_name_is("System", "Object") => {
-                        ctx.module.import_foreign_type(t, library).map(Some)
-                    }
-                    _ => Ok(None),
-                })
-                .collect::<Result<Vec<_>>>()?;
-
-            let mut native = Vec::new();
-            if method.kind == MethodKind::Instance {
-                native.push(NATIVE_INT);
-            }
-            for (_, ty) in &method.params {
-                native.extend(native_ty(ty));
-            }
-            let returns = method.kind == MethodKind::Constructor || method.ret != Ty::Void;
-            let ret_arg = native.len() as u16;
-            if returns {
-                native.push(NATIVE_INT);
-            }
-
-            let declaring = declaring.clone();
-            ctx.add_thunk(&thunks, method.thunk, native, |c, e, gch| {
-                if returns {
-                    e.emit(Instruction::ldarg(ret_arg));
-                }
-                let mut arg = 0;
-                if method.kind == MethodKind::Instance {
-                    c.load_object(e, 0, gch, Some(&declaring));
-                    arg = 1;
-                }
-                for ((_, ty), cast) in method.params.iter().zip(&casts) {
-                    match ty {
-                        Ty::String => {
-                            let not_null = e.label();
-                            let done = e.label();
-                            e.emit(Instruction::ldarg(arg));
-                            e.branch(OpCode::Brtrue, not_null);
-                            e.op(OpCode::Ldnull);
-                            e.branch(OpCode::Br, done);
-                            e.mark(not_null);
-                            e.emit(Instruction::ldarg(arg));
-                            e.emit(Instruction::ldc_i4(0));
-                            e.emit(Instruction::ldarg(arg + 1));
-                            e.emit(Instruction::newobj(c.string_ctor.clone()));
-                            e.mark(done);
-                            arg += 2;
-                        }
-                        Ty::Object { .. } => {
-                            c.load_object(e, arg, gch, cast.as_ref());
-                            arg += 1;
-                        }
-                        _ => {
-                            e.emit(Instruction::ldarg(arg));
-                            arg += 1;
-                        }
-                    }
-                }
-                match method.kind {
-                    MethodKind::Constructor => {
-                        e.emit(Instruction::newobj(target_method.clone()));
-                        c.store_object(e);
-                        e.op(OpCode::Stind_I);
-                    }
-                    MethodKind::Static => {
-                        e.emit(Instruction::call(target_method.clone()));
-                    }
-                    MethodKind::Instance => {
-                        e.emit(Instruction::callvirt(target_method.clone()));
-                    }
-                }
-                if method.kind != MethodKind::Constructor && returns {
-                    match &method.ret {
-                        Ty::String | Ty::Object { .. } => {
-                            c.store_object(e);
-                            e.op(OpCode::Stind_I);
-                        }
-                        ty => {
-                            e.op(store_op(ty));
-                        }
-                    }
-                }
-            })?;
+            .import_foreign_type(&TypeDefOrRef::TypeDef(bound.ty.clone()), library)?;
+        for method in &bound.methods {
+            builder.add_method(library, &declaring, method)?;
         }
     }
-
-    let _ = ctx.target;
-    ctx.module.write()
+    builder.module.write()
 }
