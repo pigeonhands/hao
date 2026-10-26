@@ -126,6 +126,19 @@ impl Runtime {
         }
     }
 
+    /// Loads a module built or edited with hao, without writing it to disk.
+    #[cfg(feature = "hao")]
+    pub fn load_module(&self, module: &hao::Module) -> Result<()> {
+        let bytes = module
+            .write()
+            .map_err(|e| Error::Other(format!("could not write {}: {}", module.name(), e)))?;
+        let name = match &module.assembly {
+            Some(assembly) => assembly.get().name.clone(),
+            None => module.name().trim_end_matches(".dll").to_string(),
+        };
+        self.load_assembly_bytes(&name, &bytes)
+    }
+
     /// A native pointer to the static method `type_name::method` in `assembly`.
     ///
     /// On CoreCLR the method must be `[UnmanagedCallersOnly]`. On Mono the

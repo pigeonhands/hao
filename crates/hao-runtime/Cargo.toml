@@ -17,7 +17,13 @@ hao = { version = "0.0.4", path = "../hao", optional = true }
 [dev-dependencies]
 hao = { path = "../hao" }
 
+[[example]]
+name = "mono"
+required-features = ["mono"]
+
 [features]
 default = ["coreclr"]
-coreclr = ["dep:hao"]
+coreclr = ["hao"]
+# `Runtime::load_module` for modules built or edited with hao.
+hao = ["dep:hao"]
 mono = []

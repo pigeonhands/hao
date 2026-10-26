@@ -29,8 +29,10 @@ let runtime = Runtime::mono(&MonoOptions {
 })?;
 ```
 
-- `load_assembly_bytes` loads an assembly from memory, e.g. one generated with
-  [`hao`](../hao)'s `Module::new`.
+- `load_assembly_bytes` loads an assembly from memory, and `load_module` (the `hao` feature, on
+  with `coreclr`) loads a [`hao`](../hao) `Module` you built or edited without writing a file.
+- CoreCLR is configured in memory: nothing is written to disk, and no `.runtimeconfig.json` is
+  needed.
 - Only one runtime of each kind can run per process, so `Runtime::coreclr()` and
   `Runtime::mono()` return the existing instance when called again.
 - On Mono, threads have to be attached before running managed code. `attach_thread` does this,
@@ -38,3 +40,20 @@ let runtime = Runtime::mono(&MonoOptions {
 
 Calling methods by hand is fiddly; [`hao-runtime-macros`](../hao-runtime-macros) generates safe
 bindings instead. The `bindings` module holds the support code those bindings use.
+
+## Examples
+
+```sh
+cargo run -p hao-runtime --example generate_and_call
+cargo run -p hao-runtime --example patch_in_memory
+cargo run -p hao-runtime --example hook_managed
+cargo run -p hao-runtime --features mono --example mono
+```
+
+- [`generate_and_call`](examples/generate_and_call.rs): builds a class with hao (arithmetic, a
+  call into `System.Math`, and a loop built with the IL emitter), loads it and calls it.
+- [`patch_in_memory`](examples/patch_in_memory.rs): reads an assembly, patches two methods' IL,
+  and loads the patched copy next to the original to compare them.
+- [`hook_managed`](examples/hook_managed.rs): hooks managed methods with Rust functions, like
+  Harmony prefixes and postfixes, by rewriting their IL to call a native function pointer.
+- [`mono`](examples/mono.rs): the Mono backend, including a call that throws.
