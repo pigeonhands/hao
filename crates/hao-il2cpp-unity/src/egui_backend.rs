@@ -154,11 +154,6 @@ impl EguiState {
             // Above the game's own overlay canvases (sorting order is a short).
             canvas.set_sorting_order(i16::MAX as i32)?;
             let image = go.add_component::<RawImage>()?;
-            // egui's output is premultiplied-alpha, and it's drawn into the target
-            // with a premultiplied blend. Composite the target the same way (the UI
-            // shader's straight-alpha blend would make the whole overlay look
-            // half-transparent).
-            image.set_material(make_material()?)?;
             // Stretch to fill the canvas (the whole screen).
             if let Some(rect) = go.rect_transform()? {
                 rect.set_anchors(Vector2::ZERO, Vector2::ONE, Vector2::new(0.5, 0.5))?;

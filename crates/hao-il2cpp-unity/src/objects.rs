@@ -310,11 +310,6 @@ impl RawImage {
     pub fn set_texture(&self, texture: Object) -> Result<()> {
         RAW_IMAGE_SET_TEXTURE.call((*self, texture))
     }
-
-    /// The material the image is drawn with (its shader decides the blend mode).
-    pub fn set_material(&self, material: Material) -> Result<()> {
-        GRAPHIC_SET_MATERIAL.call((*self, material))
-    }
 }
 
 impl GameObject {

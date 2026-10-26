@@ -35,6 +35,12 @@ extern "C" fn load() {
             if !VISIBLE.load(Ordering::Relaxed) {
                 return;
             }
+            // egui's default window fill is slightly see-through; make it opaque so
+            // it reads clearly over the game.
+            ctx.style_mut(|style| {
+                style.visuals.window_fill = egui::Color32::from_rgb(27, 27, 27);
+                style.visuals.panel_fill = egui::Color32::from_rgb(27, 27, 27);
+            });
             let frames = FRAMES.fetch_add(1, Ordering::Relaxed);
             egui::Window::new("hao + egui")
                 .default_pos([24.0, 24.0])
