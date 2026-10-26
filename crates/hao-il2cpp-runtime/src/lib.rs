@@ -109,7 +109,7 @@ fn cstring(value: &str) -> Result<CString> {
     CString::new(value).map_err(|_| Error::Nul(value.to_owned()))
 }
 
-unsafe fn c_str<'a>(value: *const std::ffi::c_char) -> &'a str {
+pub(crate) unsafe fn c_str<'a>(value: *const std::ffi::c_char) -> &'a str {
     if value.is_null() {
         ""
     } else {
@@ -290,6 +290,21 @@ impl Class {
         })
     }
 
+    /// Allocates an object of this class without running a constructor; call
+    /// `.ctor` on it with [`Method::call`].
+    pub fn new_object(&self) -> Object {
+        Object(unsafe { (self.il2cpp.api.il2cpp_object_new)(self.ptr) })
+    }
+
+    /// The class's `System.Type`, as `typeof` gives it.
+    pub fn type_object(&self) -> Object {
+        Object(unsafe {
+            (self.il2cpp.api.il2cpp_type_get_object)((self.il2cpp.api.il2cpp_class_get_type)(
+                self.ptr,
+            ))
+        })
+    }
+
     /// Every method declared by the class, e.g. to pick an overload by [`Method::signature`].
     pub fn methods(&self) -> impl Iterator<Item = Method> + '_ {
         let mut iter: Ptr = std::ptr::null_mut();
@@ -312,6 +327,36 @@ impl Class {
             return Err(Error::NotFound(format!("field {}.{}", self.name(), name)));
         }
         Ok(unsafe { (self.il2cpp.api.il2cpp_field_get_offset)(field) })
+    }
+}
+
+/// Keeps an object alive and findable after the garbage collector moves or
+/// would free it. The collector doesn't scan Rust memory, so objects kept
+/// between calls (in statics or closures) need one. Freed on drop.
+pub struct GcHandle {
+    il2cpp: &'static Il2Cpp,
+    handle: Ptr,
+}
+
+unsafe impl Send for GcHandle {}
+unsafe impl Sync for GcHandle {}
+
+impl GcHandle {
+    pub fn new(il2cpp: &'static Il2Cpp, object: Object) -> Self {
+        Self {
+            il2cpp,
+            handle: unsafe { (il2cpp.api.il2cpp_gchandle_new)(object.0, false) },
+        }
+    }
+
+    pub fn target(&self) -> Object {
+        Object(unsafe { (self.il2cpp.api.il2cpp_gchandle_get_target)(self.handle) })
+    }
+}
+
+impl Drop for GcHandle {
+    fn drop(&mut self) {
+        unsafe { (self.il2cpp.api.il2cpp_gchandle_free)(self.handle) }
     }
 }
 

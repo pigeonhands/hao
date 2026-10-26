@@ -59,4 +59,12 @@ api! {
     il2cpp_runtime_invoke: fn(Ptr, Ptr, *mut Ptr, *mut Ptr) -> Ptr;
     il2cpp_type_get_class_or_element_class: fn(Ptr) -> Ptr;
     il2cpp_class_is_valuetype: fn(Ptr) -> bool;
+    il2cpp_class_is_enum: fn(Ptr) -> bool;
+    il2cpp_class_enum_basetype: fn(Ptr) -> Ptr;
+    il2cpp_class_get_type: fn(Ptr) -> Ptr;
+    il2cpp_type_get_object: fn(Ptr) -> Ptr;
+    il2cpp_object_new: fn(Ptr) -> Ptr;
+    il2cpp_gchandle_new: fn(Ptr, bool) -> Ptr;
+    il2cpp_gchandle_get_target: fn(Ptr) -> Ptr;
+    il2cpp_gchandle_free: fn(Ptr);
 }

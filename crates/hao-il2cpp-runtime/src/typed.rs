@@ -36,10 +36,25 @@ pub mod element {
 /// The managed type of a parameter or return value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TypeInfo {
-    /// The `Il2CppTypeEnum` value.
+    /// The `Il2CppTypeEnum` value. For enums, the element type of the underlying integer.
     pub element: i32,
     pub value_type: bool,
+    pub is_enum: bool,
     pub byref: bool,
+    pub namespace: &'static str,
+    pub name: &'static str,
+}
+
+impl TypeInfo {
+    /// Whether this is the value type `namespace.name`, passed by value. For
+    /// [`Il2CppValue`] impls of `#[repr(C)]` structs mirroring a managed struct.
+    pub fn is_value_type(&self, namespace: &str, name: &str) -> bool {
+        !self.byref
+            && self.value_type
+            && !self.is_enum
+            && self.namespace == namespace
+            && self.name == name
+    }
 }
 
 /// A managed object reference (`Il2CppObject*`), possibly null.
@@ -311,20 +326,35 @@ impl Method {
     fn type_info(&self, ty: Ptr) -> TypeInfo {
         let api = &self.il2cpp.api;
         unsafe {
-            let element = (api.il2cpp_type_get_type)(ty);
+            let mut element = (api.il2cpp_type_get_type)(ty);
             let byref = (api.il2cpp_type_is_byref)(ty);
+            let class = (api.il2cpp_type_get_class_or_element_class)(ty);
             let value_type = match element {
                 element::VALUETYPE => true,
-                element::GENERICINST => {
-                    let class = (api.il2cpp_type_get_class_or_element_class)(ty);
-                    !class.is_null() && (api.il2cpp_class_is_valuetype)(class)
-                }
+                element::GENERICINST => !class.is_null() && (api.il2cpp_class_is_valuetype)(class),
                 _ => false,
+            };
+            let is_enum = element == element::VALUETYPE
+                && !class.is_null()
+                && (api.il2cpp_class_is_enum)(class);
+            if is_enum {
+                element = (api.il2cpp_type_get_type)((api.il2cpp_class_enum_basetype)(class));
+            }
+            let (namespace, name) = if class.is_null() {
+                ("", "")
+            } else {
+                (
+                    crate::c_str((api.il2cpp_class_get_namespace)(class)),
+                    crate::c_str((api.il2cpp_class_get_name)(class)),
+                )
             };
             TypeInfo {
                 element,
                 value_type,
+                is_enum,
                 byref,
+                namespace,
+                name,
             }
         }
     }
@@ -410,6 +440,13 @@ impl Method {
             )));
         }
         Ok(())
+    }
+
+    /// Checks argument types `Args` (a tuple, with the instance first for
+    /// instance methods) and return type `R` against the method's signature, as
+    /// [`Method::hook`] and [`Method::call`] do.
+    pub fn check_types<Args: MethodArgs, R: Il2CppValue>(&self) -> Result<()> {
+        self.check(&Args::parameters(), ValueCheck::of::<R>())
     }
 
     /// Redirects calls of this method to `callback`, after checking its types

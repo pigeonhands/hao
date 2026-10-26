@@ -21,5 +21,9 @@ libc = "0.2"
 name = "heal_mod"
 crate-type = ["cdylib"]
 
+[[example]]
+name = "scene_overlay"
+crate-type = ["cdylib"]
+
 [dev-dependencies]
 libc = "0.2"

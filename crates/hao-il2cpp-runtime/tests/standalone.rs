@@ -7,7 +7,34 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use hao_il2cpp_runtime::{original, Error, Il2Cpp, Il2CppString, MethodInfo, Object, Original};
+use hao_il2cpp_runtime::{
+    original, Error, Il2Cpp, Il2CppString, Il2CppValue, MethodInfo, Object, Original, TypeInfo,
+};
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Scene {
+    handle: i32,
+}
+
+unsafe impl Il2CppValue for Scene {
+    fn matches(ty: TypeInfo) -> bool {
+        ty.is_value_type("UnityEngine.SceneManagement", "Scene")
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Vector2 {
+    x: f32,
+    y: f32,
+}
+
+unsafe impl Il2CppValue for Vector2 {
+    fn matches(ty: TypeInfo) -> bool {
+        ty.is_value_type("UnityEngine", "Vector2")
+    }
+}
 
 static INIT_CALLBACK_RAN: AtomicBool = AtomicBool::new(false);
 
@@ -152,4 +179,40 @@ fn hooks_il2cpp_code() {
         "FormatException"
     );
     parse_hook.remove().unwrap();
+
+    // Structs declared in Rust, and enums as their underlying integer.
+    let scenes = il2cpp
+        .class(
+            "UnityEngine.CoreModule",
+            "UnityEngine.SceneManagement",
+            "SceneManager",
+        )
+        .unwrap();
+    let loaded = scenes.method("Internal_SceneLoaded", 2).unwrap();
+    loaded.check_types::<(Scene, i32), ()>().unwrap();
+    assert!(loaded.check_types::<(i32, i32), ()>().is_err());
+    assert!(loaded.check_types::<(Scene, Vector2), ()>().is_err());
+    let rect = il2cpp
+        .class("UnityEngine.CoreModule", "UnityEngine", "RectTransform")
+        .unwrap();
+    rect.method("set_anchoredPosition", 1)
+        .unwrap()
+        .check_types::<(Object, Vector2), ()>()
+        .unwrap();
+    let game_object = il2cpp
+        .class("UnityEngine.CoreModule", "UnityEngine", "GameObject")
+        .unwrap();
+    assert_eq!(
+        unsafe { il2cpp.class_of(game_object.type_object()) }.name(),
+        "RuntimeType"
+    );
+    assert_eq!(
+        unsafe { il2cpp.class_of(game_object.new_object()) }.name(),
+        "GameObject"
+    );
+    let pinned = hao_il2cpp_runtime::GcHandle::new(il2cpp, il2cpp.string("kept").unwrap().0);
+    assert_eq!(
+        unsafe { il2cpp.read_string(pinned.target()) }.as_deref(),
+        Some("kept")
+    );
 }
