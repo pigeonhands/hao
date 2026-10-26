@@ -48,6 +48,9 @@ struct EguiState {
     texture: Option<(GcHandle, [usize; 2])>,
     /// A CPU copy of the font atlas (RGBA), patched from egui's texture deltas.
     atlas: Vec<u8>,
+    /// Previous state of the left/right mouse buttons, so a press or release is
+    /// sent to egui only on the edge (egui is event-based, not level-based).
+    pointer_down: [bool; 2],
 }
 
 /// Builds the egui material: a textured, vertex-coloured, alpha-blended shader.
@@ -72,6 +75,7 @@ impl EguiState {
             material: GcHandle::new(crate::il2cpp()?, material.object()),
             texture: None,
             atlas: Vec::new(),
+            pointer_down: [false; 2],
         })
     }
 
@@ -122,20 +126,28 @@ impl EguiState {
         self.render(w, h, &primitives)
     }
 
-    fn raw_input(&self, w: f32, h: f32) -> Result<egui::RawInput> {
+    fn raw_input(&mut self, w: f32, h: f32) -> Result<egui::RawInput> {
         let mouse = input::mouse_position()?;
         // Unity's origin is bottom-left; egui's is top-left.
         let pos = egui::pos2(mouse.x, h - mouse.y);
         let mut events = vec![egui::Event::PointerMoved(pos)];
-        for (button, egui_button) in [
+        for (i, (button, egui_button)) in [
             (0, egui::PointerButton::Primary),
             (1, egui::PointerButton::Secondary),
-        ] {
-            if input::mouse_button(button)? {
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            // Send an event only when the button changes state, so egui gets one
+            // press and one release per click rather than a press every frame
+            // (which left drags stuck to the cursor).
+            let down = input::mouse_button(button)?;
+            if down != self.pointer_down[i] {
+                self.pointer_down[i] = down;
                 events.push(egui::Event::PointerButton {
                     pos,
                     button: egui_button,
-                    pressed: true,
+                    pressed: down,
                     modifiers: egui::Modifiers::default(),
                 });
             }
