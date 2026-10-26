@@ -16,7 +16,13 @@ fn heal_mod_hooks_the_game() {
         eprintln!("skipping: the heal_mod example is for Megabonk");
         return;
     }
-    let examples = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("examples");
+    let examples = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("examples");
     let mod_path = examples.join("libheal_mod.so");
 
     // The mod prints to stderr, so capture file descriptor 2 for the duration.
@@ -47,10 +53,20 @@ fn heal_mod_hooks_the_game() {
     use std::io::Seek;
     captured.rewind().unwrap();
     captured.read_to_string(&mut output).unwrap();
-    assert!(output.contains("[heal_mod] hooked PlayerHealth.Heal"), "mod output: {:?}", output);
+    assert!(
+        output.contains("[heal_mod] hooked PlayerHealth.Heal"),
+        "mod output: {:?}",
+        output
+    );
 }
 
 fn tempfile() -> std::fs::File {
     let path = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("heal_mod_stderr.txt");
-    std::fs::OpenOptions::new().create(true).truncate(true).read(true).write(true).open(path).unwrap()
+    std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .read(true)
+        .write(true)
+        .open(path)
+        .unwrap()
 }

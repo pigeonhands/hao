@@ -48,4 +48,15 @@ api! {
     il2cpp_string_new: fn(*const c_char) -> Ptr;
     il2cpp_string_chars: fn(Ptr) -> *const u16;
     il2cpp_string_length: fn(Ptr) -> i32;
+    il2cpp_method_get_param_count: fn(Ptr) -> u32;
+    il2cpp_method_get_param: fn(Ptr, u32) -> Ptr;
+    il2cpp_method_get_return_type: fn(Ptr) -> Ptr;
+    il2cpp_method_is_instance: fn(Ptr) -> bool;
+    il2cpp_type_get_type: fn(Ptr) -> i32;
+    il2cpp_type_is_byref: fn(Ptr) -> bool;
+    il2cpp_type_get_name: fn(Ptr) -> *mut c_char;
+    il2cpp_class_get_methods: fn(Ptr, *mut Ptr) -> Ptr;
+    il2cpp_runtime_invoke: fn(Ptr, Ptr, *mut Ptr, *mut Ptr) -> Ptr;
+    il2cpp_type_get_class_or_element_class: fn(Ptr) -> Ptr;
+    il2cpp_class_is_valuetype: fn(Ptr) -> bool;
 }

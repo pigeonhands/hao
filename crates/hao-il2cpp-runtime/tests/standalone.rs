@@ -7,14 +7,14 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use hao_il2cpp_runtime::{original, Il2Cpp, MethodInfo, Object};
+use hao_il2cpp_runtime::{original, Error, Il2Cpp, Il2CppString, MethodInfo, Object, Original};
 
 static INIT_CALLBACK_RAN: AtomicBool = AtomicBool::new(false);
 
-type Concat = extern "C" fn(Object, Object, MethodInfo) -> Object;
+type Concat = extern "C" fn(Il2CppString, Il2CppString, MethodInfo) -> Il2CppString;
 
 /// Calls the original with its arguments swapped.
-extern "C" fn swapped_concat(a: Object, b: Object, method: MethodInfo) -> Object {
+extern "C" fn swapped_concat(a: Il2CppString, b: Il2CppString, method: MethodInfo) -> Il2CppString {
     let concat = original!(Concat);
     concat(b, a, method)
 }
@@ -40,25 +40,116 @@ fn hooks_il2cpp_code() {
 
     let il2cpp = Il2Cpp::load(hao_il2cpp_runtime::find_game_assembly(&game).unwrap()).unwrap();
     il2cpp.init_standalone(&data_dir).unwrap();
-    assert!(INIT_CALLBACK_RAN.load(Ordering::SeqCst), "the il2cpp_init hook did not run the callback");
+    assert!(
+        INIT_CALLBACK_RAN.load(Ordering::SeqCst),
+        "the il2cpp_init hook did not run the callback"
+    );
 
     let string = il2cpp.class("mscorlib", "System", "String").unwrap();
     assert_eq!((string.namespace(), string.name()), ("System", "String"));
     // Objects start with a two pointer header (class and monitor).
-    assert_eq!(string.field_offset("_stringLength").unwrap(), 2 * std::mem::size_of::<usize>());
+    assert_eq!(
+        string.field_offset("_stringLength").unwrap(),
+        2 * std::mem::size_of::<usize>()
+    );
 
-    let method = string.method("Concat", 2).unwrap();
+    let method = string
+        .methods()
+        .find(|m| m.signature() == "static System.String Concat(System.String, System.String)")
+        .unwrap();
     let concat: Concat = unsafe { std::mem::transmute(method.code()) };
     let call = |a: &str, b: &str| unsafe {
         il2cpp
-            .read_string(concat(il2cpp.string(a).unwrap(), il2cpp.string(b).unwrap(), method.as_ptr()))
+            .read_string(
+                concat(
+                    il2cpp.string(a).unwrap(),
+                    il2cpp.string(b).unwrap(),
+                    method.as_ptr(),
+                )
+                .0,
+            )
             .unwrap()
     };
     assert_eq!(call("Kia ", "ora"), "Kia ora");
 
-    let hook = unsafe { method.hook(swapped_concat as *mut u8) }.unwrap();
+    let hook = unsafe { method.hook_raw(swapped_concat as *mut u8) }.unwrap();
     assert_eq!(call("Kia ", "ora"), "oraKia ");
 
     hook.remove().unwrap();
     assert_eq!(call("Kia ", "ora"), "Kia ora");
+
+    // Typed hooks: the closure's types are checked against the method.
+    let hook = method
+        .hook(
+            |a: Il2CppString, b: Il2CppString, original: Original<_, Il2CppString>| {
+                let joined = original.call((a, b)).to_rust().unwrap();
+                Il2CppString::new(Il2Cpp::get().unwrap(), &joined.to_uppercase()).unwrap()
+            },
+        )
+        .unwrap();
+    assert_eq!(call("Kia ", "ora"), "KIA ORA");
+    let mismatch = method.hook(|a: Il2CppString, _b: i32, _original: Original<_, Il2CppString>| a);
+    assert!(
+        matches!(mismatch, Err(Error::Signature(_))),
+        "{:?}",
+        mismatch.err()
+    );
+    assert!(matches!(
+        method.hook(|a: Object, _original: Original<_, Object>| a),
+        Err(Error::Signature(_))
+    ));
+    hook.remove().unwrap();
+
+    let called: Il2CppString = method
+        .call((il2cpp.string("a").unwrap(), il2cpp.string("b").unwrap()))
+        .unwrap();
+    assert_eq!(called.to_rust().unwrap(), "ab");
+    assert!(matches!(
+        method.call::<_, i32>((il2cpp.string("a").unwrap(), il2cpp.string("b").unwrap())),
+        Err(Error::Signature(_))
+    ));
+
+    // A managed exception thrown under a hook unwinds through it to il2cpp_runtime_invoke.
+    let parse = il2cpp
+        .class("mscorlib", "System", "Int32")
+        .unwrap()
+        .method("Parse", 1)
+        .unwrap();
+    assert!(
+        parse.signature().contains("Parse(System.String)"),
+        "{}",
+        parse.signature()
+    );
+    let parse_hook = parse
+        .hook(|s: Il2CppString, original: Original<_, i32>| original.call((s,)) + 1)
+        .unwrap();
+    let invoke = |text: &str| {
+        let mut args = [il2cpp.string(text).unwrap().0.as_ptr()];
+        let mut exception = std::ptr::null_mut();
+        let result = unsafe {
+            (il2cpp.api().il2cpp_runtime_invoke)(
+                parse.as_ptr(),
+                std::ptr::null_mut(),
+                args.as_mut_ptr(),
+                &mut exception,
+            )
+        };
+        (result, exception)
+    };
+    let (boxed, exception) = invoke("41");
+    assert!(exception.is_null());
+    // A boxed int's value follows the object header.
+    assert_eq!(
+        unsafe {
+            hao_il2cpp_runtime::read_field::<i32>(Object(boxed), 2 * std::mem::size_of::<usize>())
+        },
+        42
+    );
+    let (_, exception) = invoke("not a number");
+    assert!(!exception.is_null());
+    assert_eq!(
+        unsafe { il2cpp.class_of(Object(exception)) }.name(),
+        "FormatException"
+    );
+    parse_hook.remove().unwrap();
 }

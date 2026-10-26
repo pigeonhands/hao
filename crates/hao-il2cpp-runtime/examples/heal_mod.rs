@@ -11,31 +11,31 @@
 //! Method and field names come from the game's metadata, e.g. with
 //! `cargo run -p hao-il2cpp --example game_info -- <game folder> <type>`.
 
-use std::sync::OnceLock;
-
-use hao_il2cpp_runtime::{original, read_field, MethodInfo, Object};
-
-static HP_OFFSET: OnceLock<usize> = OnceLock::new();
-
-/// `int PlayerHealth.Heal(float amount, bool allowOverheal)`: the instance comes
-/// first and Il2Cpp's `MethodInfo*` last.
-extern "C" fn heal(this: Object, amount: f32, allow_overheal: bool, method: MethodInfo) -> i32 {
-    let heal = original!(extern "C" fn(Object, f32, bool, MethodInfo) -> i32);
-    let healed = heal(this, amount * 2.0, allow_overheal, method);
-    if let Some(offset) = HP_OFFSET.get() {
-        let hp: i32 = unsafe { read_field(this, *offset) };
-        eprintln!("[heal_mod] healed {} instead of {}, hp is now {}", healed, amount, hp);
-    }
-    healed
-}
+use hao_il2cpp_runtime::{read_field, Object, Original};
 
 /// Runs when the library is loaded into the game.
 #[ctor::ctor(unsafe)]
-fn load() {
+pub fn load() {
     hao_il2cpp_runtime::on_init(|il2cpp| {
-        let health = il2cpp.class("Assembly-CSharp", "Assets.Scripts.Inventory__Items__Pickups", "PlayerHealth")?;
-        let _ = HP_OFFSET.set(health.field_offset("hp")?);
-        unsafe { health.method("Heal", 2)?.hook(heal as *mut u8)? };
+        let health = il2cpp.class(
+            "Assembly-CSharp",
+            "Assets.Scripts.Inventory__Items__Pickups",
+            "PlayerHealth",
+        )?;
+        let hp = health.field_offset("hp")?;
+        // `int PlayerHealth.Heal(float amount, bool allowOverheal)`, checked against
+        // the closure's types when the hook is installed.
+        health.method("Heal", 2)?.hook(
+            move |this: Object, amount: f32, overheal: bool, original: Original<_, i32>| {
+                let healed = original.call((this, amount * 2.0, overheal));
+                let hp: i32 = unsafe { read_field(this, hp) };
+                eprintln!(
+                    "[heal_mod] healed {} instead of {}, hp is now {}",
+                    healed, amount, hp
+                );
+                healed
+            },
+        )?;
         eprintln!("[heal_mod] hooked PlayerHealth.Heal");
         Ok(())
     });

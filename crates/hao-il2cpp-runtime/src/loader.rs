@@ -30,7 +30,10 @@ pub fn on_init(callback: impl FnOnce(&'static Il2Cpp) -> Result<()> + Send + 'st
         run(Box::new(callback));
         return;
     }
-    CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()).push(Box::new(callback));
+    CALLBACKS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(Box::new(callback));
     if let Err(e) = install() {
         eprintln!("[hao] could not watch for the game binary: {}", e);
     }
@@ -51,7 +54,8 @@ fn install() -> Result<()> {
     // The binary may already be loaded but not initialised.
     if let Some(path) = loaded_game_assembly() {
         crate::check_format(&path)?;
-        let name = std::ffi::CString::new(path.to_string_lossy().into_owned()).map_err(|_| Error::Nul(path.display().to_string()))?;
+        let name = std::ffi::CString::new(path.to_string_lossy().into_owned())
+            .map_err(|_| Error::Nul(path.display().to_string()))?;
         let handle = unsafe { libc::dlopen(name.as_ptr(), libc::RTLD_NOW | libc::RTLD_NOLOAD) };
         if !handle.is_null() {
             return hook_init(handle);
@@ -60,7 +64,8 @@ fn install() -> Result<()> {
     if DLOPEN_HOOKED.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
-    let mut hook = unsafe { hooking::Hook::by_name(None, c"dlopen", dlopen_detour as *mut u8) }.map_err(Error::Hook)?;
+    let mut hook = unsafe { hooking::Hook::by_name(None, c"dlopen", dlopen_detour as *mut u8) }
+        .map_err(Error::Hook)?;
     unsafe { hook.apply_hook() }.map_err(Error::Hook)
 }
 
@@ -72,7 +77,8 @@ fn hook_init(handle: *mut c_void) -> Result<()> {
     if init.is_null() {
         return Err(Error::NotFound("il2cpp_init in the game binary".into()));
     }
-    let mut hook = unsafe { hooking::Hook::create(init as *mut u8, init_detour as *mut u8) }.map_err(Error::Hook)?;
+    let mut hook = unsafe { hooking::Hook::create(init as *mut u8, init_detour as *mut u8) }
+        .map_err(Error::Hook)?;
     unsafe { hook.apply_hook() }.map_err(Error::Hook)
 }
 

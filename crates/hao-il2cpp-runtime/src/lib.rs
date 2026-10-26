@@ -3,21 +3,19 @@
 //!
 //! A mod is a `cdylib` loaded into the game (on Linux with `LD_PRELOAD`).
 //! [`on_init`] runs once the game's Il2Cpp runtime has started, and from there
-//! methods are found by name and hooked:
+//! methods are found by name and hooked with ordinary closures. The closure's
+//! types are checked against the method's real signature when the hook is
+//! installed:
 //!
 //! ```no_run
-//! use hao_il2cpp_runtime::{original, Il2Cpp, MethodInfo, Object};
+//! use hao_il2cpp_runtime::{Il2Cpp, Object, Original};
 //!
-//! // `int PlayerHealth.Heal(float amount, bool allowOverheal)`. Il2Cpp passes the
-//! // instance first and the method's `MethodInfo*` last.
-//! extern "C" fn heal(this: Object, amount: f32, overheal: bool, method: MethodInfo) -> i32 {
-//!     let original = original!(extern "C" fn(Object, f32, bool, MethodInfo) -> i32);
-//!     original(this, amount * 2.0, overheal, method)
-//! }
-//!
-//! hao_il2cpp_runtime::on_init(|il2cpp: &Il2Cpp| {
-//!     let class = il2cpp.class("Assembly-CSharp", "Assets.Scripts.Inventory__Items__Pickups", "PlayerHealth")?;
-//!     unsafe { class.method("Heal", 2)?.hook(heal as *mut u8)? };
+//! hao_il2cpp_runtime::on_init(|il2cpp: &'static Il2Cpp| {
+//!     let health = il2cpp.class("Assembly-CSharp", "Assets.Scripts.Inventory__Items__Pickups", "PlayerHealth")?;
+//!     // `int Heal(float amount, bool allowOverheal)`: the instance comes first.
+//!     health.method("Heal", 2)?.hook(|this: Object, amount: f32, overheal: bool, original: Original<_, i32>| {
+//!         original.call((this, amount * 2.0, overheal))
+//!     })?;
 //!     Ok(())
 //! });
 //! ```
@@ -26,6 +24,7 @@ mod api;
 mod error;
 #[cfg(unix)]
 mod loader;
+mod typed;
 
 use std::{
     ffi::{c_void, CStr, CString},
@@ -39,9 +38,11 @@ pub use api::{Api, Ptr};
 pub use error::{Error, Result};
 #[cfg(unix)]
 pub use loader::on_init;
+pub use typed::{
+    element, HookCallback, Il2CppString, Il2CppValue, MethodArgs, Object, Original, Signature,
+    TypeInfo, ValueCheck,
+};
 
-/// A managed object (`Il2CppObject*`).
-pub type Object = Ptr;
 /// The hidden last argument of every Il2Cpp method (`const MethodInfo*`).
 pub type MethodInfo = Ptr;
 
@@ -49,7 +50,9 @@ pub type MethodInfo = Ptr;
 /// Both `/` and `\\` separate directories, as Windows paths can show up on Linux under Wine.
 pub fn is_game_assembly(path: impl AsRef<Path>) -> bool {
     let path = path.as_ref().to_string_lossy();
-    path.rsplit(['/', '\\']).next().is_some_and(|name| name.starts_with("GameAssembly."))
+    path.rsplit(['/', '\\'])
+        .next()
+        .is_some_and(|name| name.starts_with("GameAssembly."))
 }
 
 /// The game binary in a game folder, whichever platform the game was built for.
@@ -117,7 +120,10 @@ unsafe fn c_str<'a>(value: *const std::ffi::c_char) -> &'a str {
 impl Il2Cpp {
     fn install(library: Library) -> Result<&'static Il2Cpp> {
         let api = Api::load(&library)?;
-        Ok(INSTANCE.get_or_init(|| Il2Cpp { api, _library: library }))
+        Ok(INSTANCE.get_or_init(|| Il2Cpp {
+            api,
+            _library: library,
+        }))
     }
 
     /// The runtime of the game binary already loaded in this process.
@@ -125,14 +131,17 @@ impl Il2Cpp {
         if let Some(il2cpp) = INSTANCE.get() {
             return Ok(il2cpp);
         }
-        let path = loaded_game_assembly().ok_or_else(|| Error::NotFound("a loaded GameAssembly".into()))?;
+        let path = loaded_game_assembly()
+            .ok_or_else(|| Error::NotFound("a loaded GameAssembly".into()))?;
         check_format(&path)?;
         #[cfg(unix)]
         let library = unsafe {
-            libloading::os::unix::Library::open(Some(&path), libc::RTLD_NOW | libc::RTLD_NOLOAD).map(Library::from)
+            libloading::os::unix::Library::open(Some(&path), libc::RTLD_NOW | libc::RTLD_NOLOAD)
+                .map(Library::from)
         };
         #[cfg(windows)]
-        let library = libloading::os::windows::Library::open_already_loaded(&path).map(Library::from);
+        let library =
+            libloading::os::windows::Library::open_already_loaded(&path).map(Library::from);
         Self::install(library.map_err(Error::Load)?)
     }
 
@@ -175,7 +184,8 @@ impl Il2Cpp {
 
     /// Finds a class, e.g. `class("Assembly-CSharp", "Game.Player", "Health")`.
     pub fn class(&'static self, assembly: &str, namespace: &str, name: &str) -> Result<Class> {
-        let (assembly_c, namespace_c, name_c) = (cstring(assembly)?, cstring(namespace)?, cstring(name)?);
+        let (assembly_c, namespace_c, name_c) =
+            (cstring(assembly)?, cstring(namespace)?, cstring(name)?);
         let class = unsafe {
             let domain = (self.api.il2cpp_domain_get)();
             let opened = (self.api.il2cpp_domain_assembly_open)(domain, assembly_c.as_ptr());
@@ -186,15 +196,23 @@ impl Il2Cpp {
             (self.api.il2cpp_class_from_name)(image, namespace_c.as_ptr(), name_c.as_ptr())
         };
         if class.is_null() {
-            return Err(Error::NotFound(format!("class {}.{} in {}", namespace, name, assembly)));
+            return Err(Error::NotFound(format!(
+                "class {}.{} in {}",
+                namespace, name, assembly
+            )));
         }
-        Ok(Class { il2cpp: self, ptr: class })
+        Ok(Class {
+            il2cpp: self,
+            ptr: class,
+        })
     }
 
     /// A new managed string.
-    pub fn string(&self, value: &str) -> Result<Object> {
+    pub fn string(&self, value: &str) -> Result<Il2CppString> {
         let value = cstring(value)?;
-        Ok(unsafe { (self.api.il2cpp_string_new)(value.as_ptr()) })
+        Ok(Il2CppString(Object(unsafe {
+            (self.api.il2cpp_string_new)(value.as_ptr())
+        })))
     }
 
     /// Reads a managed string, `None` for null.
@@ -206,8 +224,9 @@ impl Il2Cpp {
             return None;
         }
         unsafe {
-            let length = (self.api.il2cpp_string_length)(string).max(0) as usize;
-            let chars = std::slice::from_raw_parts((self.api.il2cpp_string_chars)(string), length);
+            let length = (self.api.il2cpp_string_length)(string.0).max(0) as usize;
+            let chars =
+                std::slice::from_raw_parts((self.api.il2cpp_string_chars)(string.0), length);
             Some(String::from_utf16_lossy(chars))
         }
     }
@@ -219,7 +238,7 @@ impl Il2Cpp {
     pub unsafe fn class_of(&'static self, object: Object) -> Class {
         Class {
             il2cpp: self,
-            ptr: unsafe { (self.api.il2cpp_object_get_class)(object) },
+            ptr: unsafe { (self.api.il2cpp_object_get_class)(object.0) },
         }
     }
 }
@@ -250,17 +269,45 @@ impl Class {
     /// Finds a method by name and parameter count (`-1` for any).
     pub fn method(&self, name: &str, parameter_count: i32) -> Result<Method> {
         let c_name = cstring(name)?;
-        let method = unsafe { (self.il2cpp.api.il2cpp_class_get_method_from_name)(self.ptr, c_name.as_ptr(), parameter_count) };
+        let method = unsafe {
+            (self.il2cpp.api.il2cpp_class_get_method_from_name)(
+                self.ptr,
+                c_name.as_ptr(),
+                parameter_count,
+            )
+        };
         if method.is_null() {
-            return Err(Error::NotFound(format!("method {}.{}({} parameters)", self.name(), name, parameter_count)));
+            return Err(Error::NotFound(format!(
+                "method {}.{}({} parameters)",
+                self.name(),
+                name,
+                parameter_count
+            )));
         }
-        Ok(Method { il2cpp: self.il2cpp, ptr: method })
+        Ok(Method {
+            il2cpp: self.il2cpp,
+            ptr: method,
+        })
+    }
+
+    /// Every method declared by the class, e.g. to pick an overload by [`Method::signature`].
+    pub fn methods(&self) -> impl Iterator<Item = Method> + '_ {
+        let mut iter: Ptr = std::ptr::null_mut();
+        std::iter::from_fn(move || {
+            let method = unsafe { (self.il2cpp.api.il2cpp_class_get_methods)(self.ptr, &mut iter) };
+            (!method.is_null()).then_some(Method {
+                il2cpp: self.il2cpp,
+                ptr: method,
+            })
+        })
     }
 
     /// The byte offset of an instance field from the start of an object.
     pub fn field_offset(&self, name: &str) -> Result<usize> {
         let c_name = cstring(name)?;
-        let field = unsafe { (self.il2cpp.api.il2cpp_class_get_field_from_name)(self.ptr, c_name.as_ptr()) };
+        let field = unsafe {
+            (self.il2cpp.api.il2cpp_class_get_field_from_name)(self.ptr, c_name.as_ptr())
+        };
         if field.is_null() {
             return Err(Error::NotFound(format!("field {}.{}", self.name(), name)));
         }
@@ -297,21 +344,23 @@ impl Method {
 
     /// Redirects every call of the method to `detour`, which has the method's
     /// signature as described on [`Method::code`]. Inside the detour, [`original!`]
-    /// gets a function that calls the original code.
+    /// gets a function that calls the original code. [`Method::hook`] is the safe,
+    /// typed version of this.
     ///
     /// The hook stays in place when the returned value is dropped.
     ///
     /// # Safety
     /// `detour` must be an `extern "C"` function with exactly the method's signature.
-    pub unsafe fn hook(&self, detour: *mut u8) -> Result<MethodHook> {
-        let mut hook = unsafe { hooking::Hook::create(self.code() as *mut u8, detour) }.map_err(Error::Hook)?;
+    pub unsafe fn hook_raw(&self, detour: *mut u8) -> Result<MethodHook> {
+        let mut hook = unsafe { hooking::Hook::create(self.code() as *mut u8, detour) }
+            .map_err(Error::Hook)?;
         unsafe { hook.apply_hook() }.map_err(Error::Hook)?;
         Ok(MethodHook(hook))
     }
 }
 
-/// An applied method hook.
-pub struct MethodHook(hooking::Hook<'static>);
+/// An applied method hook. Dropping it leaves the hook in place.
+pub struct MethodHook(pub(crate) hooking::Hook<'static>);
 
 impl MethodHook {
     pub fn remove(mut self) -> Result<()> {
@@ -324,7 +373,7 @@ impl MethodHook {
 /// # Safety
 /// `object` must be a live object with a field of type `T` at `offset`.
 pub unsafe fn read_field<T: Copy>(object: Object, offset: usize) -> T {
-    unsafe { std::ptr::read_unaligned((object as *const u8).add(offset) as *const T) }
+    unsafe { std::ptr::read_unaligned((object.0 as *const u8).add(offset) as *const T) }
 }
 
 /// Writes a managed object's field at `offset`. Only for fields that don't hold references.
@@ -332,15 +381,16 @@ pub unsafe fn read_field<T: Copy>(object: Object, offset: usize) -> T {
 /// # Safety
 /// `object` must be a live object with a field of type `T` at `offset`.
 pub unsafe fn write_field<T: Copy>(object: Object, offset: usize, value: T) {
-    unsafe { std::ptr::write_unaligned((object as *mut u8).add(offset) as *mut T, value) }
+    unsafe { std::ptr::write_unaligned((object.0 as *mut u8).add(offset) as *mut T, value) }
 }
 
-/// Inside a detour from [`Method::hook`], gets the function that calls the
+/// Inside a detour from [`Method::hook_raw`], gets the function that calls the
 /// original method. Must be the first thing the detour does.
 #[macro_export]
 macro_rules! original {
     ($fn_type:ty) => {{
-        let original = $crate::__original_function_ptr().expect("original! must be used inside a hook");
+        let original =
+            $crate::__original_function_ptr().expect("original! must be used inside a hook");
         unsafe { ::core::mem::transmute::<*mut ::core::ffi::c_void, $fn_type>(original.as_ptr()) }
     }};
 }
@@ -369,7 +419,10 @@ mod tests {
         let found = find_game_assembly(&dir).unwrap();
         assert_eq!(found, dir.join("GameAssembly.dll"));
         if cfg!(unix) {
-            assert!(matches!(check_format(&found), Err(Error::UnsupportedBinary(_))));
+            assert!(matches!(
+                check_format(&found),
+                Err(Error::UnsupportedBinary(_))
+            ));
         }
         std::fs::remove_dir_all(dir).unwrap();
     }

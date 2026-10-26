@@ -7,32 +7,36 @@ runtime has started; from there, classes and methods are found by name through t
 `il2cpp_*` API, and methods are hooked with [`hooking`](https://crates.io/crates/hooking).
 
 ```rust
-use hao_il2cpp_runtime::{original, MethodInfo, Object};
-
-// `int PlayerHealth.Heal(float amount, bool allowOverheal)`. Il2Cpp methods take the
-// instance first and a hidden `MethodInfo*` last.
-extern "C" fn heal(this: Object, amount: f32, allow_overheal: bool, method: MethodInfo) -> i32 {
-    let heal = original!(extern "C" fn(Object, f32, bool, MethodInfo) -> i32);
-    heal(this, amount * 2.0, allow_overheal, method)
-}
+use hao_il2cpp_runtime::{Object, Original};
 
 #[ctor::ctor(unsafe)]
-fn load() {
+pub fn load() {
     hao_il2cpp_runtime::on_init(|il2cpp| {
         let health = il2cpp.class("Assembly-CSharp", "Assets.Scripts.Inventory__Items__Pickups", "PlayerHealth")?;
-        unsafe { health.method("Heal", 2)?.hook(heal as *mut u8)? };
+        // `int PlayerHealth.Heal(float amount, bool allowOverheal)`: the instance comes first.
+        health.method("Heal", 2)?.hook(|this: Object, amount: f32, overheal: bool, original: Original<_, i32>| {
+            original.call((this, amount * 2.0, overheal))
+        })?;
         Ok(())
     });
 }
 ```
+
+The closure's types are checked against the method's real signature when the hook is installed,
+and a mismatch is an `Error::Signature` rather than a crash. Arguments and return values are
+Rust primitives for the matching .NET ones, `Object` for references, `Il2CppString` for strings
+and `*mut c_void` for pointers and `ref` parameters. `Method::call` calls a method the same way,
+and `Class::methods` lists every overload with its `Method::signature`. Managed exceptions pass
+through hooks.
 
 [`examples/heal_mod.rs`](examples/heal_mod.rs) is a complete mod for Megabonk's Linux build. Load it
 by adding `LD_PRELOAD=/path/to/libheal_mod.so %command%` to the game's Steam launch options.
 The class, method and field names come from the game's metadata, which
 [`hao-il2cpp`](../hao-il2cpp)'s `game_info` example shows.
 
-- `original!` must be the first thing a detour does: it reads the trampoline address from
-  registers the hook sets.
+- `Method::hook_raw` takes an `extern "C"` detour instead, with Il2Cpp's hidden `MethodInfo*` as
+  the last parameter. `original!` gets the original function and must be the first thing the
+  detour does: it reads the trampoline address from registers the hook sets.
 - `Class::field_offset` with `read_field`/`write_field` reads and writes fields of game objects.
 - `Il2Cpp::load` + `init_standalone` run a game's Il2Cpp runtime without Unity, which is how the
   tests work. Only code that doesn't call into Unity can run that way.
@@ -47,5 +51,5 @@ Wine rather than `dlopen`, and uses the Windows calling convention.
 ## Tests
 
 `HAO_IL2CPP_GAME=/path/to/game cargo test -p hao-il2cpp-runtime` loads the game's Il2Cpp runtime
-into the test process, hooks `String.Concat`, and (for Megabonk) checks the example mod installs
-its hook. Without the variable the tests skip.
+into the test process, hooks `String.Concat` and `Int32.Parse` with raw and typed hooks, and (for
+Megabonk) checks the example mod installs its hook. Without the variable the tests skip.

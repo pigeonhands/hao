@@ -10,6 +10,8 @@ pub enum Error {
     MissingExport(&'static str, libloading::Error),
     #[error("{0}")]
     UnsupportedBinary(String),
+    #[error("signature mismatch, {0}")]
+    Signature(String),
     #[error("il2cpp_init failed")]
     Init,
     #[error("could not find {0}")]
