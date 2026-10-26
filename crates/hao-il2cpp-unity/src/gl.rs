@@ -24,7 +24,7 @@ use hao_il2cpp_runtime::Result;
 
 use crate::{
     bindings::{
-        GL_BEGIN, GL_COLOR, GL_END, GL_LOAD_ORTHO, GL_LOAD_PIXEL_MATRIX, GL_POP_MATRIX,
+        GL_BEGIN, GL_CLEAR, GL_COLOR, GL_END, GL_LOAD_ORTHO, GL_LOAD_PIXEL_MATRIX, GL_POP_MATRIX,
         GL_PUSH_MATRIX, GL_TEXCOORD2, GL_VERTEX3,
     },
     Color,
@@ -85,6 +85,11 @@ pub fn load_pixel_matrix(left: f32, right: f32, bottom: f32, top: f32) -> Result
 /// Sets up an orthographic projection with coordinates from (0, 0) to (1, 1).
 pub fn load_ortho() -> Result<()> {
     GL_LOAD_ORTHO.call(())
+}
+
+/// Clears the active render target to `color` (and optionally the depth buffer).
+pub fn clear(clear_depth: bool, color: Color) -> Result<()> {
+    GL_CLEAR.call((clear_depth, true, color))
 }
 
 /// Saves the projection/model-view matrix; restore with [`pop_matrix`].

@@ -269,6 +269,49 @@ impl Texture2D {
     }
 }
 
+object_type!(
+    /// `UnityEngine.RenderTexture`, an off-screen render target.
+    RenderTexture = "UnityEngine.CoreModule" "UnityEngine" "RenderTexture"
+);
+
+impl RenderTexture {
+    /// `new RenderTexture(width, height, depth)` (depth is the depth-buffer bits,
+    /// e.g. 0 for a colour-only target).
+    pub fn new(width: i32, height: i32, depth: i32) -> Result<RenderTexture> {
+        let object = RenderTexture(
+            il2cpp()?
+                .class(Self::ASSEMBLY, Self::NAMESPACE, Self::NAME)?
+                .new_object(),
+        );
+        RENDER_TEXTURE_CTOR.call((object, width, height, depth))?;
+        Ok(object)
+    }
+
+    /// `RenderTexture.active`, the target GL and camera drawing goes to.
+    pub fn active() -> Result<Option<RenderTexture>> {
+        let rt = RENDER_TEXTURE_GET_ACTIVE.call(())?;
+        Ok((!rt.is_null()).then_some(rt))
+    }
+
+    /// Sets `RenderTexture.active`. Pass `None` to restore the back buffer.
+    pub fn set_active(target: Option<RenderTexture>) -> Result<()> {
+        RENDER_TEXTURE_SET_ACTIVE.call((target.unwrap_or(RenderTexture(Object::NULL)),))
+    }
+}
+
+component_type!(
+    /// `UnityEngine.UI.RawImage`, a UI element that draws a raw [`Texture2D`] or
+    /// [`RenderTexture`].
+    RawImage = "UnityEngine.UI" "UnityEngine.UI" "RawImage"
+);
+
+impl RawImage {
+    /// The texture the image displays.
+    pub fn set_texture(&self, texture: Object) -> Result<()> {
+        RAW_IMAGE_SET_TEXTURE.call((*self, texture))
+    }
+}
+
 impl GameObject {
     /// `new GameObject(name)`.
     pub fn new(name: &str) -> Result<Self> {

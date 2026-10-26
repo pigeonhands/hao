@@ -2,7 +2,9 @@
 
 use hao_il2cpp_runtime::{Il2CppString, Object};
 
-use crate::{binding::bindings, Camera, Color, Material, Shader, Texture2D, TextureFormat};
+use crate::{
+    binding::bindings, Camera, Color, Material, RenderTexture, Shader, Texture2D, TextureFormat,
+};
 
 bindings! { rendering_checks;
     // Unity calls FireOnPostRender from native after each camera renders.
@@ -18,6 +20,13 @@ bindings! { rendering_checks;
     GL_POP_MATRIX: "UnityEngine.CoreModule" "UnityEngine" "GL" "PopMatrix" () -> ();
 
     GL_TEXCOORD2: "UnityEngine.CoreModule" "UnityEngine" "GL" "TexCoord2" (f32, f32) -> ();
+    GL_CLEAR: "UnityEngine.CoreModule" "UnityEngine" "GL" "Clear" (bool, bool, Color) -> ();
+
+    // An off-screen render target, so egui can draw into a texture and then be
+    // shown on a top-most overlay canvas (above screen-space UI).
+    RENDER_TEXTURE_CTOR: "UnityEngine.CoreModule" "UnityEngine" "RenderTexture" ".ctor" (RenderTexture, i32, i32, i32) -> ();
+    RENDER_TEXTURE_GET_ACTIVE: "UnityEngine.CoreModule" "UnityEngine" "RenderTexture" "get_active" () -> RenderTexture;
+    RENDER_TEXTURE_SET_ACTIVE: "UnityEngine.CoreModule" "UnityEngine" "RenderTexture" "set_active" (RenderTexture) -> ();
 
     SHADER_FIND: "UnityEngine.CoreModule" "UnityEngine" "Shader" "Find" (Il2CppString) -> Shader;
     MATERIAL_CTOR: "UnityEngine.CoreModule" "UnityEngine" "Material" ".ctor" (Material, Shader) -> ();

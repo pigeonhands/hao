@@ -1,10 +1,14 @@
 //! UI: `RectTransform`, `Canvas`, TextMeshPro text.
 
-use hao_il2cpp_runtime::Il2CppString;
+use hao_il2cpp_runtime::{Il2CppString, Object};
 
-use crate::{binding::bindings, Canvas, Color, RectTransform, RenderMode, TextMeshPro, Vector2};
+use crate::{
+    binding::bindings, Canvas, Color, RawImage, RectTransform, RenderMode, TextMeshPro, Vector2,
+};
 
 bindings! { ui_checks;
+    RAW_IMAGE_SET_TEXTURE: "UnityEngine.UI" "UnityEngine.UI" "RawImage" "set_texture" (RawImage, Object) -> ();
+
     RECT_SET_ANCHOR_MIN: "UnityEngine.CoreModule" "UnityEngine" "RectTransform" "set_anchorMin" (RectTransform, Vector2) -> ();
     RECT_SET_ANCHOR_MAX: "UnityEngine.CoreModule" "UnityEngine" "RectTransform" "set_anchorMax" (RectTransform, Vector2) -> ();
     RECT_SET_PIVOT: "UnityEngine.CoreModule" "UnityEngine" "RectTransform" "set_pivot" (RectTransform, Vector2) -> ();
