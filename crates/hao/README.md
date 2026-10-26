@@ -65,28 +65,43 @@ same instructions. See [`examples/patch_method.rs`](examples/patch_method.rs).
 ```rust
 use hao::dotnet::{
     entries::{Method, TypeDef},
-    il::{Instruction, MethodBody},
-    md::streams::tables_stream::{MethodFlags, TypeAttributes},
+    il::{Emitter, OpCode},
     module::{ModuleKind, TargetRuntime},
     signature::{MethodSig, TypeSig},
 };
 
 let mut module = Module::new("Generated", ModuleKind::Dll, TargetRuntime::NetCore(9));
-let object = module.corlib_type("System.Object")?;
-let ty = module.add_type(TypeDef::new(TypeAttributes::Public, "Generated", "Answer", Some(object)));
-let method = TypeDef::add_method(
-    &ty,
-    Method::new(MethodFlags::Public | MethodFlags::Static, "Get", MethodSig::new_static(TypeSig::INT32, vec![])),
-);
-method.get_mut().body = Some(MethodBody {
-    instructions: vec![Instruction::ldc_i4(42), Instruction::ret()],
-    ..Default::default()
+let answer = module.add_static_class("Generated", "Answer")?;
+let max = module.import_corlib_method(
+    "System.Math",
+    "Max",
+    MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32; 2]),
+)?;
+
+// public static int Get(int a) => a > 0 ? Math.Max(a, 42) : 0;
+let body = Emitter::build(|e| {
+    e.ldarg(0).ldc_i4(0).op(OpCode::Cgt).if_else(
+        |e| {
+            e.ldarg(0).ldc_i4(42).call(&max);
+        },
+        |e| {
+            e.ldc_i4(0);
+        },
+    );
+    e.ret();
 });
+let signature = MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32]);
+TypeDef::add_method(&answer, Method::public_static("Get", signature).with_body(body));
 module.write_to_path("Generated.dll")?;
 ```
 
-`TargetRuntime::NetFramework` references `mscorlib` instead, for Mono and Unity. The
-`il::Emitter` builds bodies with forward branch labels and try/catch blocks.
+`TargetRuntime::NetFramework` references `mscorlib` instead, for Mono and Unity.
+
+`il::Emitter` has a method per common instruction (`ldarg`, `call`, `stloc`, ...), structured
+control flow (`if_else`, `if_then`, `while_loop`, `try_catch`) and `call_native` for calling a
+native function pointer. To patch an existing method, `MethodBody::prefix` runs code at its start
+and `postfix` before every return. `Method::with_attribute` with `Module::corlib_attribute` adds
+attributes such as `[UnmanagedCallersOnly]`.
 
 Members of other loaded modules are referenced with `import_foreign_method`,
 `import_foreign_type` and `import_foreign_signature`, which copy the needed type and assembly
