@@ -343,7 +343,7 @@ impl EguiState {
                 }
             }
             tracing::info!(?min, ?max, "egui content bounds (egui coords)");
-            Some(((min.0 + max.0) / 2.0, (min.1 + max.1) / 2.0))
+            Some((min, max))
         } else {
             None
         };
@@ -387,11 +387,16 @@ impl EguiState {
                 }
                 gl::end()?;
             }
-            // While the target is still active, read a pixel back from the centre
-            // of egui's content to see what actually landed in the target.
-            if let Some((cx, cy)) = content_center {
-                if let Err(e) = self.sample_target(cx, cy, h) {
-                    tracing::warn!("target readback failed: {}", e);
+            // While the target is still active, read pixels back from egui's
+            // content to see what landed in the target: the centre (likely a
+            // widget) and a point just below the title bar (plain window fill).
+            if let Some((min, max)) = content_center {
+                let center = ((min.0 + max.0) / 2.0, (min.1 + max.1) / 2.0);
+                let fill = (min.0 + 20.0, min.1 + 40.0);
+                for (label, (x, y)) in [("center", center), ("fill", fill)] {
+                    if let Err(e) = self.sample_target(label, x, y, h) {
+                        tracing::warn!("target readback failed: {}", e);
+                    }
                 }
             }
             gl::pop_matrix()
@@ -402,7 +407,7 @@ impl EguiState {
 
     /// Debug: reads the active target at egui's content centre `(cx, cy)` (in
     /// egui coords) and logs the colour, so we can see what landed in the target.
-    fn sample_target(&mut self, cx: f32, cy: f32, h: f32) -> Result<()> {
+    fn sample_target(&mut self, label: &str, cx: f32, cy: f32, h: f32) -> Result<()> {
         let readback = match &self.readback {
             Some(handle) => Texture2D(handle.target()),
             None => {
@@ -412,22 +417,11 @@ impl EguiState {
                 tex
             }
         };
-        // ReadPixels' Y origin can differ by platform, so read both the straight
-        // and the flipped Y at egui's content centre.
-        for (label, py) in [("top-origin", cy), ("bottom-origin", h - cy)] {
-            readback.read_pixels(crate::Rect::new(cx, py, 1.0, 1.0), 0, 0)?;
-            let c = readback.get_pixel(0, 0)?;
-            tracing::info!(
-                r = c.r,
-                g = c.g,
-                b = c.b,
-                a = c.a,
-                px = cx,
-                py,
-                origin = label,
-                "target pixel"
-            );
-        }
+        // The target is bottom-left origin, egui is top-left, so flip Y.
+        let py = h - cy;
+        readback.read_pixels(crate::Rect::new(cx, py, 1.0, 1.0), 0, 0)?;
+        let c = readback.get_pixel(0, 0)?;
+        tracing::info!(r = c.r, g = c.g, b = c.b, a = c.a, at = label, "target pixel");
         Ok(())
     }
 }
