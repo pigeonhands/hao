@@ -72,4 +72,5 @@ api! {
     il2cpp_gchandle_new: fn(Ptr, bool) -> Ptr;
     il2cpp_gchandle_get_target: fn(Ptr) -> Ptr;
     il2cpp_gchandle_free: fn(Ptr);
+    il2cpp_array_length: fn(Ptr) -> usize;
 }

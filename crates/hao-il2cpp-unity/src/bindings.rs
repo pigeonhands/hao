@@ -18,12 +18,16 @@ bindings! {
     GAME_OBJECT_CTOR: "UnityEngine.CoreModule" "UnityEngine" "GameObject" ".ctor" (GameObject, Il2CppString) -> ();
     GAME_OBJECT_FIND: "UnityEngine.CoreModule" "UnityEngine" "GameObject" "Find" (Il2CppString) -> GameObject;
     GAME_OBJECT_ADD_COMPONENT: "UnityEngine.CoreModule" "UnityEngine" "GameObject" "AddComponent" (GameObject, Object) -> Component;
+    GAME_OBJECT_GET_COMPONENT: "UnityEngine.CoreModule" "UnityEngine" "GameObject" "GetComponent" (GameObject, Object) -> Component;
     GAME_OBJECT_TRANSFORM: "UnityEngine.CoreModule" "UnityEngine" "GameObject" "get_transform" (GameObject) -> Transform;
     GAME_OBJECT_SET_ACTIVE: "UnityEngine.CoreModule" "UnityEngine" "GameObject" "SetActive" (GameObject, bool) -> ();
     GAME_OBJECT_ACTIVE_SELF: "UnityEngine.CoreModule" "UnityEngine" "GameObject" "get_activeSelf" (GameObject) -> bool;
 
     COMPONENT_GAME_OBJECT: "UnityEngine.CoreModule" "UnityEngine" "Component" "get_gameObject" (Component) -> GameObject;
     COMPONENT_TRANSFORM: "UnityEngine.CoreModule" "UnityEngine" "Component" "get_transform" (Component) -> Transform;
+    COMPONENT_GET_COMPONENT: "UnityEngine.CoreModule" "UnityEngine" "Component" "GetComponent" (Component, Object) -> Component;
+
+    OBJECT_FIND_OBJECTS_OF_TYPE: "UnityEngine.CoreModule" "UnityEngine" "Object" "FindObjectsOfType" (Object) -> Object;
 
     TRANSFORM_SET_PARENT: "UnityEngine.CoreModule" "UnityEngine" "Transform" "SetParent" (Transform, Transform, bool) -> ();
     TRANSFORM_SET_LOCAL_SCALE: "UnityEngine.CoreModule" "UnityEngine" "Transform" "set_localScale" (Transform, Vector3) -> ();

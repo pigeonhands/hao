@@ -76,6 +76,54 @@ pub trait ComponentType: Il2CppValue {
     fn transform(&self) -> Result<Transform> {
         COMPONENT_TRANSFORM.call((Component(self.object()),))
     }
+
+    /// `GetComponent<U>()` on this component's game object, or `None` if absent.
+    fn get_component<U: ComponentType>(&self) -> Result<Option<U>> {
+        let found =
+            COMPONENT_GET_COMPONENT.call((Component(self.object()), component_type::<U>()?))?;
+        Ok((!found.is_null()).then(|| U::from_object(found.0)))
+    }
+}
+
+/// The `System.Type` of a component type `T`, for the Unity query methods.
+fn component_type<T: ComponentType>() -> Result<Object> {
+    Ok(il2cpp()?
+        .class(T::ASSEMBLY, T::NAMESPACE, T::NAME)?
+        .type_object())
+}
+
+/// Collects the elements of a managed `T[]` whose object is `array`.
+fn read_object_array<T: ComponentType>(array: Object) -> Vec<T> {
+    if array.is_null() {
+        return Vec::new();
+    }
+    let Some(il2cpp) = il2cpp().ok() else {
+        return Vec::new();
+    };
+    let length = unsafe { (il2cpp.api().il2cpp_array_length)(array.as_ptr()) };
+    // Elements follow the array header (object header, bounds, length): 4 pointers.
+    let base = 4 * std::mem::size_of::<usize>();
+    (0..length)
+        .map(|i| {
+            T::from_object(unsafe {
+                hao_il2cpp_runtime::read_field(array, base + i * std::mem::size_of::<usize>())
+            })
+        })
+        .collect()
+}
+
+/// Every active object of type `T` in the loaded scenes (`Object.FindObjectsOfType`).
+///
+/// Call this on Unity's main thread (e.g. in [`on_update`](crate::on_update) or
+/// [`on_scene_loaded`](crate::on_scene_loaded)).
+pub fn find_objects_of_type<T: ComponentType>() -> Result<Vec<T>> {
+    let array = OBJECT_FIND_OBJECTS_OF_TYPE.call((component_type::<T>()?,))?;
+    Ok(read_object_array(array))
+}
+
+/// The first active object of type `T`, or `None` (`Object.FindObjectOfType`).
+pub fn find_object_of_type<T: ComponentType>() -> Result<Option<T>> {
+    Ok(find_objects_of_type::<T>()?.into_iter().next())
 }
 
 macro_rules! component_type {
@@ -151,6 +199,12 @@ impl GameObject {
         let class = il2cpp()?.class(T::ASSEMBLY, T::NAMESPACE, T::NAME)?;
         let component = GAME_OBJECT_ADD_COMPONENT.call((*self, class.type_object()))?;
         Ok(T::from_object(component.0))
+    }
+
+    /// `GetComponent<T>()`, or `None` if the object has no such component.
+    pub fn get_component<T: ComponentType>(&self) -> Result<Option<T>> {
+        let found = GAME_OBJECT_GET_COMPONENT.call((*self, component_type::<T>()?))?;
+        Ok((!found.is_null()).then(|| T::from_object(found.0)))
     }
 
     pub fn transform(&self) -> Result<Transform> {

@@ -11,6 +11,9 @@ common Unity functionality the same way for any Unity game:
 - `GameObject` (create, find, add components, activate), `Transform`, `RectTransform`, `Canvas`
   and TextMeshPro text, with `Vector2`, `Vector3` and `Color`
 - `TextOverlay`: a line of text drawn over the game in one call
+- `find_objects_of_type::<T>()` / `find_object_of_type::<T>()` and `GameObject::get_component`
+  / `Component::get_component` query live objects by type (`Object.FindObjectsOfType`,
+  `GetComponent`)
 - `Scene` and `on_scene_loaded` (runs code when a scene loads), and `on_update` (runs code every
   frame, e.g. to refresh an overlay)
 - `log`/`log_warning`/`log_error` (`Debug.Log`, to the game's `Player.log`) and `time`
