@@ -7,10 +7,16 @@ Read Unity Il2Cpp games, with the goal of generating .NET proxy assemblies for t
 
 - [x] `global-metadata.dat` reader for metadata v29 (Unity 2021.2 – 2023.x): images, assemblies,
       types, methods, fields, parameters, properties, events and generic parameters, with names
+- [x] `GameAssembly` binary (ELF): finds `MetadataRegistration` and decodes the `Il2CppType`
+      table, giving the types of fields, parameters and return values
+- [x] declaration assemblies ("dummy DLLs"): one assembly per image with every type, field,
+      constant, method signature, property, event, generic parameter and interface, with stub
+      bodies. Other code compiles against them.
+- [ ] custom attributes (only `[DefaultMember]` for indexers is generated so far)
+- [ ] PE game binaries (`GameAssembly.dll`)
 - [ ] more metadata versions (v31, v39 for Unity 6)
-- [ ] `GameAssembly` binary: `CodeRegistration` / `MetadataRegistration` and the `Il2CppType`
-      table, needed for the types of fields, parameters and return values (ELF and PE)
-- [ ] proxy assembly generation
+- [ ] `CodeRegistration` and method addresses
+- [ ] runtime proxy assemblies that call into the game, like Il2CppInterop
 
 ```rust
 use hao_il2cpp::Metadata;
@@ -21,11 +27,24 @@ for image in &metadata.images {
 }
 ```
 
+```rust
+use hao_il2cpp::{generate, Binary, ElfImage, Metadata};
+
+let metadata = Metadata::from_path("Game_Data/il2cpp_data/Metadata/global-metadata.dat")?;
+let data = std::fs::read("GameAssembly.so")?;
+let binary = Binary::read(&ElfImage::parse(&data)?, &metadata)?;
+for assembly in generate(&metadata, &binary)? {
+    assembly.module.write_to_path(format!("out/{}", assembly.file_name))?;
+}
+```
+
 ```sh
-cargo run -p hao-il2cpp --example il2cpp_info -- path/to/global-metadata.dat System.String
+cargo run -p hao-il2cpp --example il2cpp_info -- path/to/global-metadata.dat System.String path/to/GameAssembly.so
+cargo run --release -p hao-il2cpp --example generate_dlls -- path/to/game out
 ```
 
 ## Tests
 
-The tests need a real game. Set `HAO_IL2CPP_METADATA` to a v29 `global-metadata.dat`, or they
-skip themselves. Game files are never committed.
+The tests need a real game: `HAO_IL2CPP_METADATA` (a v29 `global-metadata.dat`) and
+`HAO_IL2CPP_GAME` (a game folder with a v29 `GameAssembly.so`). Without them they skip
+themselves. Game files are never committed.

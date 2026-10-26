@@ -100,3 +100,39 @@ fn method_signatures() {
     assert!(signature("get_Length").contains(&"int get_Length()".to_owned()));
     assert!(signature("Split").iter().any(|s| s == "string[] Split(char[])"), "{:?}", signature("Split"));
 }
+
+#[test]
+fn generates_declaration_assemblies() {
+    let Some(game) = game() else { return };
+    let assemblies = hao_il2cpp::generate(&game.metadata, &game.binary).unwrap();
+    assert_eq!(assemblies.len(), game.metadata.images.len());
+
+    let mut total_types = 0;
+    let mut mscorlib = None;
+    for assembly in &assemblies {
+        let written = assembly.module.write().unwrap();
+        let reloaded = hao::Module::from_bytes(&written).unwrap();
+        total_types += reloaded.all_types().iter().filter(|t| t.get().name != "<Module>").count();
+        if assembly.file_name == "mscorlib.dll" {
+            mscorlib = Some(reloaded);
+        }
+    }
+    let modules = game.metadata.type_definitions.iter().filter(|t| game.metadata.string(t.name_index) == "<Module>").count();
+    assert_eq!(total_types, game.metadata.type_definitions.len() - modules);
+
+    let mscorlib = mscorlib.unwrap();
+    // Unused constants are stripped by Il2Cpp, but enum members are kept.
+    let day = mscorlib.find_type("System", "DayOfWeek").unwrap();
+    let constant = |name: &str| day.get().find_field(name).unwrap().get().constant.clone().unwrap().as_i64();
+    assert_eq!(constant("Sunday"), Some(0));
+    assert_eq!(constant("Saturday"), Some(6));
+
+    let dictionary = mscorlib.find_type("System.Collections.Generic", "Dictionary`2").unwrap();
+    let dictionary = dictionary.get();
+    assert_eq!(dictionary.generic_params.len(), 2);
+    assert!(dictionary
+        .custom_attributes
+        .iter()
+        .any(|a| a.type_name() == "System.Reflection.DefaultMemberAttribute"));
+    assert!(dictionary.find_method("TryGetValue").is_some());
+}

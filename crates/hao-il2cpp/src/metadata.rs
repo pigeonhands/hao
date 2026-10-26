@@ -223,6 +223,17 @@ pub struct Metadata {
     pub generic_parameters: Vec<GenericParameter>,
     pub nested_types: Vec<TypeDefinitionIndex>,
     pub interfaces: Vec<TypeIndex>,
+    pub generic_parameter_constraints: Vec<TypeIndex>,
+    pub field_default_values: Vec<FieldDefaultValue>,
+    declaring_types: Vec<Option<TypeDefinitionIndex>>,
+}
+
+/// A constant value for a field, stored in the default value data section.
+#[derive(Debug, Clone)]
+pub struct FieldDefaultValue {
+    pub field_index: i32,
+    pub type_index: TypeIndex,
+    pub data_index: i32,
 }
 
 impl Metadata {
@@ -270,6 +281,9 @@ impl Metadata {
             generic_parameters: Vec::new(),
             nested_types: Vec::new(),
             interfaces: Vec::new(),
+            generic_parameter_constraints: Vec::new(),
+            field_default_values: Vec::new(),
+            declaring_types: Vec::new(),
             data: Vec::new(),
         };
         metadata.data = data;
@@ -397,6 +411,21 @@ impl Metadata {
         })?;
         self.nested_types = self.table("nested_types", 4, |c| c.i32())?;
         self.interfaces = self.table("interfaces", 4, |c| c.i32())?;
+        self.generic_parameter_constraints = self.table("generic_parameter_constraints", 4, |c| c.i32())?;
+        self.field_default_values = self.table("field_default_values", 12, |c| FieldDefaultValue {
+            field_index: c.i32(),
+            type_index: c.i32(),
+            data_index: c.i32(),
+        })?;
+        self.declaring_types = vec![None; self.type_definitions.len()];
+        for (i, t) in self.type_definitions.iter().enumerate() {
+            let start = t.nested_types_start.max(0) as usize;
+            for nested in self.nested_types.get(start..start + t.nested_type_count as usize).unwrap_or(&[]) {
+                if let Some(slot) = usize::try_from(*nested).ok().and_then(|n| self.declaring_types.get_mut(n)) {
+                    *slot = Some(i as TypeDefinitionIndex);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -428,14 +457,7 @@ impl Metadata {
 
     /// The enclosing type definition, found through the nested type lists.
     pub fn declaring_type_definition(&self, index: TypeDefinitionIndex) -> Option<TypeDefinitionIndex> {
-        if self.type_definitions[index as usize].declaring_type_index < 0 {
-            return None;
-        }
-        self.type_definitions.iter().enumerate().find_map(|(i, t)| {
-            let start = t.nested_types_start.max(0) as usize;
-            let nested = self.nested_types.get(start..start + t.nested_type_count as usize)?;
-            nested.contains(&index).then_some(i as TypeDefinitionIndex)
-        })
+        self.declaring_types.get(index as usize).copied().flatten()
     }
 
     pub fn image_name(&self, image: &ImageDefinition) -> &str {
@@ -455,6 +477,21 @@ impl Metadata {
     pub fn type_fields(&self, t: &TypeDefinition) -> &[FieldDefinition] {
         let start = t.field_start.max(0) as usize;
         self.fields.get(start..start + t.field_count as usize).unwrap_or(&[])
+    }
+
+    /// Bytes of the default value data section from `index` on.
+    pub fn default_value_data(&self, index: i32) -> &[u8] {
+        let (offset, size) = self.sections["field_and_parameter_default_value_data"];
+        let data = &self.data[offset..offset + size];
+        usize::try_from(index).ok().and_then(|i| data.get(i..)).unwrap_or(&[])
+    }
+
+    pub fn generic_container_parameters(&self, container: i32) -> &[GenericParameter] {
+        let Some(c) = usize::try_from(container).ok().and_then(|i| self.generic_containers.get(i)) else {
+            return &[];
+        };
+        let start = c.generic_parameter_start.max(0) as usize;
+        self.generic_parameters.get(start..start + c.type_argc.max(0) as usize).unwrap_or(&[])
     }
 
     pub fn method_parameters(&self, m: &MethodDefinition) -> &[ParameterDefinition] {

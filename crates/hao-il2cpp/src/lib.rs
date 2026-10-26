@@ -1,9 +1,10 @@
 //! Reads Unity Il2Cpp games, to generate .NET proxy assemblies with hao.
 //!
-//! Work in progress: [`Metadata`] reads `global-metadata.dat` (metadata v29),
-//! which has the names and shape of every type. The `GameAssembly` binary,
-//! which holds the `Il2CppType` table that field, parameter and return types
-//! index into, isn't read yet.
+//! Work in progress, for metadata v29 and ELF game binaries:
+//! - [`Metadata`] reads `global-metadata.dat`: the names and shape of every type.
+//! - [`Binary`] reads the `Il2CppType` table from `GameAssembly`, which gives the
+//!   types of fields, parameters and return values.
+//! - [`generate`] builds a declaration assembly per image with hao.
 //!
 //! ```no_run
 //! use hao_il2cpp::Metadata;
@@ -16,8 +17,10 @@
 
 pub mod binary;
 mod error;
+pub mod generate;
 pub mod metadata;
 
 pub use error::{Error, Result};
 pub use binary::{Binary, BinaryImage, ElfImage};
+pub use generate::{generate, GeneratedAssembly};
 pub use metadata::Metadata;
