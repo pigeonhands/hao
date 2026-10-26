@@ -1,0 +1,9 @@
+[package]
+name = "hao-runtime-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+hao-runtime = { path = "../hao-runtime", features = ["coreclr", "mono"] }
+hao-runtime-macros = { path = "../hao-runtime-macros" }
