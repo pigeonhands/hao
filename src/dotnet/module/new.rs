@@ -21,6 +21,10 @@ pub enum TargetRuntime {
     NetCore(u16),
     /// .NET Framework 4.x and Mono (including Unity), referencing `mscorlib`.
     NetFramework,
+    /// .NET (Core) referencing the implementation assembly `System.Private.CoreLib`,
+    /// where every core type lives. Only suitable for code that runs on the
+    /// runtime it is generated for, as the reference ties it to that version.
+    NetCoreImplementation(u16),
 }
 
 impl TargetRuntime {
@@ -30,6 +34,11 @@ impl TargetRuntime {
                 "System.Runtime",
                 Version { major, ..Default::default() },
                 [0xb0, 0x3f, 0x5f, 0x7f, 0x11, 0xd5, 0x0a, 0x3a],
+            ),
+            Self::NetCoreImplementation(major) => (
+                "System.Private.CoreLib",
+                Version { major, ..Default::default() },
+                [0x7c, 0xec, 0x85, 0xd7, 0xbe, 0xa7, 0x79, 0x8e],
             ),
             Self::NetFramework => (
                 "mscorlib",
