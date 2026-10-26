@@ -22,6 +22,10 @@ hao = { path = "../hao" }
 name = "mono"
 required-features = ["mono"]
 
+[[example]]
+name = "mono_attach"
+required-features = ["mono"]
+
 [features]
 default = ["coreclr"]
 coreclr = ["hao"]

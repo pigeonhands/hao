@@ -69,3 +69,4 @@ cargo run -p hao-runtime --features mono --example mono
   Harmony prefixes and postfixes, by rewriting their IL to call a native function pointer.
 - [`mono`](examples/mono.rs): the Mono backend, including a call that throws.
 - [`call_any_method`](examples/call_any_method.rs): calls plain static methods (no `[UnmanagedCallersOnly]`) with `method_pointer`, including one whose IL was patched before loading.
+- [`mono_attach`](examples/mono_attach.rs): attaches to a Mono runtime already running in the process and calls into it.
