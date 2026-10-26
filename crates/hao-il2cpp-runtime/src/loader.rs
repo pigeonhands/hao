@@ -50,8 +50,25 @@ fn run(callback: Callback) {
     }
 }
 
+/// Runs every queued callback, once. Used when `il2cpp_init` finishes, or
+/// straight away when the mod is injected into an already-running game.
+fn run_callbacks() {
+    if INITIALIZED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let callbacks = std::mem::take(&mut *CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()));
+    for callback in callbacks {
+        run(callback);
+    }
+}
+
+/// Whether the game's Il2Cpp runtime has already started, for a mod injected late.
+fn already_running() -> bool {
+    matches!(Il2Cpp::loaded(), Ok(il2cpp) if !unsafe { (il2cpp.api().il2cpp_domain_get)() }.is_null())
+}
+
 fn install() -> Result<()> {
-    // The binary may already be loaded but not initialised.
+    // The binary may already be loaded, and may already be initialised.
     if let Some(path) = loaded_game_assembly() {
         crate::check_format(&path)?;
         let name = std::ffi::CString::new(path.to_string_lossy().into_owned())
@@ -59,6 +76,15 @@ fn install() -> Result<()> {
         let handle = unsafe { libc::dlopen(name.as_ptr(), libc::RTLD_NOW | libc::RTLD_NOLOAD) };
         if !handle.is_null() {
             tracing::debug!(path = %path.display(), "game binary already loaded");
+            if already_running() {
+                // Injected after il2cpp_init: attach this thread and run now.
+                tracing::debug!("il2cpp already initialised; running callbacks immediately");
+                if let Ok(il2cpp) = Il2Cpp::loaded() {
+                    il2cpp.attach_thread();
+                }
+                run_callbacks();
+                return Ok(());
+            }
             return hook_init(handle);
         }
     }
@@ -105,11 +131,8 @@ extern "C" fn init_detour(domain_name: *const c_char) -> i32 {
     tracing::debug!("il2cpp_init called");
     let result = init(domain_name);
     tracing::debug!(result, "il2cpp_init returned");
-    if result != 0 && !INITIALIZED.swap(true, Ordering::SeqCst) {
-        let callbacks = std::mem::take(&mut *CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()));
-        for callback in callbacks {
-            run(callback);
-        }
+    if result != 0 {
+        run_callbacks();
     }
     result
 }

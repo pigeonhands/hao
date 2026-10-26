@@ -39,6 +39,7 @@ struct Api {
     class_get_method_from_name: unsafe extern "C" fn(Ptr, *const c_char, c_int) -> Ptr,
     method_get_unmanaged_thunk: unsafe extern "C" fn(Ptr) -> Ptr,
     compile_method: unsafe extern "C" fn(Ptr) -> Ptr,
+    get_root_domain: unsafe extern "C" fn() -> Ptr,
 }
 
 pub(crate) struct Mono {
@@ -77,7 +78,9 @@ fn cstring(value: &str) -> Result<CString> {
 }
 
 impl Mono {
-    pub fn new(options: &MonoOptions) -> Result<Self> {
+    /// Opens the Mono library and resolves its symbols, without initialising it.
+    /// On `attach` the library is already loaded, so this hands back the same one.
+    fn open(options: &MonoOptions) -> Result<(Library, Api)> {
         let path = options
             .library
             .clone()
@@ -104,7 +107,34 @@ impl Mono {
             class_get_method_from_name: symbol!("mono_class_get_method_from_name"),
             method_get_unmanaged_thunk: symbol!("mono_method_get_unmanaged_thunk"),
             compile_method: symbol!("mono_compile_method"),
+            get_root_domain: symbol!("mono_get_root_domain"),
         };
+        Ok((library, api))
+    }
+
+    /// Attaches to a Mono runtime already running in this process, for a mod
+    /// loaded into a Unity Mono game. `options.library` should point at the
+    /// game's own Mono (e.g. `MonoBleedingEdge/.../libmonobdwgc-2.0.so`); loading
+    /// it by name returns the already-loaded instance rather than a fresh copy.
+    pub fn attach(options: &MonoOptions) -> Result<Self> {
+        let (library, api) = Self::open(options)?;
+        let domain = unsafe { (api.get_root_domain)() };
+        if domain.is_null() {
+            return Err(Error::Other(
+                "no Mono runtime is running in this process".into(),
+            ));
+        }
+        unsafe { (api.thread_attach)(domain) };
+        Ok(Self {
+            _library: library,
+            api,
+            domain,
+            images: Mutex::new(HashMap::new()),
+        })
+    }
+
+    pub fn new(options: &MonoOptions) -> Result<Self> {
+        let (library, api) = Self::open(options)?;
 
         let assemblies = options
             .assemblies_dir

@@ -215,4 +215,15 @@ fn hooks_il2cpp_code() {
         unsafe { il2cpp.read_string(pinned.target()) }.as_deref(),
         Some("kept")
     );
+
+    // A mod injected after the runtime has started: on_init runs straight away.
+    static LATE_RAN: AtomicBool = AtomicBool::new(false);
+    hao_il2cpp_runtime::on_init(|_| {
+        LATE_RAN.store(true, Ordering::SeqCst);
+        Ok(())
+    });
+    assert!(
+        LATE_RAN.load(Ordering::SeqCst),
+        "on_init after init should run immediately"
+    );
 }

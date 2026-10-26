@@ -40,6 +40,10 @@ let runtime = Runtime::mono(&MonoOptions {
   with `coreclr`) loads a [`hao`](../hao) `Module` you built or edited without writing a file.
 - CoreCLR is configured in memory: nothing is written to disk, and no `.runtimeconfig.json` is
   needed.
+- `Runtime::mono_attach` attaches to a Mono runtime already running in the process, for a mod
+  loaded into a Unity Mono game (point `MonoOptions.library` at the game's own Mono). Loading
+  assemblies and calling methods then work as usual. Attaching to a foreign CoreCLR is not
+  supported.
 - Only one runtime of each kind can run per process, so `Runtime::coreclr()` and
   `Runtime::mono()` return the existing instance when called again.
 - On Mono, threads have to be attached before running managed code. `attach_thread` does this,

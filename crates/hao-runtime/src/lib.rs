@@ -73,12 +73,26 @@ impl Runtime {
     /// Starts Mono, or returns the already running instance.
     #[cfg(feature = "mono")]
     pub fn mono(options: &MonoOptions) -> Result<Self> {
+        Self::mono_with(|| mono::Mono::new(options))
+    }
+
+    /// Attaches to a Mono runtime already running in this process, for a mod
+    /// loaded into a Unity Mono game. `options.library` should point at the
+    /// game's own Mono. After this, assemblies can be loaded and methods called
+    /// as usual. Returns the existing handle if hao already has one.
+    #[cfg(feature = "mono")]
+    pub fn mono_attach(options: &MonoOptions) -> Result<Self> {
+        Self::mono_with(|| mono::Mono::attach(options))
+    }
+
+    #[cfg(feature = "mono")]
+    fn mono_with(make: impl FnOnce() -> Result<mono::Mono>) -> Result<Self> {
         static RUNTIME: std::sync::Mutex<Option<Runtime>> = std::sync::Mutex::new(None);
         let mut runtime = RUNTIME.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(runtime) = runtime.as_ref() {
             return Ok(runtime.clone());
         }
-        let started = Runtime(Arc::new(Inner::Mono(mono::Mono::new(options)?)));
+        let started = Runtime(Arc::new(Inner::Mono(make()?)));
         *runtime = Some(started.clone());
         Ok(started)
     }
