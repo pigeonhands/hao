@@ -22,7 +22,10 @@ pub(crate) fn encode_body(
         offsets
             .get(label.0)
             .copied()
-            .ok_or(HaoError::WriteError(format!("label {} is out of range", label.0)))
+            .ok_or(HaoError::WriteError(format!(
+                "label {} is out of range",
+                label.0
+            )))
     };
 
     let mut code = Vec::with_capacity(code_size);
@@ -237,10 +240,10 @@ fn fix_operand_forms(instructions: &[Instruction]) -> Result<Vec<Instruction>> {
             let Some(long) = instruction.opcode.long_branch() else {
                 continue;
             };
-            let target = *offsets
-                .get(target.0)
-                .ok_or(HaoError::WriteError(format!("label {} is out of range", target.0)))?
-                as i64;
+            let target = *offsets.get(target.0).ok_or(HaoError::WriteError(format!(
+                "label {} is out of range",
+                target.0
+            )))? as i64;
             let delta = target - offsets[index + 1] as i64;
             if i8::try_from(delta).is_err() {
                 instruction.opcode = long;
@@ -314,20 +317,20 @@ pub fn compute_max_stack(
 
             match instruction.opcode.flow_control() {
                 FlowControl::Branch => {
-                    let Operand::Target(t) = instruction.operand else { break };
+                    let Operand::Target(t) = instruction.operand else {
+                        break;
+                    };
                     if matches!(instruction.opcode, OpCode::Leave | OpCode::Leave_S) {
                         height = 0;
                     }
                     index = t.0;
                     continue;
                 }
-                FlowControl::CondBranch => {
-                    match &instruction.operand {
-                        Operand::Target(t) => work.push((t.0, height)),
-                        Operand::Switch(ts) => work.extend(ts.iter().map(|t| (t.0, height))),
-                        _ => {}
-                    }
-                }
+                FlowControl::CondBranch => match &instruction.operand {
+                    Operand::Target(t) => work.push((t.0, height)),
+                    Operand::Switch(ts) => work.extend(ts.iter().map(|t| (t.0, height))),
+                    _ => {}
+                },
                 FlowControl::Return | FlowControl::Throw => break,
                 _ => {}
             }

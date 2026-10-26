@@ -62,7 +62,11 @@ impl PathAssemblyResolver {
             .into_iter()
             .flatten()
             .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.ends_with("_Data")))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.ends_with("_Data"))
+            })
             .map(|p| p.join("Managed"))
             .chain([game_dir.join("Contents/Resources/Data/Managed")])
             .filter(|p| p.is_dir())
@@ -111,7 +115,9 @@ impl PathAssemblyResolver {
     fn find_path_for(&self, assembly_name: &str) -> Option<PathBuf> {
         self.search_paths
             .iter()
-            .flat_map(|dir| ["dll", "exe"].map(|ext| dir.join(format!("{}.{}", assembly_name, ext))))
+            .flat_map(|dir| {
+                ["dll", "exe"].map(|ext| dir.join(format!("{}.{}", assembly_name, ext)))
+            })
             .find(|p| p.exists())
     }
 }
@@ -119,7 +125,11 @@ impl PathAssemblyResolver {
 fn parse_version(path: &Path) -> Vec<u32> {
     path.file_name()
         .and_then(|n| n.to_str())
-        .map(|n| n.split(['.', '-']).map(|p| p.parse().unwrap_or(0)).collect())
+        .map(|n| {
+            n.split(['.', '-'])
+                .map(|p| p.parse().unwrap_or(0))
+                .collect()
+        })
         .unwrap_or_default()
 }
 

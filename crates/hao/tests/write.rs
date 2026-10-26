@@ -7,7 +7,6 @@ use hao::{
     Module,
 };
 
-
 fn out_dir(sample: &common::Sample, name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
     std::fs::create_dir_all(&dir).unwrap();
@@ -32,7 +31,11 @@ fn rewrite_unmodified() {
     let reloaded = Module::from_bytes(&written).unwrap();
     assert_eq!(reloaded.all_types().len(), module.all_types().len());
     assert_eq!(reloaded.all_methods().len(), module.all_methods().len());
-    for (a, b) in module.all_methods().iter().zip(reloaded.all_methods().iter()) {
+    for (a, b) in module
+        .all_methods()
+        .iter()
+        .zip(reloaded.all_methods().iter())
+    {
         let (a, b) = (a.get(), b.get());
         assert_eq!(a.name, b.name);
         assert_eq!(
@@ -58,7 +61,11 @@ fn patch_instructions() {
     {
         let mut add = add.get_mut();
         let body = add.body.as_mut().unwrap();
-        let op = body.instructions.iter_mut().find(|i| i.opcode == OpCode::Add).unwrap();
+        let op = body
+            .instructions
+            .iter_mut()
+            .find(|i| i.opcode == OpCode::Add)
+            .unwrap();
         *op = Instruction::simple(OpCode::Mul);
     }
 
@@ -124,7 +131,12 @@ fn rewrite_shared_framework() {
             Err(e) => failures.push(format!("{}: {}", path.display(), e)),
         }
     }
-    assert!(failures.is_empty(), "{} ok, failures:\n{}", count, failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} ok, failures:\n{}",
+        count,
+        failures.join("\n")
+    );
     println!("rewrote {} assemblies", count);
 }
 
@@ -137,7 +149,8 @@ fn rewrite_ready_to_run() {
     let Some(dir) = hao::resolver::PathAssemblyResolver::find_framework_dir() else {
         return;
     };
-    let module = Module::from_path_no_resolve(dir.join("System.Collections.Immutable.dll")).unwrap();
+    let module =
+        Module::from_path_no_resolve(dir.join("System.Collections.Immutable.dll")).unwrap();
     let written = module.write().unwrap();
 
     let pe = PEFile::parse(&written).unwrap();
@@ -145,7 +158,10 @@ fn rewrite_ready_to_run() {
     assert!(cor20.managed_native_header.is_null());
     assert!(cor20.flags.contains(Cor20Flags::IL_ONLY));
     assert!(!cor20.flags.contains(Cor20Flags::IL_LIBRARY));
-    assert!(!matches!(pe.coff_header.machine, ImageFileMachine::Other(_)));
+    assert!(!matches!(
+        pe.coff_header.machine,
+        ImageFileMachine::Other(_)
+    ));
     let dirs = &pe.optional_header.as_ref().unwrap().data_directories;
     assert!(dirs.exception_table.is_null());
     Module::from_bytes(&written).unwrap();
@@ -160,17 +176,33 @@ fn import_helpers() {
     let refs = module.member_refs.len();
 
     let write_line = module
-        .import_method("System.Console", "WriteLine", MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]))
+        .import_method(
+            "System.Console",
+            "WriteLine",
+            MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]),
+        )
         .unwrap();
-    assert_eq!(module.member_refs.len(), refs, "existing reference should be reused");
+    assert_eq!(
+        module.member_refs.len(),
+        refs,
+        "existing reference should be reused"
+    );
 
     let write = module
-        .import_method("System.Console", "Write", MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]))
+        .import_method(
+            "System.Console",
+            "Write",
+            MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]),
+        )
         .unwrap();
     assert_eq!(module.member_refs.len(), refs + 1);
 
     let local = module
-        .import_method("Sample.Calc", "Add", MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32, TypeSig::INT32]))
+        .import_method(
+            "Sample.Calc",
+            "Add",
+            MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32, TypeSig::INT32]),
+        )
         .unwrap();
     assert!(matches!(local, hao::dotnet::il::MemberToken::Method(_)));
 
@@ -193,7 +225,10 @@ fn import_helpers() {
 
     let dir = out_dir(sample, "imported");
     module.write_to_path(dir.join("Sample.dll")).unwrap();
-    assert_eq!(run(&dir), format!("imported ok\n{}", sample.expected_output));
+    assert_eq!(
+        run(&dir),
+        format!("imported ok\n{}", sample.expected_output)
+    );
 }
 
 #[test]
@@ -208,32 +243,61 @@ fn shortest_instruction_forms() {
 /// Adds a reference to an assembly Sample doesn't use and calls generic code in it.
 #[test]
 fn reference_new_assembly() {
-    use hao::dotnet::{entries::Version, signature::{MethodSig, TypeSig}};
+    use hao::dotnet::{
+        entries::Version,
+        signature::{MethodSig, TypeSig},
+    };
 
     let sample = sample!();
     let mut module = Module::from_bytes(&sample.bytes).unwrap();
     assert!(module.find_assembly_ref("System.Linq").is_none());
 
-    let version = Version { major: 9, minor: 0, build: 0, revision: 0 };
+    let version = Version {
+        major: 9,
+        minor: 0,
+        build: 0,
+        revision: 0,
+    };
     let token = [0xb0, 0x3f, 0x5f, 0x7f, 0x11, 0xd5, 0x0a, 0x3a];
     module.add_assembly_ref("System.Linq", version, &token);
     let again = module.add_assembly_ref("System.Linq", version, &token);
-    assert_eq!(module.assembly_refs.iter().filter(|a| a.ptr_eq(&again)).count(), 1);
+    assert_eq!(
+        module
+            .assembly_refs
+            .iter()
+            .filter(|a| a.ptr_eq(&again))
+            .count(),
+        1
+    );
 
-    let enumerable = module.import_type_from("System.Linq", "System.Linq.Enumerable").unwrap();
+    let enumerable = module
+        .import_type_from("System.Linq", "System.Linq.Enumerable")
+        .unwrap();
     let ienumerable = module
         .import_type_from("System.Runtime", "System.Collections.Generic.IEnumerable`1")
         .unwrap();
     let ints = TypeSig::generic_class(ienumerable, vec![TypeSig::INT32]);
 
     let range = module
-        .import_method_on(&enumerable, "Range", MethodSig::new_static(ints.clone(), vec![TypeSig::INT32, TypeSig::INT32]))
+        .import_method_on(
+            &enumerable,
+            "Range",
+            MethodSig::new_static(ints.clone(), vec![TypeSig::INT32, TypeSig::INT32]),
+        )
         .unwrap();
     let sum = module
-        .import_method_on(&enumerable, "Sum", MethodSig::new_static(TypeSig::INT32, vec![ints]))
+        .import_method_on(
+            &enumerable,
+            "Sum",
+            MethodSig::new_static(TypeSig::INT32, vec![ints]),
+        )
         .unwrap();
     let write_line = module
-        .import_method("System.Console", "WriteLine", MethodSig::new_static(TypeSig::VOID, vec![TypeSig::INT32]))
+        .import_method(
+            "System.Console",
+            "WriteLine",
+            MethodSig::new_static(TypeSig::VOID, vec![TypeSig::INT32]),
+        )
         .unwrap();
 
     module.entry_point.clone().unwrap().edit_body(|body| {

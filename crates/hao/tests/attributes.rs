@@ -2,7 +2,9 @@ mod common;
 
 use hao::{
     dotnet::{
-        entries::{CANamedArgument, CAValue, CustomAttribute, CustomAttributeCtor, CustomAttributeValue},
+        entries::{
+            CANamedArgument, CAValue, CustomAttribute, CustomAttributeCtor, CustomAttributeValue,
+        },
         il::MemberToken,
         signature::{MethodSig, TypeSig},
     },
@@ -46,15 +48,26 @@ fn decode_enum_from_dependency() {
 #[test]
 fn add_attribute() {
     let mut module = Module::from_bytes(&sample!().bytes).unwrap();
-    let obsolete = module.import_type_from("System.Runtime", "System.ObsoleteAttribute").unwrap();
-    let ctor = module
-        .import_method_on(&obsolete, ".ctor", MethodSig::new_instance(TypeSig::VOID, vec![TypeSig::STRING]))
+    let obsolete = module
+        .import_type_from("System.Runtime", "System.ObsoleteAttribute")
         .unwrap();
-    let MemberToken::MemberRef(ctor) = ctor else { panic!() };
+    let ctor = module
+        .import_method_on(
+            &obsolete,
+            ".ctor",
+            MethodSig::new_instance(TypeSig::VOID, vec![TypeSig::STRING]),
+        )
+        .unwrap();
+    let MemberToken::MemberRef(ctor) = ctor else {
+        panic!()
+    };
 
     let value = CustomAttributeValue {
         fixed: vec!["patched by hao".into()],
-        named: vec![CANamedArgument::property("UrlFormat", "https://example.com/{0}".into())],
+        named: vec![CANamedArgument::property(
+            "UrlFormat",
+            "https://example.com/{0}".into(),
+        )],
     };
     let attribute = CustomAttribute::new(CustomAttributeCtor::MemberRef(ctor), &value).unwrap();
     module
@@ -88,7 +101,9 @@ fn round_trip_shared_framework() {
         if path.extension().is_none_or(|e| e != "dll") {
             continue;
         }
-        let Ok(module) = Module::from_path(&path) else { continue };
+        let Ok(module) = Module::from_path(&path) else {
+            continue;
+        };
         let attributes = module
             .all_types()
             .iter()
@@ -103,7 +118,12 @@ fn round_trip_shared_framework() {
                 }
                 all
             })
-            .chain(module.assembly.iter().flat_map(|a| a.get().custom_attributes.clone()))
+            .chain(
+                module
+                    .assembly
+                    .iter()
+                    .flat_map(|a| a.get().custom_attributes.clone()),
+            )
             .collect::<Vec<_>>();
         for attribute in attributes {
             total += 1;
@@ -113,7 +133,12 @@ fn round_trip_shared_framework() {
                         mismatched.push(format!("{}: {}", path.display(), attribute.type_name()));
                     }
                 }
-                Err(e) => failures.push(format!("{}: {} {}", path.display(), attribute.type_name(), e)),
+                Err(e) => failures.push(format!(
+                    "{}: {} {}",
+                    path.display(),
+                    attribute.type_name(),
+                    e
+                )),
             }
         }
     }
@@ -121,6 +146,10 @@ fn round_trip_shared_framework() {
     for f in failures.iter().take(10) {
         println!("  {}", f);
     }
-    assert!(mismatched.is_empty(), "re-encoded differently:\n{}", mismatched.join("\n"));
+    assert!(
+        mismatched.is_empty(),
+        "re-encoded differently:\n{}",
+        mismatched.join("\n")
+    );
     assert!(failures.is_empty());
 }

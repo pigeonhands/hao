@@ -24,16 +24,20 @@ use heaps::*;
 use tables::*;
 
 use crate::{
+    dotnet::module::ModuleKind,
     dotnet::{
         entries::*,
         il::{encode_body, BodyEncoder, MemberToken},
         md::{
-            streams::tables_stream::{coded_tokens::*, metadata::{TableRowCount, TableRows}, *},
+            streams::tables_stream::{
+                coded_tokens::*,
+                metadata::{TableRowCount, TableRows},
+                *,
+            },
             MDStreamFlags,
         },
         signature::{MethodSig, SignatureWriter, TokenEncoder, TypeSig},
     },
-    dotnet::module::ModuleKind,
     error::{HaoError, Result},
     Module,
 };
@@ -215,29 +219,42 @@ impl<'m> ModuleWriter<'m> {
 
     fn type_def_or_ref(&mut self, ty: &TypeDefOrRef) -> Result<CodedToken<TypeDefOrRefToken>> {
         Ok(match ty {
-            TypeDefOrRef::TypeDef(t) => CodedToken::new(TypeDefOrRefToken::TypeDef, self.type_def_rid(t)?),
-            TypeDefOrRef::TypeRef(t) => CodedToken::new(TypeDefOrRefToken::TypeRef, self.type_refs.add(t)),
-            TypeDefOrRef::TypeSpec(t) => CodedToken::new(TypeDefOrRefToken::TypeSpec, self.type_specs.add(t)),
+            TypeDefOrRef::TypeDef(t) => {
+                CodedToken::new(TypeDefOrRefToken::TypeDef, self.type_def_rid(t)?)
+            }
+            TypeDefOrRef::TypeRef(t) => {
+                CodedToken::new(TypeDefOrRefToken::TypeRef, self.type_refs.add(t))
+            }
+            TypeDefOrRef::TypeSpec(t) => {
+                CodedToken::new(TypeDefOrRefToken::TypeSpec, self.type_specs.add(t))
+            }
         })
     }
 
     fn method_def_or_ref(&mut self, m: &MethodDefOrRef) -> Result<CodedToken<MethodDefOrRefToken>> {
         Ok(match m {
-            MethodDefOrRef::Method(m) => CodedToken::new(MethodDefOrRefToken::Method, self.method_rid(m)?),
-            MethodDefOrRef::MemberRef(m) => CodedToken::new(MethodDefOrRefToken::MemberRef, self.member_refs.add(m)),
+            MethodDefOrRef::Method(m) => {
+                CodedToken::new(MethodDefOrRefToken::Method, self.method_rid(m)?)
+            }
+            MethodDefOrRef::MemberRef(m) => {
+                CodedToken::new(MethodDefOrRefToken::MemberRef, self.member_refs.add(m))
+            }
         })
     }
 
     fn implementation(&mut self, i: &Option<Implementation>) -> CodedToken<ImplementationToken> {
         match i {
             None => CodedToken::new(ImplementationToken::File, 0),
-            Some(Implementation::File(f)) => CodedToken::new(ImplementationToken::File, self.files.add(f)),
+            Some(Implementation::File(f)) => {
+                CodedToken::new(ImplementationToken::File, self.files.add(f))
+            }
             Some(Implementation::AssemblyRef(a)) => {
                 CodedToken::new(ImplementationToken::AssemblyRef, self.assembly_refs.add(a))
             }
-            Some(Implementation::ExportedType(e)) => {
-                CodedToken::new(ImplementationToken::ExportedType, self.exported_types.add(e))
-            }
+            Some(Implementation::ExportedType(e)) => CodedToken::new(
+                ImplementationToken::ExportedType,
+                self.exported_types.add(e),
+            ),
         }
     }
 
@@ -305,7 +322,9 @@ impl<'m> ModuleWriter<'m> {
         let next = self.rows.stand_alone_sig.len() as u32 + 1;
         let rid = *self.stand_alone_sigs.entry(signature.0).or_insert(next);
         if rid == next {
-            self.rows.stand_alone_sig.push(StandAloneSigTableRow { signature });
+            self.rows
+                .stand_alone_sig
+                .push(StandAloneSigTableRow { signature });
         }
         0x1100_0000 | rid
     }
@@ -412,7 +431,11 @@ impl<'m> ModuleWriter<'m> {
             let rva = match &m.body {
                 Some(body) => {
                     let bytes = encode_body(body, !m.signature.ret.is_void(), self)?;
-                    let align = if bytes.first().is_some_and(|b| b & 3 == 2) { 1 } else { 4 };
+                    let align = if bytes.first().is_some_and(|b| b & 3 == 2) {
+                        1
+                    } else {
+                        4
+                    };
                     self.code.resize(align_up(self.code.len(), align), 0);
                     let rva = self.section_rva + self.code.len() as u32;
                     self.code.extend_from_slice(&bytes);
@@ -445,12 +468,18 @@ impl<'m> ModuleWriter<'m> {
         let mut owners: Vec<(CodedToken<TypeOrMethodDefToken>, Entry<GenericParam>)> = Vec::new();
         for (i, ty) in types.iter().enumerate() {
             for gp in &ty.get().generic_params {
-                owners.push((CodedToken::new(TypeOrMethodDefToken::TypeDef, i as u32 + 1), gp.clone()));
+                owners.push((
+                    CodedToken::new(TypeOrMethodDefToken::TypeDef, i as u32 + 1),
+                    gp.clone(),
+                ));
             }
         }
         for (i, m) in self.methods.list.iter().enumerate() {
             for gp in &m.get().generic_params {
-                owners.push((CodedToken::new(TypeOrMethodDefToken::Method, i as u32 + 1), gp.clone()));
+                owners.push((
+                    CodedToken::new(TypeOrMethodDefToken::Method, i as u32 + 1),
+                    gp.clone(),
+                ));
             }
         }
         owners.sort_by_key(|(owner, gp)| (owner.encode(), gp.get().number));
@@ -578,7 +607,11 @@ impl<'m> ModuleWriter<'m> {
                 .iter()
                 .map(|m| (MethodSemanticsFlags::Setter, m))
                 .chain(p.getter.iter().map(|m| (MethodSemanticsFlags::Getter, m)))
-                .chain(p.other_methods.iter().map(|m| (MethodSemanticsFlags::Other, m)));
+                .chain(
+                    p.other_methods
+                        .iter()
+                        .map(|m| (MethodSemanticsFlags::Other, m)),
+                );
             for (semantic, method) in semantics {
                 self.rows.method_semantics.push(MethodSemanticsTableRow {
                     semantic,
@@ -609,7 +642,11 @@ impl<'m> ModuleWriter<'m> {
                 .map(|m| (MethodSemanticsFlags::AddOn, m))
                 .chain(e.remove.iter().map(|m| (MethodSemanticsFlags::RemoveOn, m)))
                 .chain(e.fire.iter().map(|m| (MethodSemanticsFlags::Fire, m)))
-                .chain(e.other_methods.iter().map(|m| (MethodSemanticsFlags::Other, m)));
+                .chain(
+                    e.other_methods
+                        .iter()
+                        .map(|m| (MethodSemanticsFlags::Other, m)),
+                );
             for (semantic, method) in semantics {
                 self.rows.method_semantics.push(MethodSemanticsTableRow {
                     semantic,
@@ -625,10 +662,12 @@ impl<'m> ModuleWriter<'m> {
             let g = gp.get();
             for constraint in &g.constraints {
                 let token = self.type_def_or_ref(&constraint.constraint)?;
-                self.rows.generic_param_constraint.push(GenericParamConstraintTableRow {
-                    owner: GenericParamTableOffset(rid),
-                    constraint: token,
-                });
+                self.rows
+                    .generic_param_constraint
+                    .push(GenericParamConstraintTableRow {
+                        owner: GenericParamTableOffset(rid),
+                        constraint: token,
+                    });
                 let constraint_rid = self.rows.generic_param_constraint.len() as u32;
                 self.custom_attributes(
                     HasCustomAttributeToken::GenericParamConstraint,
@@ -636,7 +675,11 @@ impl<'m> ModuleWriter<'m> {
                     &constraint.custom_attributes,
                 )?;
             }
-            self.custom_attributes(HasCustomAttributeToken::GenericParam, rid, &g.custom_attributes)?;
+            self.custom_attributes(
+                HasCustomAttributeToken::GenericParam,
+                rid,
+                &g.custom_attributes,
+            )?;
         }
 
         if let Some(assembly) = &module.assembly {
@@ -665,7 +708,8 @@ impl<'m> ModuleWriter<'m> {
                 ResourceData::Embedded(data) => {
                     self.resources.resize(align_up(self.resources.len(), 8), 0);
                     let offset = self.resources.len() as u32;
-                    self.resources.extend_from_slice(&(data.len() as u32).to_le_bytes());
+                    self.resources
+                        .extend_from_slice(&(data.len() as u32).to_le_bytes());
                     self.resources.extend_from_slice(data);
                     (offset, CodedToken::new(ImplementationToken::File, 0))
                 }
@@ -713,7 +757,11 @@ impl<'m> ModuleWriter<'m> {
                     hash_value: self.blob(&a.hash_value),
                 };
                 self.rows.assembly_ref.push(row);
-                self.custom_attributes(HasCustomAttributeToken::AssemblyRef, rid, &a.custom_attributes)?;
+                self.custom_attributes(
+                    HasCustomAttributeToken::AssemblyRef,
+                    rid,
+                    &a.custom_attributes,
+                )?;
                 progress = true;
             }
 
@@ -725,7 +773,11 @@ impl<'m> ModuleWriter<'m> {
                     name: self.string(&m.name),
                 };
                 self.rows.module_ref.push(row);
-                self.custom_attributes(HasCustomAttributeToken::ModuleRef, rid, &m.custom_attributes)?;
+                self.custom_attributes(
+                    HasCustomAttributeToken::ModuleRef,
+                    rid,
+                    &m.custom_attributes,
+                )?;
                 progress = true;
             }
 
@@ -735,13 +787,16 @@ impl<'m> ModuleWriter<'m> {
                 let t = entry.get();
                 let resolution_scope = match &t.scope {
                     None => CodedToken::new(ResolutionScopeToken::Module, 0),
-                    Some(ResolutionScope::Module(_)) => CodedToken::new(ResolutionScopeToken::Module, 1),
+                    Some(ResolutionScope::Module(_)) => {
+                        CodedToken::new(ResolutionScopeToken::Module, 1)
+                    }
                     Some(ResolutionScope::ModuleRef(m)) => {
                         CodedToken::new(ResolutionScopeToken::ModuleRef, self.module_refs.add(m))
                     }
-                    Some(ResolutionScope::AssemblyRef(a)) => {
-                        CodedToken::new(ResolutionScopeToken::AssemblyRef, self.assembly_refs.add(a))
-                    }
+                    Some(ResolutionScope::AssemblyRef(a)) => CodedToken::new(
+                        ResolutionScopeToken::AssemblyRef,
+                        self.assembly_refs.add(a),
+                    ),
                     Some(ResolutionScope::TypeRef(r)) => {
                         CodedToken::new(ResolutionScopeToken::TypeRef, self.type_refs.add(r))
                     }
@@ -752,7 +807,11 @@ impl<'m> ModuleWriter<'m> {
                     namespace: self.string(&t.namespace),
                 };
                 self.rows.type_ref.push(row);
-                self.custom_attributes(HasCustomAttributeToken::TypeRef, rid, &t.custom_attributes)?;
+                self.custom_attributes(
+                    HasCustomAttributeToken::TypeRef,
+                    rid,
+                    &t.custom_attributes,
+                )?;
                 progress = true;
             }
 
@@ -764,7 +823,11 @@ impl<'m> ModuleWriter<'m> {
                 self.rows.type_spec.push(TypeSpecTableRow {
                     signature: BlobStreamOffsetTypeSpec(signature.0),
                 });
-                self.custom_attributes(HasCustomAttributeToken::TypeSpec, rid, &t.custom_attributes)?;
+                self.custom_attributes(
+                    HasCustomAttributeToken::TypeSpec,
+                    rid,
+                    &t.custom_attributes,
+                )?;
                 progress = true;
             }
 
@@ -796,7 +859,11 @@ impl<'m> ModuleWriter<'m> {
                     signature,
                 };
                 self.rows.member_ref.push(row);
-                self.custom_attributes(HasCustomAttributeToken::MemberRef, rid, &m.custom_attributes)?;
+                self.custom_attributes(
+                    HasCustomAttributeToken::MemberRef,
+                    rid,
+                    &m.custom_attributes,
+                )?;
                 progress = true;
             }
 
@@ -810,7 +877,11 @@ impl<'m> ModuleWriter<'m> {
                     method,
                     instantiation,
                 });
-                self.custom_attributes(HasCustomAttributeToken::MethodSpec, rid, &m.custom_attributes)?;
+                self.custom_attributes(
+                    HasCustomAttributeToken::MethodSpec,
+                    rid,
+                    &m.custom_attributes,
+                )?;
                 progress = true;
             }
 
@@ -841,7 +912,11 @@ impl<'m> ModuleWriter<'m> {
                     implementation,
                 };
                 self.rows.exported_type.push(row);
-                self.custom_attributes(HasCustomAttributeToken::ExportedType, rid, &e.custom_attributes)?;
+                self.custom_attributes(
+                    HasCustomAttributeToken::ExportedType,
+                    rid,
+                    &e.custom_attributes,
+                )?;
                 progress = true;
             }
 
@@ -851,7 +926,10 @@ impl<'m> ModuleWriter<'m> {
         }
     }
 
-    fn finish_tables(&mut self, mut security: Vec<(HasDeclSecurityToken, u32, DeclSecurity)>) -> Result<()> {
+    fn finish_tables(
+        &mut self,
+        mut security: Vec<(HasDeclSecurityToken, u32, DeclSecurity)>,
+    ) -> Result<()> {
         security.sort_by_key(|(target, rid, _)| CodedToken::new(*target, *rid).encode());
         for (target, rid, s) in security {
             let permission_set = self.blob(&s.permission_set);
@@ -861,14 +939,19 @@ impl<'m> ModuleWriter<'m> {
                 permission_set,
             });
             let security_rid = self.rows.decl_security.len() as u32;
-            self.custom_attributes(HasCustomAttributeToken::DeclSecurity, security_rid, &s.custom_attributes)?;
+            self.custom_attributes(
+                HasCustomAttributeToken::DeclSecurity,
+                security_rid,
+                &s.custom_attributes,
+            )?;
         }
 
         self.flush_references()?;
 
         let field_data_rva = self.section_rva + align_up(self.code.len(), 8) as u32;
         for (rid, data) in std::mem::take(&mut self.pending_field_rvas) {
-            self.field_data.resize(align_up(self.field_data.len(), 8), 0);
+            self.field_data
+                .resize(align_up(self.field_data.len(), 8), 0);
             let rva = field_data_rva + self.field_data.len() as u32;
             self.field_data.extend_from_slice(&data);
             self.rows.field_rva.push(FieldRVATableRow {
@@ -881,7 +964,8 @@ impl<'m> ModuleWriter<'m> {
         r.constant.sort_by_key(|row| row.parent.encode());
         r.custom_attribute.sort_by_key(|row| row.parent.encode());
         r.field_marshal.sort_by_key(|row| row.parent.encode());
-        r.method_semantics.sort_by_key(|row| row.association.encode());
+        r.method_semantics
+            .sort_by_key(|row| row.association.encode());
         r.impl_map.sort_by_key(|row| row.member_forwarded.encode());
         r.field_layout.sort_by_key(|row| row.field.0);
         r.field_rva.sort_by_key(|row| row.field.0);
@@ -1115,7 +1199,9 @@ impl BodyEncoder for ModuleWriter<'_> {
 pub(crate) fn write_module(module: &Module) -> Result<Vec<u8>> {
     let mut cor20 = module.cor20.clone();
     if !cor20.vtable_fixups.is_null() {
-        return Err(err("mixed mode assemblies (vtable fixups) are not supported"));
+        return Err(err(
+            "mixed mode assemblies (vtable fixups) are not supported",
+        ));
     }
 
     let mut image = if module.image.is_empty() {
@@ -1123,8 +1209,14 @@ pub(crate) fn write_module(module: &Module) -> Result<Vec<u8>> {
     } else {
         PEImageDef::parse(&module.image).map_err(HaoError::PeError)?
     };
-    let cor20_rva = image.optional_header.data_directories.clr_runtime_header.virtual_address;
-    let section_rva = image.sections.next_virtual_address(image.section_alignment()) as u32;
+    let cor20_rva = image
+        .optional_header
+        .data_directories
+        .clr_runtime_header
+        .virtual_address;
+    let section_rva = image
+        .sections
+        .next_virtual_address(image.section_alignment()) as u32;
 
     let mut writer = ModuleWriter::new(module, section_rva);
     let security = writer.build()?;
@@ -1185,7 +1277,9 @@ pub(crate) fn write_module(module: &Module) -> Result<Vec<u8>> {
 
     let mut cor20_bytes = Vec::new();
     pewter::io::Writer::write(&mut cor20_bytes, &cor20).map_err(HaoError::PeError)?;
-    image.write_at_rva(cor20_rva, &cor20_bytes).map_err(HaoError::PeError)?;
+    image
+        .write_at_rva(cor20_rva, &cor20_bytes)
+        .map_err(HaoError::PeError)?;
     image.strip_certificate();
 
     image.write_file().map_err(HaoError::PeError)

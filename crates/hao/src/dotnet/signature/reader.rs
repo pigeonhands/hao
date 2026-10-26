@@ -157,7 +157,12 @@ impl<'a, R: TokenResolver> SignatureReader<'a, R> {
                     },
                 }
             }
-            _ => return Err(HaoError::InvalidSignatureElementType(element_type as u8, self.position - 1)),
+            _ => {
+                return Err(HaoError::InvalidSignatureElementType(
+                    element_type as u8,
+                    self.position - 1,
+                ))
+            }
         };
         Ok(sig)
     }
@@ -169,7 +174,11 @@ impl<'a, R: TokenResolver> SignatureReader<'a, R> {
         Ok((cc, SignatureFlags::from_bits_retain(b & 0xF0)))
     }
 
-    fn read_method_body(&mut self, calling_convention: CallingConvention, flags: SignatureFlags) -> Result<MethodSig> {
+    fn read_method_body(
+        &mut self,
+        calling_convention: CallingConvention,
+        flags: SignatureFlags,
+    ) -> Result<MethodSig> {
         let generic_param_count = if flags.contains(SignatureFlags::GENERIC) {
             self.read_compressed_u32()?
         } else {
@@ -238,7 +247,9 @@ impl<'a, R: TokenResolver> SignatureReader<'a, R> {
         }
         let count = self.read_count()?;
         let ty = self.read_type()?;
-        let params = (0..count).map(|_| self.read_type()).collect::<Result<_>>()?;
+        let params = (0..count)
+            .map(|_| self.read_type())
+            .collect::<Result<_>>()?;
         Ok(PropertySig {
             has_this: flags.contains(SignatureFlags::HAS_THIS),
             ty,

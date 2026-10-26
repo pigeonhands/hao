@@ -1,8 +1,5 @@
 use super::{Entry, MemberRef, Method, ModuleRef};
-use crate::dotnet::{
-    md::streams::tables_stream::PInvokeMapFlags,
-    signature::ElementType,
-};
+use crate::dotnet::{md::streams::tables_stream::PInvokeMapFlags, signature::ElementType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustomAttributeCtor {
@@ -56,9 +53,7 @@ impl Constant {
             }
             ElementType::I4 => i32::from_le_bytes(v.get(..4)?.try_into().ok()?) as i64,
             ElementType::U4 => u32::from_le_bytes(v.get(..4)?.try_into().ok()?) as i64,
-            ElementType::I8 | ElementType::U8 => {
-                i64::from_le_bytes(v.get(..8)?.try_into().ok()?)
-            }
+            ElementType::I8 | ElementType::U8 => i64::from_le_bytes(v.get(..8)?.try_into().ok()?),
             _ => return None,
         })
     }
@@ -69,7 +64,9 @@ impl Constant {
         }
         let units: Vec<u16> = self
             .value
-            .as_chunks::<2>().0.iter()
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         String::from_utf16(&units).ok()

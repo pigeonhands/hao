@@ -308,7 +308,12 @@ mod tests {
                 .0
                 .borrow_mut()
                 .entry(coded)
-                .or_insert_with(|| Entry::new(TypeRef { name: format!("T{}", coded), ..Default::default() }))
+                .or_insert_with(|| {
+                    Entry::new(TypeRef {
+                        name: format!("T{}", coded),
+                        ..Default::default()
+                    })
+                })
                 .clone();
             Ok(TypeDefOrRef::TypeRef(entry))
         }
@@ -316,13 +321,17 @@ mod tests {
 
     impl TokenEncoder for Tokens {
         fn type_def_or_ref(&mut self, ty: &TypeDefOrRef) -> Result<u32> {
-            let TypeDefOrRef::TypeRef(t) = ty else { unreachable!() };
+            let TypeDefOrRef::TypeRef(t) = ty else {
+                unreachable!()
+            };
             Ok(*self.0.borrow().iter().find(|(_, e)| e.ptr_eq(t)).unwrap().0)
         }
     }
 
     fn method(blob: &[u8]) -> MethodSig {
-        SignatureReader::new(blob, &Tokens::default()).read_method_sig().unwrap()
+        SignatureReader::new(blob, &Tokens::default())
+            .read_method_sig()
+            .unwrap()
     }
 
     fn write_method(sig: &MethodSig, tokens: &mut Tokens) -> Vec<u8> {
@@ -338,17 +347,24 @@ mod tests {
         assert_eq!(sig.ret, TypeSig::Primitive(PrimitiveType::I4));
         assert_eq!(
             sig.params,
-            [TypeSig::Primitive(PrimitiveType::I4), TypeSig::Primitive(PrimitiveType::String)]
+            [
+                TypeSig::Primitive(PrimitiveType::I4),
+                TypeSig::Primitive(PrimitiveType::String)
+            ]
         );
     }
 
     #[test]
     fn signed_and_unsigned_bytes_are_not_swapped() {
         let tokens = Tokens::default();
-        let field = SignatureReader::new(&[0x06, 0x04], &tokens).read_field_sig().unwrap();
+        let field = SignatureReader::new(&[0x06, 0x04], &tokens)
+            .read_field_sig()
+            .unwrap();
         assert_eq!(field.ty, TypeSig::Primitive(PrimitiveType::I1));
         assert_eq!(PrimitiveType::I1.keyword(), "sbyte");
-        let field = SignatureReader::new(&[0x06, 0x19], &tokens).read_field_sig().unwrap();
+        let field = SignatureReader::new(&[0x06, 0x19], &tokens)
+            .read_field_sig()
+            .unwrap();
         assert_eq!(field.ty, TypeSig::Primitive(PrimitiveType::U));
     }
 
@@ -359,7 +375,10 @@ mod tests {
         assert_eq!(sig.params, [TypeSig::Primitive(PrimitiveType::I4)]);
         assert_eq!(
             sig.varargs,
-            [TypeSig::Primitive(PrimitiveType::I8), TypeSig::Primitive(PrimitiveType::R8)]
+            [
+                TypeSig::Primitive(PrimitiveType::I8),
+                TypeSig::Primitive(PrimitiveType::R8)
+            ]
         );
     }
 
@@ -367,9 +386,20 @@ mod tests {
     fn array_shape_with_negative_bounds() {
         let blob = [0x06, 0x14, 0x08, 0x02, 0x02, 0x03, 0x04, 0x02, 0x00, 0x7B];
         let tokens = Tokens::default();
-        let field = SignatureReader::new(&blob, &tokens).read_field_sig().unwrap();
-        let TypeSig::Array { shape, .. } = field.ty else { panic!() };
-        assert_eq!(shape, ArrayShape { rank: 2, sizes: vec![3, 4], lo_bounds: vec![0, -3] });
+        let field = SignatureReader::new(&blob, &tokens)
+            .read_field_sig()
+            .unwrap();
+        let TypeSig::Array { shape, .. } = field.ty else {
+            panic!()
+        };
+        assert_eq!(
+            shape,
+            ArrayShape {
+                rank: 2,
+                sizes: vec![3, 4],
+                lo_bounds: vec![0, -3]
+            }
+        );
     }
 
     #[test]
@@ -403,10 +433,15 @@ mod tests {
             0x09, 0x10, 0x08, 0x14, 0x08, 0x02, 0x00, 0x02, 0x00, 0x7B,
         ];
         let mut tokens = Tokens::default();
-        let sig = SignatureReader::new(&blob, &tokens).read_method_sig().unwrap();
+        let sig = SignatureReader::new(&blob, &tokens)
+            .read_method_sig()
+            .unwrap();
         assert_eq!(sig.generic_param_count, 1);
         assert_eq!(sig.params.len(), 4);
-        assert!(matches!(&sig.params[2], TypeSig::Modified { required: true, .. }));
+        assert!(matches!(
+            &sig.params[2],
+            TypeSig::Modified { required: true, .. }
+        ));
         assert_eq!(write_method(&sig, &mut tokens), blob);
     }
 }

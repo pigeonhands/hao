@@ -205,7 +205,10 @@ fn underlying_type(ty: &Entry<TypeDef>) -> Result<PrimitiveType> {
     let underlying = field.get().signature.ty.clone();
     match underlying {
         TypeSig::Primitive(p) => Ok(p),
-        _ => Err(error(format!("{} has a non primitive underlying type", ty.full_name()))),
+        _ => Err(error(format!(
+            "{} has a non primitive underlying type",
+            ty.full_name()
+        ))),
     }
 }
 
@@ -229,7 +232,12 @@ impl Module {
             module.resolve_type(namespace, name)
         })?;
         for part in nested.split('/').filter(|p| !p.is_empty()) {
-            let next = ty.get().nested_types.iter().find(|t| t.get().name == part).cloned()?;
+            let next = ty
+                .get()
+                .nested_types
+                .iter()
+                .find(|t| t.get().name == part)
+                .cloned()?;
             ty = next;
         }
         Some(ty)
@@ -290,9 +298,12 @@ impl<'a> Reader<'a> {
             TypeSig::SzArray(element) => CAType::SzArray(Box::new(self.sig_type(element)?)),
             TypeSig::Class(t) if t.full_name_is("System", "Type") => CAType::Type,
             TypeSig::ValueType(t) => {
-                let def = t
-                    .resolve()
-                    .ok_or_else(|| error(format!("can't resolve enum {}, load the module's dependencies", t.full_name())))?;
+                let def = t.resolve().ok_or_else(|| {
+                    error(format!(
+                        "can't resolve enum {}, load the module's dependencies",
+                        t.full_name()
+                    ))
+                })?;
                 CAType::Enum {
                     type_name: serialized_name(t),
                     underlying: underlying_type(&def)?,
@@ -309,11 +320,18 @@ impl<'a> Reader<'a> {
             TAG_TYPE => CAType::Type,
             TAG_BOXED => CAType::Object,
             TAG_ENUM => {
-                let type_name = self.ser_string()?.ok_or_else(|| error("null enum type name"))?;
+                let type_name = self
+                    .ser_string()?
+                    .ok_or_else(|| error("null enum type name"))?;
                 let def = self
                     .module
                     .resolve_serialized_type(&type_name)
-                    .ok_or_else(|| error(format!("can't resolve enum {}, load the module's dependencies", type_name)))?;
+                    .ok_or_else(|| {
+                        error(format!(
+                            "can't resolve enum {}, load the module's dependencies",
+                            type_name
+                        ))
+                    })?;
                 CAType::Enum {
                     underlying: underlying_type(&def)?,
                     type_name,
@@ -343,7 +361,12 @@ impl<'a> Reader<'a> {
                 PrimitiveType::R4 => CAValue::R4(f32::from_le_bytes(self.bytes()?)),
                 PrimitiveType::R8 => CAValue::R8(f64::from_le_bytes(self.bytes()?)),
                 PrimitiveType::String => CAValue::String(self.ser_string()?),
-                p => return Err(error(format!("{} can't be an attribute argument", p.keyword()))),
+                p => {
+                    return Err(error(format!(
+                        "{} can't be an attribute argument",
+                        p.keyword()
+                    )))
+                }
             },
             CAType::Type => CAValue::Type(self.ser_string()?),
             CAType::Object => {
@@ -365,7 +388,11 @@ impl<'a> Reader<'a> {
                     if count as usize > self.data.len() {
                         return Err(error("array is larger than the blob"));
                     }
-                    Some((0..count).map(|_| self.value(element)).collect::<Result<_>>()?)
+                    Some(
+                        (0..count)
+                            .map(|_| self.value(element))
+                            .collect::<Result<_>>()?,
+                    )
                 };
                 CAValue::Array {
                     element: (**element).clone(),
@@ -430,7 +457,8 @@ impl Writer {
             CAValue::Array { values, .. } => match values {
                 None => self.0.extend_from_slice(&u32::MAX.to_le_bytes()),
                 Some(values) => {
-                    self.0.extend_from_slice(&(values.len() as u32).to_le_bytes());
+                    self.0
+                        .extend_from_slice(&(values.len() as u32).to_le_bytes());
                     for v in values {
                         self.value(v)?;
                     }
@@ -449,7 +477,11 @@ impl CustomAttributeValue {
         }
         w.0.extend_from_slice(&(self.named.len() as u16).to_le_bytes());
         for named in &self.named {
-            w.0.push(if named.is_field { NAMED_FIELD } else { NAMED_PROPERTY });
+            w.0.push(if named.is_field {
+                NAMED_FIELD
+            } else {
+                NAMED_PROPERTY
+            });
             w.tagged_type(&named.ty)?;
             w.ser_string(&Some(named.name.clone()))?;
             w.value(&named.value)?;

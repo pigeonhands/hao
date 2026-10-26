@@ -81,7 +81,12 @@ macro_rules! flag_columns {
     )*};
 }
 
-heap_columns!(StringsStreamOffset, BlobStreamOffset, BlobStreamOffsetTypeSpec, GuidStreamOffset);
+heap_columns!(
+    StringsStreamOffset,
+    BlobStreamOffset,
+    BlobStreamOffsetTypeSpec,
+    GuidStreamOffset
+);
 table_columns!(
     TypeDefTableOffset,
     FieldTableOffset,

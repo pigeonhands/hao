@@ -124,8 +124,7 @@ impl ReadData<u8> for DataReader<'_> {
 impl<const N: usize> ReadData<[u8; N]> for DataReader<'_> {
     #[inline(always)]
     fn read(&mut self) -> Result<[u8; N]> {
-        self
-            .read_slice(N)?
+        self.read_slice(N)?
             .try_into()
             .map_err(|_| HaoError::NotEnoughDataLeft(N))
     }

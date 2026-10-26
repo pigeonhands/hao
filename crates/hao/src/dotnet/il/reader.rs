@@ -161,7 +161,13 @@ impl<'a, R: BodyResolver> BodyReader<'a, R> {
                 let count = data_size.saturating_sub(4) / clause_size;
                 for _ in 0..count {
                     let (flags, try_offset, try_length, handler_offset, handler_length) = if fat {
-                        (self.u32()?, self.u32()?, self.u32()?, self.u32()?, self.u32()?)
+                        (
+                            self.u32()?,
+                            self.u32()?,
+                            self.u32()?,
+                            self.u32()?,
+                            self.u32()?,
+                        )
                     } else {
                         (
                             self.u16()? as u32,
@@ -215,7 +221,8 @@ impl<'a, R: BodyResolver> BodyReader<'a, R> {
         } else {
             first
         };
-        let opcode = OpCode::from_repr(value).ok_or(HaoError::InvalidOpCode(value, self.position))?;
+        let opcode =
+            OpCode::from_repr(value).ok_or(HaoError::InvalidOpCode(value, self.position))?;
 
         let relative = |this: &Self, delta: i64| (this.position - code_start) as i64 + delta;
 
@@ -231,9 +238,15 @@ impl<'a, R: BodyResolver> BodyReader<'a, R> {
                 RawOperand::Resolved(Operand::Int32(v))
             }
             OperandType::I => RawOperand::Resolved(Operand::Int32(self.u32()? as i32)),
-            OperandType::I8 => RawOperand::Resolved(Operand::Int64(i64::from_le_bytes(self.bytes()?))),
-            OperandType::ShortR => RawOperand::Resolved(Operand::Float32(f32::from_le_bytes(self.bytes()?))),
-            OperandType::R => RawOperand::Resolved(Operand::Float64(f64::from_le_bytes(self.bytes()?))),
+            OperandType::I8 => {
+                RawOperand::Resolved(Operand::Int64(i64::from_le_bytes(self.bytes()?)))
+            }
+            OperandType::ShortR => {
+                RawOperand::Resolved(Operand::Float32(f32::from_le_bytes(self.bytes()?)))
+            }
+            OperandType::R => {
+                RawOperand::Resolved(Operand::Float64(f64::from_le_bytes(self.bytes()?)))
+            }
             OperandType::ShortBranch => {
                 let delta = self.u8()? as i8 as i64;
                 RawOperand::Target(relative(self, delta))
@@ -273,7 +286,9 @@ impl<'a, R: BodyResolver> BodyReader<'a, R> {
                 let token = self.u32()?;
                 match self.resolver.stand_alone_sig(token)? {
                     StandAloneSig::Method(sig) => RawOperand::Resolved(Operand::Sig(sig)),
-                    StandAloneSig::Locals(_) => return Err(self.error("calli with a local signature")),
+                    StandAloneSig::Locals(_) => {
+                        return Err(self.error("calli with a local signature"))
+                    }
                 }
             }
         };

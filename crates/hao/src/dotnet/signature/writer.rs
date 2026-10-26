@@ -137,7 +137,8 @@ impl<'a, E: TokenEncoder> SignatureWriter<'a, E> {
     pub fn write_method_sig(&mut self, sig: &MethodSig) -> Result<()> {
         let mut flags = sig.flags;
         flags.set(SignatureFlags::GENERIC, sig.generic_param_count > 0);
-        self.buffer.push(sig.calling_convention as u8 | flags.bits());
+        self.buffer
+            .push(sig.calling_convention as u8 | flags.bits());
         if sig.generic_param_count > 0 {
             self.write_compressed_u32(sig.generic_param_count)?;
         }
@@ -173,7 +174,8 @@ impl<'a, E: TokenEncoder> SignatureWriter<'a, E> {
         } else {
             SignatureFlags::empty()
         };
-        self.buffer.push(CallingConvention::Property as u8 | flags.bits());
+        self.buffer
+            .push(CallingConvention::Property as u8 | flags.bits());
         self.write_compressed_u32(sig.params.len() as u32)?;
         self.write_type(&sig.ty)?;
         for param in &sig.params {

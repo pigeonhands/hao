@@ -76,7 +76,10 @@ impl Emitter {
     pub fn switch(&mut self, targets: Vec<EmitLabel>) -> &mut Self {
         self.pending
             .push((self.body.instructions.len(), PendingTarget::Switch(targets)));
-        self.emit(Instruction::new(OpCode::Switch, Operand::Switch(Vec::new())))
+        self.emit(Instruction::new(
+            OpCode::Switch,
+            Operand::Switch(Vec::new()),
+        ))
     }
 
     /// Adds a local variable, returning its index.

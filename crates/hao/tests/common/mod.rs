@@ -16,7 +16,10 @@ pub struct Sample {
 
 impl Sample {
     pub fn run(&self, dir: &std::path::Path) -> Option<String> {
-        let output = Command::new(self.runner?).arg(dir.join(self.file_name)).output().ok()?;
+        let output = Command::new(self.runner?)
+            .arg(dir.join(self.file_name))
+            .output()
+            .ok()?;
         assert!(
             output.status.success(),
             "{} failed: {}",
@@ -61,7 +64,10 @@ fn build_target(
                 let contents = if path.extension().is_some_and(|e| e == "csproj") {
                     String::from_utf8(contents)
                         .ok()?
-                        .replace("<TargetFramework>net9.0</TargetFramework>", &format!("<TargetFramework>{}</TargetFramework>", framework))
+                        .replace(
+                            "<TargetFramework>net9.0</TargetFramework>",
+                            &format!("<TargetFramework>{}</TargetFramework>", framework),
+                        )
                         .into_bytes()
                 } else {
                     contents

@@ -16,7 +16,6 @@ use crate::{
     Module,
 };
 
-
 #[derive(Debug, Clone, Default)]
 pub struct CSharpOptions {
     /// Write type names with their namespace.
@@ -309,14 +308,21 @@ fn member_visibility(access: u16) -> &'static str {
     }
 }
 
-fn write_attributes<W: Write>(w: &mut CSharpWriter<W>, attributes: &[CustomAttribute]) -> fmt::Result {
+fn write_attributes<W: Write>(
+    w: &mut CSharpWriter<W>,
+    attributes: &[CustomAttribute],
+) -> fmt::Result {
     for attribute in attributes {
         let name = attribute.type_name();
         let short = name.rsplit(['.', '/']).next().unwrap_or(&name);
         let short = short.strip_suffix("Attribute").unwrap_or(short);
         if matches!(
             short,
-            "CompilerGenerated" | "Nullable" | "NullableContext" | "IsReadOnly" | "DebuggerBrowsable"
+            "CompilerGenerated"
+                | "Nullable"
+                | "NullableContext"
+                | "IsReadOnly"
+                | "DebuggerBrowsable"
         ) {
             continue;
         }
@@ -330,7 +336,11 @@ fn write_constant<W: Write>(w: &mut CSharpWriter<W>, constant: &Constant) -> fmt
         return write!(w, "{:?}", s);
     }
     match constant.element_type {
-        ElementType::Boolean => w.write_str(if constant.as_i64() == Some(0) { "false" } else { "true" }),
+        ElementType::Boolean => w.write_str(if constant.as_i64() == Some(0) {
+            "false"
+        } else {
+            "true"
+        }),
         ElementType::Char => match constant.as_i64().and_then(|c| char::from_u32(c as u32)) {
             Some(c) => write!(w, "{:?}", c),
             None => w.write_str("'\\0'"),
@@ -352,7 +362,10 @@ fn write_constant<W: Write>(w: &mut CSharpWriter<W>, constant: &Constant) -> fmt
     }
 }
 
-fn write_generic_params<W: Write>(w: &mut CSharpWriter<W>, params: &[Entry<GenericParam>]) -> fmt::Result {
+fn write_generic_params<W: Write>(
+    w: &mut CSharpWriter<W>,
+    params: &[Entry<GenericParam>],
+) -> fmt::Result {
     if params.is_empty() {
         return Ok(());
     }
@@ -370,23 +383,33 @@ fn write_generic_params<W: Write>(w: &mut CSharpWriter<W>, params: &[Entry<Gener
     w.write_str(">")
 }
 
-fn write_constraints<W: Write>(w: &mut CSharpWriter<W>, params: &[Entry<GenericParam>]) -> fmt::Result {
+fn write_constraints<W: Write>(
+    w: &mut CSharpWriter<W>,
+    params: &[Entry<GenericParam>],
+) -> fmt::Result {
     for p in params {
         let p = p.get();
         let mut parts = Vec::new();
-        if p.flags.contains(GenericParamFlags::NotNullableValueTypeConstraint) {
+        if p.flags
+            .contains(GenericParamFlags::NotNullableValueTypeConstraint)
+        {
             parts.push("struct".to_owned());
         } else if p.flags.contains(GenericParamFlags::ReferenceTypeConstraint) {
             parts.push("class".to_owned());
         }
         for c in &p.constraints {
-            if c.constraint.is_system_type(well_known::SystemType::ValueType) {
+            if c.constraint
+                .is_system_type(well_known::SystemType::ValueType)
+            {
                 continue;
             }
             parts.push(c.constraint.to_csharp_with(w));
         }
-        if p.flags.contains(GenericParamFlags::DefaultConstructorConstraint)
-            && !p.flags.contains(GenericParamFlags::NotNullableValueTypeConstraint)
+        if p.flags
+            .contains(GenericParamFlags::DefaultConstructorConstraint)
+            && !p
+                .flags
+                .contains(GenericParamFlags::NotNullableValueTypeConstraint)
         {
             parts.push("new()".to_owned());
         }
@@ -439,7 +462,11 @@ impl WriteCSharp for Field {
 
 impl WriteCSharp for Method {
     fn write_csharp<W: Write>(&self, w: &mut CSharpWriter<W>) -> fmt::Result {
-        w.method_generics = self.generic_params.iter().map(|g| g.get().name.clone()).collect();
+        w.method_generics = self
+            .generic_params
+            .iter()
+            .map(|g| g.get().name.clone())
+            .collect();
         let result = write_method(w, self);
         w.method_generics.clear();
         result
@@ -466,9 +493,17 @@ fn write_method<W: Write>(w: &mut CSharpWriter<W>, m: &Method) -> fmt::Result {
         let new_slot = m.flags.contains(MethodFlags::NewSlot);
         let is_final = m.flags.contains(MethodFlags::Final);
         if m.flags.contains(MethodFlags::Abstract) {
-            w.write_str(if new_slot { "abstract " } else { "abstract override " })?;
+            w.write_str(if new_slot {
+                "abstract "
+            } else {
+                "abstract override "
+            })?;
         } else if virt && !new_slot {
-            w.write_str(if is_final { "sealed override " } else { "override " })?;
+            w.write_str(if is_final {
+                "sealed override "
+            } else {
+                "override "
+            })?;
         } else if virt && !is_final {
             w.write_str("virtual ")?;
         }
@@ -485,7 +520,10 @@ fn write_method<W: Write>(w: &mut CSharpWriter<W>, m: &Method) -> fmt::Result {
 
     w.write_str("(")?;
     w.separated(m.signature.params.iter().enumerate(), ", ", |w, (i, ty)| {
-        let flags = m.param(i as u16 + 1).map(|p| p.get().flags).unwrap_or_default();
+        let flags = m
+            .param(i as u16 + 1)
+            .map(|p| p.get().flags)
+            .unwrap_or_default();
         match ty {
             TypeSig::ByRef(inner) => {
                 w.write_str(if flags.contains(ParamFlags::Out) {
@@ -592,7 +630,10 @@ impl WriteCSharp for TypeDef {
     fn write_csharp<W: Write>(&self, w: &mut CSharpWriter<W>) -> fmt::Result {
         let saved = std::mem::replace(
             &mut w.type_generics,
-            self.generic_params.iter().map(|g| g.get().name.clone()).collect(),
+            self.generic_params
+                .iter()
+                .map(|g| g.get().name.clone())
+                .collect(),
         );
         let result = write_type(w, self);
         w.type_generics = saved;
@@ -612,10 +653,14 @@ fn write_type<W: Write>(w: &mut CSharpWriter<W>, t: &TypeDef) -> fmt::Result {
             write!(w, " {}", strip_arity(&t.name))?;
             write_generic_params(w, &t.generic_params)?;
             w.write_str("(")?;
-            w.separated(invoke.signature.params.iter().enumerate(), ", ", |w, (i, p)| {
-                p.write_csharp(w)?;
-                write!(w, " {}", invoke.param_name(i))
-            })?;
+            w.separated(
+                invoke.signature.params.iter().enumerate(),
+                ", ",
+                |w, (i, p)| {
+                    p.write_csharp(w)?;
+                    write!(w, " {}", invoke.param_name(i))
+                },
+            )?;
             return w.write_str(");\n");
         }
     }
@@ -625,7 +670,10 @@ fn write_type<W: Write>(w: &mut CSharpWriter<W>, t: &TypeDef) -> fmt::Result {
     } else if t.is_interface() {
         "interface"
     } else if t.is_value_type() {
-        if t.custom_attributes.iter().any(|a| a.type_name().ends_with("IsReadOnlyAttribute")) {
+        if t.custom_attributes
+            .iter()
+            .any(|a| a.type_name().ends_with("IsReadOnlyAttribute"))
+        {
             "readonly struct"
         } else {
             "struct"

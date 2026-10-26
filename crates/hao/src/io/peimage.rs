@@ -3,7 +3,7 @@ use crate::io::DataReader;
 
 use pewter::pe::optional_header::OptionalHeader;
 use pewter::pe::sections::cor20::ImageCor20Header;
-use pewter::pe::sections::{SectionRow};
+use pewter::pe::sections::SectionRow;
 use pewter::PEFile;
 
 pub struct PEImage<'a> {
@@ -18,7 +18,10 @@ impl<'a> PEImage<'a> {
     }
 
     pub fn optional_header(&self) -> Result<&OptionalHeader> {
-        self.pe.optional_header.as_ref().ok_or(HaoError::BadPeFormat)
+        self.pe
+            .optional_header
+            .as_ref()
+            .ok_or(HaoError::BadPeFormat)
     }
 
     pub fn rva_to_section(&self, rva: u32) -> Option<&SectionRow<'_>> {

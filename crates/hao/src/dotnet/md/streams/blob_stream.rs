@@ -38,7 +38,9 @@ impl<'a> UserStringsStream<'a> {
     pub fn read_string(&self, offset: u32) -> Result<String> {
         let data = read_length_prefixed(self.heap_data, offset, "#US")?;
         let units: Vec<u16> = data
-            .as_chunks::<2>().0.iter()
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         Ok(String::from_utf16_lossy(&units))

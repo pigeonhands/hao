@@ -163,7 +163,12 @@ impl Module {
         self.resolve_type_depth(namespace, name, 0)
     }
 
-    fn resolve_type_depth(&self, namespace: &str, name: &str, depth: usize) -> Option<Entry<TypeDef>> {
+    fn resolve_type_depth(
+        &self,
+        namespace: &str,
+        name: &str,
+        depth: usize,
+    ) -> Option<Entry<TypeDef>> {
         if let Some(ty) = self.find_type(namespace, name) {
             return Some(ty);
         }
@@ -190,7 +195,12 @@ impl Module {
         let (namespace, name) = top.rsplit_once('.').unwrap_or(("", top));
         let mut ty = self.find_type(namespace, name)?;
         for nested in parts {
-            let next = ty.get().nested_types.iter().find(|t| t.get().name == nested).cloned()?;
+            let next = ty
+                .get()
+                .nested_types
+                .iter()
+                .find(|t| t.get().name == nested)
+                .cloned()?;
             ty = next;
         }
         Some(ty)

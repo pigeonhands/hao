@@ -8,11 +8,13 @@ mod writer;
 pub use emitter::{EmitLabel, Emitter};
 pub use opcodes::*;
 pub(crate) use reader::{BodyReader, BodyResolver};
-pub(crate) use writer::{encode_body, BodyEncoder};
 pub use writer::compute_max_stack;
+pub(crate) use writer::{encode_body, BodyEncoder};
 
 use crate::dotnet::{
-    entries::{Entry, Field, MemberRef, Method, MethodSpec, TypeDef, TypeDefOrRef, TypeRef, TypeSpec},
+    entries::{
+        Entry, Field, MemberRef, Method, MethodSpec, TypeDef, TypeDefOrRef, TypeRef, TypeSpec,
+    },
     signature::{MethodSig, TypeSig},
 };
 
@@ -86,12 +88,10 @@ impl MemberToken {
                 crate::dotnet::entries::MethodDefOrRef::Method(m) => {
                     Some(m.get().signature.clone())
                 }
-                crate::dotnet::entries::MethodDefOrRef::MemberRef(m) => {
-                    match &m.get().signature {
-                        crate::dotnet::signature::MemberRefSig::Method(sig) => Some(sig.clone()),
-                        _ => None,
-                    }
-                }
+                crate::dotnet::entries::MethodDefOrRef::MemberRef(m) => match &m.get().signature {
+                    crate::dotnet::signature::MemberRefSig::Method(sig) => Some(sig.clone()),
+                    _ => None,
+                },
             },
             _ => None,
         }
@@ -362,7 +362,13 @@ mod tests {
             }],
             ..Default::default()
         };
-        body.insert(0, [Instruction::simple(OpCode::Ldnull), Instruction::simple(OpCode::Pop)]);
+        body.insert(
+            0,
+            [
+                Instruction::simple(OpCode::Ldnull),
+                Instruction::simple(OpCode::Pop),
+            ],
+        );
         assert_eq!(body.instructions[3].operand, Operand::Target(Label(2)));
         assert_eq!(body.exception_handlers[0].handler_end, Label(5));
 

@@ -9,7 +9,6 @@ use hao::{
     Module,
 };
 
-
 fn load(sample: &common::Sample) -> Module {
     Module::from_bytes(&sample.bytes).unwrap()
 }
@@ -31,13 +30,18 @@ fn loads_types() {
 
     let body = add.body.as_ref().unwrap();
     let ops: Vec<OpCode> = body.instructions.iter().map(|i| i.opcode).collect();
-    assert_eq!(ops, [OpCode::Ldarg_0, OpCode::Ldarg_1, OpCode::Add, OpCode::Ret]);
+    assert_eq!(
+        ops,
+        [OpCode::Ldarg_0, OpCode::Ldarg_1, OpCode::Add, OpCode::Ret]
+    );
 }
 
 #[test]
 fn nested_and_generic_types() {
     let module = load(sample!());
-    let boxed = module.find_type_by_full_name("Sample.Box`1/Nested").unwrap();
+    let boxed = module
+        .find_type_by_full_name("Sample.Box`1/Nested")
+        .unwrap();
     assert_eq!(boxed.get().full_name(), "Sample.Box`1/Nested");
 
     let generic = module.find_type("Sample", "Box`1").unwrap();
@@ -175,7 +179,12 @@ fn load_shared_framework() {
             }
         }
     }
-    assert!(failures.is_empty(), "{} loaded, failures:\n{}", count, failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} loaded, failures:\n{}",
+        count,
+        failures.join("\n")
+    );
     println!("loaded {} assemblies", count);
 }
 

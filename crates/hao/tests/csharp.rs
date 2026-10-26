@@ -5,7 +5,6 @@ use hao::{
     Module,
 };
 
-
 #[test]
 fn declarations() {
     let module = Module::from_bytes(&sample!().bytes).unwrap();
@@ -25,7 +24,12 @@ fn declarations() {
         "public static int[,] Grid();",
         "public override double Area();",
     ] {
-        assert!(source.contains(expected), "missing {:?} in\n{}", expected, source);
+        assert!(
+            source.contains(expected),
+            "missing {:?} in\n{}",
+            expected,
+            source
+        );
     }
 }
 
@@ -34,14 +38,20 @@ fn display_adapter_and_il() {
     let module = Module::from_bytes(&sample!().bytes).unwrap();
     let calc = module.find_type("Sample", "Calc").unwrap();
     let add = calc.get().find_method("Add").unwrap();
-    assert_eq!(add.csharp().to_string(), "public static int Add(int a, int b);\n");
+    assert_eq!(
+        add.csharp().to_string(),
+        "public static int Add(int a, int b);\n"
+    );
 
     let source = module.to_csharp_with(CSharpOptions {
         il_bodies: true,
         ..Default::default()
     });
     assert!(source.contains("// IL_0002: add"));
-    assert!(source.contains("// IL_0001: ldstr \"Hello from hao\"") || source.contains("ldstr \"Hello from hao\""));
+    assert!(
+        source.contains("// IL_0001: ldstr \"Hello from hao\"")
+            || source.contains("ldstr \"Hello from hao\"")
+    );
     assert!(source.contains("finally handler"));
 }
 

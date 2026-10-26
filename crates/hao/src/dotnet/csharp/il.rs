@@ -78,10 +78,18 @@ fn token_name<W: Write>(w: &CSharpWriter<W>, token: &MemberToken) -> String {
         }
         MemberToken::MethodSpec(m) => {
             let m = m.get();
-            let args: Vec<String> = m.instantiation.iter().map(|a| a.to_csharp_with(w)).collect();
+            let args: Vec<String> = m
+                .instantiation
+                .iter()
+                .map(|a| a.to_csharp_with(w))
+                .collect();
             let method = match &m.method {
-                crate::dotnet::entries::MethodDefOrRef::Method(d) => token_name(w, &MemberToken::Method(d.clone())),
-                crate::dotnet::entries::MethodDefOrRef::MemberRef(r) => token_name(w, &MemberToken::MemberRef(r.clone())),
+                crate::dotnet::entries::MethodDefOrRef::Method(d) => {
+                    token_name(w, &MemberToken::Method(d.clone()))
+                }
+                crate::dotnet::entries::MethodDefOrRef::MemberRef(r) => {
+                    token_name(w, &MemberToken::MemberRef(r.clone()))
+                }
             };
             format!("{}<{}>", method, args.join(", "))
         }

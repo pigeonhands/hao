@@ -106,7 +106,8 @@ impl UserStringHeap {
         }
         let offset = self.data.len() as u32;
         let units: Vec<u16> = value.encode_utf16().collect();
-        encode_compressed_u32(&mut self.data, units.len() as u32 * 2 + 1).expect("string too large");
+        encode_compressed_u32(&mut self.data, units.len() as u32 * 2 + 1)
+            .expect("string too large");
         let mut special = 0;
         for unit in units {
             self.data.extend_from_slice(&unit.to_le_bytes());

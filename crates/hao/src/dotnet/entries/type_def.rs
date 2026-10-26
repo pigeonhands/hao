@@ -115,7 +115,9 @@ impl TypeDef {
 
     pub fn is_static(&self) -> bool {
         !self.is_interface()
-            && self.flags.contains(TypeAttributes::Abstract | TypeAttributes::Sealed)
+            && self
+                .flags
+                .contains(TypeAttributes::Abstract | TypeAttributes::Sealed)
     }
 
     pub fn is_nested(&self) -> bool {

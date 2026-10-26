@@ -119,7 +119,10 @@ where
     T: EntryName,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = std::any::type_name::<T>().rsplit("::").next().unwrap_or("?");
+        let name = std::any::type_name::<T>()
+            .rsplit("::")
+            .next()
+            .unwrap_or("?");
         match self.try_get() {
             Some(v) => write!(f, "{}({:?})", name, v.entry_name()),
             None => write!(f, "{}(<borrowed>)", name),

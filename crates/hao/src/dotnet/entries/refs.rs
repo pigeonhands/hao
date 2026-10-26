@@ -50,7 +50,8 @@ impl TypeDefOrRef {
     }
 
     pub fn is_system_type(&self, system_type: SystemType) -> bool {
-        self.namespace() == "System" && SystemType::from_type_name(&self.name()) == Some(system_type)
+        self.namespace() == "System"
+            && SystemType::from_type_name(&self.name()) == Some(system_type)
     }
 
     /// The type definition, looking through resolved assembly references.
@@ -81,7 +82,11 @@ pub struct TypeRef {
 }
 
 impl TypeRef {
-    pub fn new(scope: ResolutionScope, namespace: impl Into<String>, name: impl Into<String>) -> Self {
+    pub fn new(
+        scope: ResolutionScope,
+        namespace: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
         Self {
             scope: Some(scope),
             name: name.into(),

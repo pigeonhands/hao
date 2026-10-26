@@ -22,15 +22,32 @@ fn body(instructions: Vec<Instruction>) -> Option<MethodBody> {
 
 fn hello_world() -> Module {
     let mut module = Module::new("Hello", ModuleKind::Console, TargetRuntime::NetCore(9));
-    module.add_assembly_ref("System.Console", Version { major: 9, ..Default::default() }, &TargetRuntime::NetCore(9).framework_token());
+    module.add_assembly_ref(
+        "System.Console",
+        Version {
+            major: 9,
+            ..Default::default()
+        },
+        &TargetRuntime::NetCore(9).framework_token(),
+    );
 
     let object = module.corlib_type("System.Object").unwrap();
     let object_ctor = module
-        .import_method_on(&object, ".ctor", MethodSig::new_instance(TypeSig::VOID, vec![]))
+        .import_method_on(
+            &object,
+            ".ctor",
+            MethodSig::new_instance(TypeSig::VOID, vec![]),
+        )
         .unwrap();
-    let console = module.import_type_from("System.Console", "System.Console").unwrap();
+    let console = module
+        .import_type_from("System.Console", "System.Console")
+        .unwrap();
     let write_line = module
-        .import_method_on(&console, "WriteLine", MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]))
+        .import_method_on(
+            &console,
+            "WriteLine",
+            MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]),
+        )
         .unwrap();
     let string = module.corlib_type("System.String").unwrap();
     let concat = module
@@ -42,17 +59,39 @@ fn hello_world() -> Module {
         .unwrap();
 
     let public_class = TypeAttributes::Public | TypeAttributes::BeforeFieldInit;
-    let greeter = module.add_type(TypeDef::new(public_class, "Hello", "Greeter", Some(object.clone())));
-    let name = TypeDef::add_field(&greeter, Field::new(FieldFlags::Private, "name", FieldSig { ty: TypeSig::STRING }));
+    let greeter = module.add_type(TypeDef::new(
+        public_class,
+        "Hello",
+        "Greeter",
+        Some(object.clone()),
+    ));
+    let name = TypeDef::add_field(
+        &greeter,
+        Field::new(
+            FieldFlags::Private,
+            "name",
+            FieldSig {
+                ty: TypeSig::STRING,
+            },
+        ),
+    );
 
-    let ctor_flags = MethodFlags::Public | MethodFlags::HideBySig | MethodFlags::SpecialName | MethodFlags::RTSpecialName;
+    let ctor_flags = MethodFlags::Public
+        | MethodFlags::HideBySig
+        | MethodFlags::SpecialName
+        | MethodFlags::RTSpecialName;
     let ctor = TypeDef::add_method(
         &greeter,
-        Method::new(ctor_flags, ".ctor", MethodSig::new_instance(TypeSig::VOID, vec![TypeSig::STRING])),
+        Method::new(
+            ctor_flags,
+            ".ctor",
+            MethodSig::new_instance(TypeSig::VOID, vec![TypeSig::STRING]),
+        ),
     );
     {
         let mut c = ctor.get_mut();
-        c.params.push(hao::dotnet::entries::Entry::new(Param::new(1, "name")));
+        c.params
+            .push(hao::dotnet::entries::Entry::new(Param::new(1, "name")));
         c.body = body(vec![
             Instruction::ldarg(0),
             Instruction::call(object_ctor),
@@ -65,12 +104,19 @@ fn hello_world() -> Module {
 
     let greet = TypeDef::add_method(
         &greeter,
-        Method::new(MethodFlags::Public | MethodFlags::HideBySig, "Greet", MethodSig::new_instance(TypeSig::STRING, vec![])),
+        Method::new(
+            MethodFlags::Public | MethodFlags::HideBySig,
+            "Greet",
+            MethodSig::new_instance(TypeSig::STRING, vec![]),
+        ),
     );
     greet.get_mut().body = body(vec![
         Instruction::ldstr("Hello, "),
         Instruction::ldarg(0),
-        Instruction::new(OpCode::Ldfld, Operand::Token(greeter.get().fields[0].clone().into())),
+        Instruction::new(
+            OpCode::Ldfld,
+            Operand::Token(greeter.get().fields[0].clone().into()),
+        ),
         Instruction::call(concat),
         Instruction::ret(),
     ]);
@@ -107,7 +153,14 @@ fn write_new_module() {
 
     let reloaded = Module::from_bytes(&data).unwrap();
     assert_eq!(reloaded.name(), "Hello.exe");
-    assert_eq!(reloaded.find_method("Hello.Greeter", "Greet").unwrap().get().name, "Greet");
+    assert_eq!(
+        reloaded
+            .find_method("Hello.Greeter", "Greet")
+            .unwrap()
+            .get()
+            .name,
+        "Greet"
+    );
     assert_eq!(reloaded.entry_point.as_ref().unwrap().get().name, "Main");
 
     let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("new_module");
@@ -122,7 +175,11 @@ fn write_new_module() {
         eprintln!("skipping run: dotnet not installed");
         return;
     };
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(String::from_utf8_lossy(&output.stdout), "Hello, hao\n");
 }
 
@@ -134,18 +191,40 @@ fn call_into_another_module() {
     let add = library.find_method("Sample.Calc", "Add").unwrap();
 
     let mut module = Module::new("Caller", ModuleKind::Console, TargetRuntime::NetCore(9));
-    module.add_assembly_ref("System.Console", Version { major: 9, ..Default::default() }, &TargetRuntime::NetCore(9).framework_token());
+    module.add_assembly_ref(
+        "System.Console",
+        Version {
+            major: 9,
+            ..Default::default()
+        },
+        &TargetRuntime::NetCore(9).framework_token(),
+    );
     let add = module.import_foreign_method(&add, &library).unwrap();
-    let console = module.import_type_from("System.Console", "System.Console").unwrap();
+    let console = module
+        .import_type_from("System.Console", "System.Console")
+        .unwrap();
     let write_line = module
-        .import_method_on(&console, "WriteLine", MethodSig::new_static(TypeSig::VOID, vec![TypeSig::INT32]))
+        .import_method_on(
+            &console,
+            "WriteLine",
+            MethodSig::new_static(TypeSig::VOID, vec![TypeSig::INT32]),
+        )
         .unwrap();
     let object = module.corlib_type("System.Object").unwrap();
 
-    let program = module.add_type(TypeDef::new(TypeAttributes::Public | TypeAttributes::Abstract | TypeAttributes::Sealed, "", "Program", Some(object)));
+    let program = module.add_type(TypeDef::new(
+        TypeAttributes::Public | TypeAttributes::Abstract | TypeAttributes::Sealed,
+        "",
+        "Program",
+        Some(object),
+    ));
     let main = TypeDef::add_method(
         &program,
-        Method::new(MethodFlags::Public | MethodFlags::Static, "Main", MethodSig::new_static(TypeSig::VOID, vec![])),
+        Method::new(
+            MethodFlags::Public | MethodFlags::Static,
+            "Main",
+            MethodSig::new_static(TypeSig::VOID, vec![]),
+        ),
     );
     main.get_mut().body = body(vec![
         Instruction::ldc_i4(40),
@@ -161,8 +240,19 @@ fn call_into_another_module() {
     std::fs::create_dir_all(&dir).unwrap();
     module.write_to_path(dir.join("Caller.dll")).unwrap();
     std::fs::write(dir.join("Sample.dll"), &sample.bytes).unwrap();
-    std::fs::copy(sample.dir.join("Sample.runtimeconfig.json"), dir.join("Caller.runtimeconfig.json")).unwrap();
-    let output = Command::new("dotnet").arg(dir.join("Caller.dll")).output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    std::fs::copy(
+        sample.dir.join("Sample.runtimeconfig.json"),
+        dir.join("Caller.runtimeconfig.json"),
+    )
+    .unwrap();
+    let output = Command::new("dotnet")
+        .arg(dir.join("Caller.dll"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
 }

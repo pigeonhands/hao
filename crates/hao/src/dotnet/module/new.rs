@@ -32,17 +32,26 @@ impl TargetRuntime {
         let (name, version, token) = match self {
             Self::NetCore(major) => (
                 "System.Runtime",
-                Version { major, ..Default::default() },
+                Version {
+                    major,
+                    ..Default::default()
+                },
                 [0xb0, 0x3f, 0x5f, 0x7f, 0x11, 0xd5, 0x0a, 0x3a],
             ),
             Self::NetCoreImplementation(major) => (
                 "System.Private.CoreLib",
-                Version { major, ..Default::default() },
+                Version {
+                    major,
+                    ..Default::default()
+                },
                 [0x7c, 0xec, 0x85, 0xd7, 0xbe, 0xa7, 0x79, 0x8e],
             ),
             Self::NetFramework => (
                 "mscorlib",
-                Version { major: 4, ..Default::default() },
+                Version {
+                    major: 4,
+                    ..Default::default()
+                },
                 [0xb7, 0x7a, 0x5c, 0x56, 0x19, 0x34, 0xe0, 0x89],
             ),
         };
@@ -87,7 +96,11 @@ impl Module {
     /// assert_eq!(module.name(), "Generated.dll");
     /// ```
     pub fn new(name: &str, kind: ModuleKind, runtime: TargetRuntime) -> Self {
-        let extension = if kind == ModuleKind::Dll { "dll" } else { "exe" };
+        let extension = if kind == ModuleKind::Dll {
+            "dll"
+        } else {
+            "exe"
+        };
         let global_type = TypeDef {
             flags: TypeAttributes::empty(),
             name: "<Module>".into(),
@@ -124,14 +137,17 @@ impl Module {
 
     /// The reference to the core library (`System.Runtime`, `mscorlib`, ...).
     pub fn corlib(&self) -> Option<Entry<AssemblyRef>> {
-        self.assembly_refs.iter().find(|a| a.get().is_corlib()).cloned()
+        self.assembly_refs
+            .iter()
+            .find(|a| a.get().is_corlib())
+            .cloned()
     }
 
     /// A type from the core library, e.g. `System.Object`.
     pub fn corlib_type(&mut self, full_name: &str) -> crate::error::Result<TypeDefOrRef> {
-        let corlib = self
-            .corlib()
-            .ok_or(crate::error::HaoError::BadImageFormat("module has no core library reference"))?;
+        let corlib = self.corlib().ok_or(crate::error::HaoError::BadImageFormat(
+            "module has no core library reference",
+        ))?;
         let name = corlib.get().name.clone();
         self.import_type_from(&name, full_name)
     }
