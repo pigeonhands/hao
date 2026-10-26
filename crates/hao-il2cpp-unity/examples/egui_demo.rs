@@ -10,7 +10,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use hao_il2cpp_unity::{egui, input, KeyCode};
+use hao_il2cpp_unity::{egui, input, time, KeyCode};
 
 #[used]
 #[link_section = ".init_array"]
@@ -37,16 +37,25 @@ extern "C" fn load() {
                     ui.label("Drawn over the game with egui. F1 to toggle.");
                     ui.label(format!("frames rendered: {}", frames));
                     ui.separator();
-                    if ui.button("Click me").clicked() {
-                        tracing::info!("egui button clicked");
+
+                    // Read the game's live Time.timeScale, let the slider drive it,
+                    // and show the value that the game reports back — so you can see
+                    // the UI is actually talking to the game both ways.
+                    let reported = time::scale().unwrap_or(f32::NAN);
+                    let mut scale = reported;
+                    ui.label(format!("Time.timeScale (from game): {reported:.2}"));
+                    if ui.add(egui::Slider::new(&mut scale, 0.0..=3.0)).changed() {
+                        let _ = time::set_scale(scale);
                     }
                     ui.horizontal(|ui| {
-                        ui.label("time scale:");
-                        if ui.button("pause").clicked() {
-                            let _ = hao_il2cpp_unity::time::set_scale(0.0);
+                        if ui.button("pause (0x)").clicked() {
+                            let _ = time::set_scale(0.0);
                         }
-                        if ui.button("resume").clicked() {
-                            let _ = hao_il2cpp_unity::time::set_scale(1.0);
+                        if ui.button("normal (1x)").clicked() {
+                            let _ = time::set_scale(1.0);
+                        }
+                        if ui.button("fast (2x)").clicked() {
+                            let _ = time::set_scale(2.0);
                         }
                     });
                 });
