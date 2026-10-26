@@ -54,7 +54,7 @@ fn heal_mod_hooks_the_game() {
     captured.rewind().unwrap();
     captured.read_to_string(&mut output).unwrap();
     assert!(
-        output.contains("[heal_mod] hooked PlayerHealth.Heal"),
+        output.contains("hooked PlayerHealth.Heal"),
         "mod output: {:?}",
         output
     );

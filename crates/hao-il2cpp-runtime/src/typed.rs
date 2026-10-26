@@ -263,6 +263,7 @@ fn callback<F: Any>(stub: usize) -> &'static F {
         .find(|(s, _)| *s == stub)
         .and_then(|(_, c)| c.downcast_ref::<F>())
         .unwrap_or_else(|| {
+            tracing::error!("no callback registered for hook {:#x}, aborting", stub);
             eprintln!("[hao] no callback registered for hook {:#x}", stub);
             std::process::abort()
         })
@@ -476,6 +477,7 @@ impl Method {
             callback,
         );
         unsafe { hook.apply_hook() }.map_err(Error::Hook)?;
+        tracing::debug!(method = %self.signature(), code = ?self.code(), "hooked");
         Ok(crate::MethodHook(hook))
     }
 

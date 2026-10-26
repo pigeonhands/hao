@@ -41,6 +41,7 @@ impl<Args: MethodArgs, R: Il2CppValue> Binding<Args, R> {
             .methods()
             .find(|m| m.name() == self.name && m.check_types::<Args, R>().is_ok())
             .ok_or_else(|| Error::NotFound(format!("{} with matching types", self.describe())))?;
+        tracing::trace!(method = %method.signature(), "resolved Unity method");
         Ok(*self.method.get_or_init(|| method))
     }
 

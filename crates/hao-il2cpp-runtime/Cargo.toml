@@ -13,6 +13,10 @@ keywords = ["unity", "il2cpp", "modding", "hooking"]
 hooking = "0.5"
 libloading = "0.9"
 thiserror = "2"
+tracing = "0.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

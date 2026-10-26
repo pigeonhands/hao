@@ -18,7 +18,19 @@ use hao_il2cpp_unity::runtime::{read_field, Object, Original};
 #[link_section = ".init_array"]
 static LOAD: extern "C" fn() = load;
 
+/// Sends this mod's and hao's logs to the game's stderr. `RUST_LOG` picks what's
+/// shown, e.g. `RUST_LOG=debug` for hao's hooks and lookups.
+fn init_logging() {
+    let filter =
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .try_init();
+}
+
 extern "C" fn load() {
+    init_logging();
     hao_il2cpp_unity::on_init(|il2cpp| {
         let health = il2cpp.class(
             "Assembly-CSharp",
@@ -40,7 +52,7 @@ extern "C" fn load() {
                 healed
             },
         )?;
-        eprintln!("[heal_mod] hooked PlayerHealth.Heal");
+        tracing::info!("hooked PlayerHealth.Heal");
         Ok(())
     });
 }

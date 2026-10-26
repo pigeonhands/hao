@@ -85,6 +85,19 @@ Status: native Linux games with `LD_PRELOAD` so far. A Windows build of a game r
 Proton is detected and reported as unsupported for now: its `GameAssembly.dll` is loaded by
 Wine rather than `dlopen`, and uses the Windows calling convention.
 
+## Logging
+
+Errors, debug and trace messages (the game binary being found, `il2cpp_init`, hooks being
+installed and removed, lookups) go through [`tracing`](https://crates.io/crates/tracing). Nothing
+is printed unless the mod installs a subscriber, e.g. with `tracing-subscriber`:
+
+```rust
+let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
+let _ = tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).try_init();
+```
+
+Then `RUST_LOG=hao_il2cpp_runtime=debug` in the game's launch options shows what hao is doing.
+
 ## Tests
 
 `HAO_IL2CPP_GAME=/path/to/game cargo test -p hao-il2cpp-runtime` loads the game's Il2Cpp runtime

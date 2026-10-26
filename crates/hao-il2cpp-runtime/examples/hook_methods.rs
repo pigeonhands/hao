@@ -6,6 +6,8 @@
 //! cargo run -p hao-il2cpp-runtime --example hook_methods -- <game folder>
 //! ```
 //!
+//! `RUST_LOG=debug` also shows hao's logs as hooks are installed and removed.
+//!
 //! Mods do the same from inside the game, in [`on_init`](hao_il2cpp_runtime::on_init).
 
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -15,6 +17,9 @@ use hao_il2cpp_runtime::{find_game_assembly, Il2Cpp, Il2CppString, Original, Res
 static CALLS: AtomicU32 = AtomicU32::new(0);
 
 fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
     let game = std::path::PathBuf::from(
         std::env::args()
             .nth(1)

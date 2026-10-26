@@ -120,6 +120,7 @@ pub(crate) unsafe fn c_str<'a>(value: *const std::ffi::c_char) -> &'a str {
 impl Il2Cpp {
     fn install(library: Library) -> Result<&'static Il2Cpp> {
         let api = Api::load(&library)?;
+        tracing::debug!("loaded the il2cpp_* API from the game binary");
         Ok(INSTANCE.get_or_init(|| Il2Cpp {
             api,
             _library: library,
@@ -134,6 +135,7 @@ impl Il2Cpp {
         let path = loaded_game_assembly()
             .ok_or_else(|| Error::NotFound("a loaded GameAssembly".into()))?;
         check_format(&path)?;
+        tracing::debug!(path = %path.display(), "using the loaded game binary");
         #[cfg(unix)]
         let library = unsafe {
             libloading::os::unix::Library::open(Some(&path), libc::RTLD_NOW | libc::RTLD_NOLOAD)
@@ -151,6 +153,7 @@ impl Il2Cpp {
             return Ok(il2cpp);
         }
         check_format(path.as_ref())?;
+        tracing::debug!(path = %path.as_ref().display(), "loading the game binary");
         let library = unsafe { Library::new(path.as_ref()) }.map_err(Error::Load)?;
         Self::install(library)
     }
@@ -167,6 +170,7 @@ impl Il2Cpp {
     /// Starts the runtime without Unity, given the game's `<Game>_Data/il2cpp_data` folder.
     /// Only the game's pure .NET code can run this way; anything calling into Unity will fail.
     pub fn init_standalone(&self, data_dir: impl AsRef<Path>) -> Result<()> {
+        tracing::debug!(data_dir = %data_dir.as_ref().display(), "starting Il2Cpp without Unity");
         let data_dir = cstring(&data_dir.as_ref().to_string_lossy())?;
         unsafe {
             (self.api.il2cpp_set_data_dir)(data_dir.as_ptr());
@@ -201,6 +205,7 @@ impl Il2Cpp {
                 namespace, name, assembly
             )));
         }
+        tracing::trace!(assembly, namespace, name, "found class");
         Ok(Class {
             il2cpp: self,
             ptr: class,
@@ -284,6 +289,7 @@ impl Class {
                 parameter_count
             )));
         }
+        tracing::trace!(class = self.name(), name, parameter_count, "found method");
         Ok(Method {
             il2cpp: self.il2cpp,
             ptr: method,
@@ -400,6 +406,7 @@ impl Method {
         let mut hook = unsafe { hooking::Hook::create(self.code() as *mut u8, detour) }
             .map_err(Error::Hook)?;
         unsafe { hook.apply_hook() }.map_err(Error::Hook)?;
+        tracing::debug!(method = self.name(), code = ?self.code(), "hooked (raw)");
         Ok(MethodHook(hook))
     }
 }
@@ -409,7 +416,9 @@ pub struct MethodHook(pub(crate) hooking::Hook<'static>);
 
 impl MethodHook {
     pub fn remove(mut self) -> Result<()> {
-        unsafe { self.0.remove_hook() }.map_err(Error::Hook)
+        unsafe { self.0.remove_hook() }.map_err(Error::Hook)?;
+        tracing::debug!(code = ?self.0.data.symbol_address, "removed hook");
+        Ok(())
     }
 }
 

@@ -4,9 +4,7 @@
 
 #![cfg(target_os = "linux")]
 
-use hao_il2cpp_unity::{
-    runtime::Il2Cpp, Color, LoadSceneMode, RenderMode, TextMeshPro,
-};
+use hao_il2cpp_unity::{runtime::Il2Cpp, Color, LoadSceneMode, RenderMode, TextMeshPro};
 
 #[test]
 fn unity_methods_match_the_game() {

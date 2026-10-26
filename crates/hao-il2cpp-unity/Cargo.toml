@@ -11,9 +11,11 @@ keywords = ["unity", "il2cpp", "modding", "hooking"]
 
 [dependencies]
 hao-il2cpp-runtime = { version = "0.0.1", path = "../hao-il2cpp-runtime" }
+tracing = "0.1"
 
 [dev-dependencies]
 libc = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [[example]]
 name = "heal_mod"

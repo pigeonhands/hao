@@ -57,15 +57,17 @@ pub fn on_scene_loaded(
         SCENE_LOADED.method()?.hook(
             |scene: Scene, mode: LoadSceneMode, original: Original<_, ()>| {
                 original.call((scene, mode));
+                tracing::debug!(scene = scene.handle, mode = mode.0, "scene loaded");
                 let callbacks = CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()).clone();
                 for callback in callbacks {
                     if catch_unwind(AssertUnwindSafe(|| callback(scene, mode))).is_err() {
-                        eprintln!("[hao] a scene loaded callback panicked");
+                        tracing::error!("a scene loaded callback panicked");
                     }
                 }
             },
         )?;
         *hooked = true;
+        tracing::debug!("watching for scene loads");
     }
     Ok(())
 }

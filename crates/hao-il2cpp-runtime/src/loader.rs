@@ -35,7 +35,7 @@ pub fn on_init(callback: impl FnOnce(&'static Il2Cpp) -> Result<()> + Send + 'st
         .unwrap_or_else(|e| e.into_inner())
         .push(Box::new(callback));
     if let Err(e) = install() {
-        eprintln!("[hao] could not watch for the game binary: {}", e);
+        tracing::error!("could not watch for the game binary: {}", e);
     }
 }
 
@@ -43,10 +43,10 @@ fn run(callback: Callback) {
     match Il2Cpp::loaded() {
         Ok(il2cpp) => {
             if let Err(e) = callback(il2cpp) {
-                eprintln!("[hao] mod failed: {}", e);
+                tracing::error!("mod failed: {}", e);
             }
         }
-        Err(e) => eprintln!("[hao] {}", e),
+        Err(e) => tracing::error!("{}", e),
     }
 }
 
@@ -58,12 +58,14 @@ fn install() -> Result<()> {
             .map_err(|_| Error::Nul(path.display().to_string()))?;
         let handle = unsafe { libc::dlopen(name.as_ptr(), libc::RTLD_NOW | libc::RTLD_NOLOAD) };
         if !handle.is_null() {
+            tracing::debug!(path = %path.display(), "game binary already loaded");
             return hook_init(handle);
         }
     }
     if DLOPEN_HOOKED.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
+    tracing::debug!("hooking dlopen to wait for the game binary");
     let mut hook = unsafe { hooking::Hook::by_name(None, c"dlopen", dlopen_detour as *mut u8) }
         .map_err(Error::Hook)?;
     unsafe { hook.apply_hook() }.map_err(Error::Hook)
@@ -77,6 +79,7 @@ fn hook_init(handle: *mut c_void) -> Result<()> {
     if init.is_null() {
         return Err(Error::NotFound("il2cpp_init in the game binary".into()));
     }
+    tracing::debug!("hooking il2cpp_init");
     let mut hook = unsafe { hooking::Hook::create(init as *mut u8, init_detour as *mut u8) }
         .map_err(Error::Hook)?;
     unsafe { hook.apply_hook() }.map_err(Error::Hook)
@@ -88,8 +91,9 @@ extern "C" fn dlopen_detour(filename: *const c_char, flags: c_int) -> *mut c_voi
     if !handle.is_null() && !filename.is_null() && !INIT_HOOKED.load(Ordering::SeqCst) {
         let name = unsafe { CStr::from_ptr(filename) }.to_string_lossy();
         if is_game_assembly(name.as_ref()) {
+            tracing::debug!(%name, "the game binary was loaded");
             if let Err(e) = hook_init(handle) {
-                eprintln!("[hao] could not hook il2cpp_init: {}", e);
+                tracing::error!("could not hook il2cpp_init: {}", e);
             }
         }
     }
@@ -98,7 +102,9 @@ extern "C" fn dlopen_detour(filename: *const c_char, flags: c_int) -> *mut c_voi
 
 extern "C" fn init_detour(domain_name: *const c_char) -> i32 {
     let init = original!(extern "C" fn(*const c_char) -> i32);
+    tracing::debug!("il2cpp_init called");
     let result = init(domain_name);
+    tracing::debug!(result, "il2cpp_init returned");
     if result != 0 && !INITIALIZED.swap(true, Ordering::SeqCst) {
         let callbacks = std::mem::take(&mut *CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()));
         for callback in callbacks {
