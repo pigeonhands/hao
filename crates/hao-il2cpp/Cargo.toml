@@ -1,0 +1,13 @@
+[package]
+name = "hao-il2cpp"
+authors = ["Sam M."]
+version = "0.0.1"
+edition = "2021"
+description = "Read Unity Il2Cpp metadata and generate .net proxy assemblies with hao"
+license = "MIT"
+repository = "https://github.com/pigeonhands/hao"
+keywords = ["unity", "il2cpp", "dotnet", "modding"]
+
+[dependencies]
+hao = { path = "../hao" }
+thiserror = "1.0.35"
