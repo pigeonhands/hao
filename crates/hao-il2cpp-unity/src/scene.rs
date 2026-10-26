@@ -2,7 +2,6 @@
 
 use std::{
     ffi::c_void,
-    panic::{catch_unwind, AssertUnwindSafe},
     sync::{Arc, Mutex},
 };
 
@@ -59,10 +58,10 @@ pub fn on_scene_loaded(
                 original.call((scene, mode));
                 tracing::debug!(scene = scene.handle, mode = mode.0, "scene loaded");
                 let callbacks = CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                // Managed exceptions must flow back to Unity, not be caught here
+                // (Rust can't catch foreign exceptions; catching would abort).
                 for callback in callbacks {
-                    if catch_unwind(AssertUnwindSafe(|| callback(scene, mode))).is_err() {
-                        tracing::error!("a scene loaded callback panicked");
-                    }
+                    callback(scene, mode);
                 }
             },
         )?;

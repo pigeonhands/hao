@@ -1,11 +1,8 @@
 //! Running mod code every frame.
 
-use std::{
-    panic::{catch_unwind, AssertUnwindSafe},
-    sync::{
-        atomic::{AtomicI32, Ordering},
-        Arc, Mutex,
-    },
+use std::sync::{
+    atomic::{AtomicI32, Ordering},
+    Arc, Mutex,
 };
 
 use hao_il2cpp_runtime::{Original, Result};
@@ -44,10 +41,11 @@ pub fn on_update(callback: impl Fn() + Send + Sync + 'static) -> Result<()> {
             // hook, so this never recurses.
             if LAST_FRAME.swap(frame, Ordering::Relaxed) != frame {
                 let callbacks = CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                // A managed exception thrown by a Unity call inside a callback must
+                // flow back to Unity (which logs it); catching it here would abort,
+                // as Rust can't catch foreign exceptions.
                 for callback in callbacks {
-                    if catch_unwind(AssertUnwindSafe(|| callback())).is_err() {
-                        tracing::error!("an on_update callback panicked");
-                    }
+                    callback();
                 }
             }
             frame
@@ -81,10 +79,9 @@ pub fn on_render(callback: impl Fn(Camera) + Send + Sync + 'static) -> Result<()
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .clone();
+                // See on_update: managed exceptions must flow back to Unity, not be caught.
                 for callback in callbacks {
-                    if catch_unwind(AssertUnwindSafe(|| callback(camera))).is_err() {
-                        tracing::error!("an on_render callback panicked");
-                    }
+                    callback(camera);
                 }
             },
         )?;
