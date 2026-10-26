@@ -8,6 +8,8 @@ pub enum Error {
     Load(libloading::Error),
     #[error("the game binary does not export {0}: {1}")]
     MissingExport(&'static str, libloading::Error),
+    #[error("{0}")]
+    UnsupportedBinary(String),
     #[error("il2cpp_init failed")]
     Init,
     #[error("could not find {0}")]

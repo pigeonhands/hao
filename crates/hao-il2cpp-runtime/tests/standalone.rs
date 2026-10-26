@@ -38,7 +38,7 @@ fn hooks_il2cpp_code() {
         Ok(())
     });
 
-    let il2cpp = Il2Cpp::load(game.join(hao_il2cpp_runtime::GAME_ASSEMBLY)).unwrap();
+    let il2cpp = Il2Cpp::load(hao_il2cpp_runtime::find_game_assembly(&game).unwrap()).unwrap();
     il2cpp.init_standalone(&data_dir).unwrap();
     assert!(INIT_CALLBACK_RAN.load(Ordering::SeqCst), "the il2cpp_init hook did not run the callback");
 

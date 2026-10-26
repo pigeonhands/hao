@@ -37,7 +37,12 @@ The class, method and field names come from the game's metadata, which
 - `Il2Cpp::load` + `init_standalone` run a game's Il2Cpp runtime without Unity, which is how the
   tests work. Only code that doesn't call into Unity can run that way.
 
-Status: Linux (`LD_PRELOAD`) only so far. Windows needs a proxy DLL to get into the process.
+The game binary is found at runtime, whatever it's called (`GameAssembly.so`, `GameAssembly.dll`):
+`find_game_assembly(dir)` in a game folder, `loaded_game_assembly()` in the running process.
+
+Status: native Linux games with `LD_PRELOAD` so far. A Windows build of a game running under
+Proton is detected and reported as unsupported for now: its `GameAssembly.dll` is loaded by
+Wine rather than `dlopen`, and uses the Windows calling convention.
 
 ## Tests
 

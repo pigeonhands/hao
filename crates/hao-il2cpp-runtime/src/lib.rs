@@ -29,7 +29,7 @@ mod loader;
 
 use std::{
     ffi::{c_void, CStr, CString},
-    path::Path,
+    path::{Path, PathBuf},
     sync::OnceLock,
 };
 
@@ -45,8 +45,54 @@ pub type Object = Ptr;
 /// The hidden last argument of every Il2Cpp method (`const MethodInfo*`).
 pub type MethodInfo = Ptr;
 
-/// The game binary's file name.
-pub const GAME_ASSEMBLY: &str = if cfg!(windows) { "GameAssembly.dll" } else { "GameAssembly.so" };
+/// Whether `path` is a game binary: `GameAssembly.so`, `GameAssembly.dll` or any other `GameAssembly.*`.
+/// Both `/` and `\\` separate directories, as Windows paths can show up on Linux under Wine.
+pub fn is_game_assembly(path: impl AsRef<Path>) -> bool {
+    let path = path.as_ref().to_string_lossy();
+    path.rsplit(['/', '\\']).next().is_some_and(|name| name.starts_with("GameAssembly."))
+}
+
+/// The game binary in a game folder, whichever platform the game was built for.
+pub fn find_game_assembly(dir: impl AsRef<Path>) -> Option<PathBuf> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| p.is_file() && is_game_assembly(p))
+}
+
+/// The game binary mapped into this process, if any.
+#[cfg(unix)]
+pub fn loaded_game_assembly() -> Option<PathBuf> {
+    let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    maps.lines()
+        .filter_map(|line| line.split_whitespace().nth(5))
+        .map(PathBuf::from)
+        .find(|p| is_game_assembly(p))
+}
+
+/// The game binary mapped into this process, if any.
+#[cfg(windows)]
+pub fn loaded_game_assembly() -> Option<PathBuf> {
+    libloading::os::windows::Library::open_already_loaded("GameAssembly.dll")
+        .ok()
+        .map(|_| PathBuf::from("GameAssembly.dll"))
+}
+
+/// Errors unless `path` is a binary this build can load: ELF on Unix, PE on Windows.
+fn check_format(path: &Path) -> Result<()> {
+    use std::io::Read;
+    let mut magic = [0u8; 4];
+    let read = std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut magic));
+    let (elf, pe) = (magic == *b"\x7fELF", magic.starts_with(b"MZ"));
+    match read {
+        Ok(()) if cfg!(unix) && pe => Err(Error::UnsupportedBinary(format!(
+            "{} is a Windows binary (a Windows build running under Wine/Proton), which a Linux mod can't load yet",
+            path.display()
+        ))),
+        Ok(()) if cfg!(windows) && elf => Err(Error::UnsupportedBinary(format!("{} is not a Windows binary", path.display()))),
+        _ => Ok(()),
+    }
+}
 
 static INSTANCE: OnceLock<Il2Cpp> = OnceLock::new();
 
@@ -79,13 +125,14 @@ impl Il2Cpp {
         if let Some(il2cpp) = INSTANCE.get() {
             return Ok(il2cpp);
         }
+        let path = loaded_game_assembly().ok_or_else(|| Error::NotFound("a loaded GameAssembly".into()))?;
+        check_format(&path)?;
         #[cfg(unix)]
         let library = unsafe {
-            libloading::os::unix::Library::open(Some(GAME_ASSEMBLY), libc::RTLD_NOW | libc::RTLD_NOLOAD)
-                .map(Library::from)
+            libloading::os::unix::Library::open(Some(&path), libc::RTLD_NOW | libc::RTLD_NOLOAD).map(Library::from)
         };
         #[cfg(windows)]
-        let library = libloading::os::windows::Library::open_already_loaded(GAME_ASSEMBLY).map(Library::from);
+        let library = libloading::os::windows::Library::open_already_loaded(&path).map(Library::from);
         Self::install(library.map_err(Error::Load)?)
     }
 
@@ -94,6 +141,7 @@ impl Il2Cpp {
         if let Some(il2cpp) = INSTANCE.get() {
             return Ok(il2cpp);
         }
+        check_format(path.as_ref())?;
         let library = unsafe { Library::new(path.as_ref()) }.map_err(Error::Load)?;
         Self::install(library)
     }
@@ -299,3 +347,30 @@ macro_rules! original {
 
 #[doc(hidden)]
 pub use hooking::original_function_ptr as __original_function_ptr;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn game_assembly_names() {
+        assert!(is_game_assembly("/games/Example/GameAssembly.so"));
+        assert!(is_game_assembly("C:\\Games\\Example\\GameAssembly.dll"));
+        assert!(!is_game_assembly("/games/Example/UnityPlayer.so"));
+        assert!(!is_game_assembly("/games/Example/NotGameAssembly.dll"));
+    }
+
+    #[test]
+    fn finds_and_checks_the_game_binary() {
+        let dir = std::env::temp_dir().join(format!("hao-il2cpp-runtime-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("UnityPlayer.dll"), b"MZ\x90\x00").unwrap();
+        std::fs::write(dir.join("GameAssembly.dll"), b"MZ\x90\x00").unwrap();
+        let found = find_game_assembly(&dir).unwrap();
+        assert_eq!(found, dir.join("GameAssembly.dll"));
+        if cfg!(unix) {
+            assert!(matches!(check_format(&found), Err(Error::UnsupportedBinary(_))));
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
