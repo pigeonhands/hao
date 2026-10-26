@@ -11,6 +11,5 @@ keywords = ["unity", "il2cpp", "dotnet", "modding"]
 
 [dependencies]
 hao = { version = "0.0.4", path = "../hao" }
-# TODO: drop the path once pewter 0.0.8 (with the new LoadedImage helpers) is published.
-pewter = { version = "0.0.8", path = "../../../pewter" }
+pewter = "0.0.8"
 thiserror = "2"
