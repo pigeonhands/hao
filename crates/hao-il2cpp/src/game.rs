@@ -41,15 +41,19 @@ impl Game {
 
     /// Opens a `global-metadata.dat` and its `GameAssembly` binary.
     pub fn from_files(metadata: impl AsRef<Path>, binary: impl AsRef<Path>) -> Result<Self> {
-        let metadata = Metadata::from_path(metadata)?;
-        let data = std::fs::read(binary.as_ref())?;
-        if !pewter::elf::ElfFile::is_elf(&data) {
-            return Err(Error::Binary(format!(
-                "{} is not an ELF binary; PE game binaries aren't supported yet",
-                binary.as_ref().display()
-            )));
+        Self::from_bytes(std::fs::read(metadata)?, &std::fs::read(binary)?)
+    }
+
+    /// Reads a game from the contents of its `global-metadata.dat` and `GameAssembly`,
+    /// e.g. files uploaded to a web page.
+    pub fn from_bytes(metadata: Vec<u8>, binary: &[u8]) -> Result<Self> {
+        let metadata = Metadata::parse(metadata)?;
+        if !pewter::elf::ElfFile::is_elf(binary) {
+            return Err(Error::Binary(
+                "the game binary is not ELF; PE game binaries aren't supported yet".into(),
+            ));
         }
-        let binary = Binary::read(&ElfImage::parse(&data)?, &metadata)?;
+        let binary = Binary::read(&ElfImage::parse(binary)?, &metadata)?;
         Ok(Self::new(metadata, binary))
     }
 
