@@ -12,7 +12,7 @@ readme = "README.md"
 proc-macro = true
 
 [dependencies]
-hao = { path = "../hao" }
+hao = { version = "0.0.4", path = "../hao" }
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "3", features = ["full"] }
