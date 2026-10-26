@@ -331,7 +331,7 @@ impl EguiState {
         }
 
         // egui's content bounding box, so the readback samples where the UI is.
-        if trace {
+        let content_center = if trace {
             let mut min = (f32::MAX, f32::MAX);
             let mut max = (f32::MIN, f32::MIN);
             for p in primitives {
@@ -343,7 +343,10 @@ impl EguiState {
                 }
             }
             tracing::info!(?min, ?max, "egui content bounds (egui coords)");
-        }
+            Some(((min.0 + max.0) / 2.0, (min.1 + max.1) / 2.0))
+        } else {
+            None
+        };
 
         // Draw into our render target, then restore whatever the camera was using
         // even if a step fails, so the game's own rendering is left untouched.
@@ -384,10 +387,10 @@ impl EguiState {
                 }
                 gl::end()?;
             }
-            // While the target is still active, read a pixel back from inside the
-            // window (near its top-left) to see what actually landed in the target.
-            if trace {
-                if let Err(e) = self.sample_target(w, h) {
+            // While the target is still active, read a pixel back from the centre
+            // of egui's content to see what actually landed in the target.
+            if let Some((cx, cy)) = content_center {
+                if let Err(e) = self.sample_target(cx, cy, h) {
                     tracing::warn!("target readback failed: {}", e);
                 }
             }
@@ -397,9 +400,9 @@ impl EguiState {
         result
     }
 
-    /// Debug: reads one pixel of the active target (the window area) and logs its
-    /// colour, so we can tell where any transparency is introduced.
-    fn sample_target(&mut self, _w: f32, h: f32) -> Result<()> {
+    /// Debug: reads the active target at egui's content centre `(cx, cy)` (in
+    /// egui coords) and logs the colour, so we can see what landed in the target.
+    fn sample_target(&mut self, cx: f32, cy: f32, h: f32) -> Result<()> {
         let readback = match &self.readback {
             Some(handle) => Texture2D(handle.target()),
             None => {
@@ -409,19 +412,17 @@ impl EguiState {
                 tex
             }
         };
-        // Sample inside the window (egui default_pos ~24,24 from top-left, body a
-        // bit in). ReadPixels' Y origin can differ by platform, so read the same
-        // X at both the straight and the flipped Y and log both.
-        let px = 90.0;
-        for (label, py) in [("top-origin", 90.0), ("bottom-origin", h - 90.0)] {
-            readback.read_pixels(crate::Rect::new(px, py, 1.0, 1.0), 0, 0)?;
+        // ReadPixels' Y origin can differ by platform, so read both the straight
+        // and the flipped Y at egui's content centre.
+        for (label, py) in [("top-origin", cy), ("bottom-origin", h - cy)] {
+            readback.read_pixels(crate::Rect::new(cx, py, 1.0, 1.0), 0, 0)?;
             let c = readback.get_pixel(0, 0)?;
             tracing::info!(
                 r = c.r,
                 g = c.g,
                 b = c.b,
                 a = c.a,
-                px,
+                px = cx,
                 py,
                 origin = label,
                 "target pixel"
