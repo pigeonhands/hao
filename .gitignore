@@ -7,6 +7,6 @@ out.txt
 # built test fixtures
 *.dll
 *.exe
-tests/fixtures/out/
-tests/fixtures/Sample/bin/
-tests/fixtures/Sample/obj/
+crates/hao/tests/fixtures/out/
+crates/hao/tests/fixtures/Sample/bin/
+crates/hao/tests/fixtures/Sample/obj/

@@ -83,7 +83,7 @@ module.write_to_path("Sample.patched.dll")?;
 
 `import_type`/`import_method`/`import_field` reuse existing references or definitions and add new
 ones when needed. `insert` and `remove` keep branch targets and exception ranges pointing at the
-same instructions. See [`examples/patch_method.rs`](examples/patch_method.rs).
+same instructions. See [`examples/patch_method.rs`](crates/hao/examples/patch_method.rs).
 
 ## C# output
 
@@ -98,8 +98,8 @@ let with_il = module.to_csharp_with(CSharpOptions { il_bodies: true, ..Default::
 ```
 
 ```sh
-tests/fixtures/build.sh
-cargo run --example dump_csharp -- tests/fixtures/out/Sample.dll --il
+crates/hao/tests/fixtures/build.sh
+cargo run --example dump_csharp -- crates/hao/tests/fixtures/out/Sample.dll --il
 ```
 
 ## Thread safety
@@ -109,7 +109,7 @@ instead, which makes `Module` `Send + Sync`.
 
 ## Tests
 
-The tests build `tests/fixtures/Sample` with the dotnet SDK and run the rewritten assemblies with
+The tests build `crates/hao/tests/fixtures/Sample` with the dotnet SDK and run the rewritten assemblies with
 it. Tests that need the sample are skipped when the SDK is not installed. The ignored tests
 load and rewrite every assembly in the installed shared framework:
 
