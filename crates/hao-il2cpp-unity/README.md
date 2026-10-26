@@ -8,15 +8,29 @@ Typed Unity wrappers for mods of Unity Il2Cpp games, on top of
 The runtime crate finds and hooks methods by name and knows nothing about Unity. This crate wraps
 common Unity functionality the same way for any Unity game:
 
-- `GameObject` (create, find, add components, activate), `Transform`, `RectTransform`, `Canvas`
-  and TextMeshPro text, with `Vector2`, `Vector3` and `Color`
+- `GameObject` (create, find, add/get components, activate, tag, layer), `Transform` (position,
+  rotation, scale, parent/children, find), `RectTransform`, `Canvas`, `Camera` and TextMeshPro
+  text; `Component::is_enabled`/`set_enabled`
+- value types `Vector2`, `Vector3` (with arithmetic, `dot`, `magnitude`, `normalized`, `distance`),
+  `Quaternion` (`Quaternion::euler`), `Color` (named constants), and the `KeyCode` enum
 - `TextOverlay`: a line of text drawn over the game in one call
 - `find_objects_of_type::<T>()` / `find_object_of_type::<T>()` and `GameObject::get_component`
   / `Component::get_component` query live objects by type (`Object.FindObjectsOfType`,
   `GetComponent`)
-- `Scene` and `on_scene_loaded` (runs code when a scene loads), and `on_update` (runs code every
-  frame, e.g. to refresh an overlay)
-- `log`/`log_warning`/`log_error` (`Debug.Log`, to the game's `Player.log`) and `time`
+- lifecycle: `on_scene_loaded` (a scene loads), `on_update` (each frame), and `on_render` (on the
+  render thread after each camera renders — where to draw an overlay)
+- `gl`: immediate-mode drawing (`GL.Begin`/`Vertex3`/`Color`/…) for use inside `on_render`
+- `input` (keys and mouse), `screen` (size), `time`, `application`, and
+  `log`/`log_warning`/`log_error` (`Debug.Log`, to the game's `Player.log`)
+
+### Drawing on top of the game
+
+`on_render` runs your callback in Unity's render pipeline (it hooks
+`Camera.FireOnPostRender`, which the engine calls from native code per camera render). From there
+you can draw with the `gl` immediate-mode module, or drive an immediate-mode UI such as egui by
+translating its tessellated output into `gl` calls. A full GPU-backed egui surface instead hooks
+the native graphics present (D3D/Vulkan/GL) — that part is renderer-specific and up to the mod;
+this crate gives you the Unity-side render callback and drawing primitives.
 
 Each Unity method is looked up the first time it's used and checked against the game's real
 signature, so a game built with a different Unity version gives an error instead of a crash.

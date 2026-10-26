@@ -27,6 +27,7 @@
 
 mod binding;
 mod bindings;
+pub mod gl;
 mod lifecycle;
 mod objects;
 mod overlay;
@@ -37,14 +38,21 @@ pub use hao_il2cpp_runtime as runtime;
 #[cfg(unix)]
 pub use hao_il2cpp_runtime::on_init;
 use hao_il2cpp_runtime::{Error, Il2Cpp, Result};
-pub use lifecycle::on_update;
+pub use lifecycle::{on_render, on_update};
 pub use objects::{
-    find_object_of_type, find_objects_of_type, Canvas, Component, ComponentType, GameObject,
-    RectTransform, TextMeshPro, Transform, UnityObject,
+    find_object_of_type, find_objects_of_type, Camera, Canvas, Component, ComponentType,
+    GameObject, RectTransform, TextMeshPro, Transform, UnityObject,
 };
 pub use overlay::TextOverlay;
 pub use scene::{on_scene_loaded, Scene};
-pub use values::{Color, LoadSceneMode, RenderMode, Vector2, Vector3};
+pub use values::{Color, KeyCode, LoadSceneMode, Quaternion, RenderMode, Vector2, Vector3};
+
+impl Quaternion {
+    /// A rotation from Euler angles in degrees (`Quaternion.Euler`).
+    pub fn euler(x: f32, y: f32, z: f32) -> Result<Self> {
+        bindings::QUATERNION_EULER.call((x, y, z))
+    }
+}
 
 use bindings::*;
 
@@ -83,6 +91,78 @@ pub mod time {
 
     pub fn set_scale(scale: f32) -> Result<()> {
         TIME_SET_SCALE.call((scale,))
+    }
+
+    /// Seconds since the game started (scaled by [`scale`]).
+    pub fn time() -> Result<f32> {
+        TIME_GET_TIME.call(())
+    }
+
+    /// Real seconds since startup, unaffected by [`scale`].
+    pub fn realtime_since_startup() -> Result<f32> {
+        TIME_REALTIME.call(())
+    }
+}
+
+/// `UnityEngine.Screen`.
+pub mod screen {
+    use super::*;
+
+    pub fn width() -> Result<i32> {
+        SCREEN_WIDTH.call(())
+    }
+
+    pub fn height() -> Result<i32> {
+        SCREEN_HEIGHT.call(())
+    }
+
+    /// `(width, height)` in pixels.
+    pub fn size() -> Result<(i32, i32)> {
+        Ok((width()?, height()?))
+    }
+}
+
+/// `UnityEngine.Input` (the legacy input manager).
+pub mod input {
+    use super::*;
+
+    /// Whether `key` is held this frame.
+    pub fn key(key: KeyCode) -> Result<bool> {
+        INPUT_GET_KEY.call((key,))
+    }
+
+    /// Whether `key` was pressed this frame.
+    pub fn key_down(key: KeyCode) -> Result<bool> {
+        INPUT_GET_KEY_DOWN.call((key,))
+    }
+
+    /// Whether `key` was released this frame.
+    pub fn key_up(key: KeyCode) -> Result<bool> {
+        INPUT_GET_KEY_UP.call((key,))
+    }
+
+    /// Whether mouse `button` (0 left, 1 right, 2 middle) is held.
+    pub fn mouse_button(button: i32) -> Result<bool> {
+        INPUT_GET_MOUSE_BUTTON.call((button,))
+    }
+
+    /// The cursor position in pixels, origin at the bottom left.
+    pub fn mouse_position() -> Result<Vector3> {
+        INPUT_MOUSE_POSITION.call(())
+    }
+}
+
+/// `UnityEngine.Application`.
+pub mod application {
+    use super::*;
+
+    pub fn is_playing() -> Result<bool> {
+        APPLICATION_IS_PLAYING.call(())
+    }
+
+    /// Quits the game with an exit code.
+    pub fn quit(exit_code: i32) -> Result<()> {
+        APPLICATION_QUIT.call((exit_code,))
     }
 }
 

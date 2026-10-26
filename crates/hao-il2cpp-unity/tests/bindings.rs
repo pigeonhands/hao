@@ -51,4 +51,9 @@ fn unity_methods_match_the_game() {
     frame_count.check_types::<(), i32>().unwrap();
     hao_il2cpp_unity::on_update(|| {}).unwrap();
     hao_il2cpp_unity::on_update(|| {}).unwrap();
+
+    // The render hook (Camera.FireOnPostRender) and GL bindings resolve above via
+    // check_bindings; installing the hook is harmless without a render loop.
+    assert_eq!(std::mem::size_of::<hao_il2cpp_unity::Quaternion>(), 16);
+    hao_il2cpp_unity::on_render(|_camera| {}).unwrap();
 }

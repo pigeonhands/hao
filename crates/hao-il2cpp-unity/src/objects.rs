@@ -5,7 +5,7 @@ use hao_il2cpp_runtime::{Il2CppValue, Object, Result, TypeInfo};
 use crate::{
     bindings::*,
     il2cpp,
-    values::{Color, RenderMode, Vector2, Vector3},
+    values::{Color, Quaternion, RenderMode, Vector2, Vector3},
 };
 
 macro_rules! object_type {
@@ -82,6 +82,16 @@ pub trait ComponentType: Il2CppValue {
         let found =
             COMPONENT_GET_COMPONENT.call((Component(self.object()), component_type::<U>()?))?;
         Ok((!found.is_null()).then(|| U::from_object(found.0)))
+    }
+
+    /// Whether the component is enabled. For `Behaviour`-derived components
+    /// (`MonoBehaviour`, `Canvas`, …); meaningless on a plain `Transform`.
+    fn is_enabled(&self) -> Result<bool> {
+        BEHAVIOUR_GET_ENABLED.call((Component(self.object()),))
+    }
+
+    fn set_enabled(&self, enabled: bool) -> Result<()> {
+        BEHAVIOUR_SET_ENABLED.call((Component(self.object()), enabled))
     }
 }
 
@@ -174,6 +184,10 @@ component_type!(
     /// `TMPro.TextMeshProUGUI`, TextMeshPro text in a UI.
     TextMeshPro = "Unity.TextMeshPro" "TMPro" "TextMeshProUGUI"
 );
+component_type!(
+    /// `UnityEngine.Camera`, passed to [`on_render`](crate::on_render) callbacks.
+    Camera = "UnityEngine.CoreModule" "UnityEngine" "Camera"
+);
 
 impl GameObject {
     /// `new GameObject(name)`.
@@ -222,8 +236,37 @@ impl GameObject {
         GAME_OBJECT_SET_ACTIVE.call((*self, active))
     }
 
+    /// Whether the object itself is active (its own flag, ignoring parents).
     pub fn is_active(&self) -> Result<bool> {
         GAME_OBJECT_ACTIVE_SELF.call((*self,))
+    }
+
+    /// Whether the object is active, taking its parents into account.
+    pub fn is_active_in_hierarchy(&self) -> Result<bool> {
+        GAME_OBJECT_ACTIVE_IN_HIERARCHY.call((*self,))
+    }
+
+    pub fn tag(&self) -> Result<String> {
+        Ok(GAME_OBJECT_GET_TAG
+            .call((*self,))?
+            .to_rust()
+            .unwrap_or_default())
+    }
+
+    pub fn set_tag(&self, tag: &str) -> Result<()> {
+        GAME_OBJECT_SET_TAG.call((*self, il2cpp()?.string(tag)?))
+    }
+
+    pub fn compare_tag(&self, tag: &str) -> Result<bool> {
+        GAME_OBJECT_COMPARE_TAG.call((*self, il2cpp()?.string(tag)?))
+    }
+
+    pub fn layer(&self) -> Result<i32> {
+        GAME_OBJECT_GET_LAYER.call((*self,))
+    }
+
+    pub fn set_layer(&self, layer: i32) -> Result<()> {
+        GAME_OBJECT_SET_LAYER.call((*self, layer))
     }
 }
 
@@ -234,6 +277,57 @@ impl Transform {
 
     pub fn set_local_scale(&self, scale: Vector3) -> Result<()> {
         TRANSFORM_SET_LOCAL_SCALE.call((*self, scale))
+    }
+
+    /// World-space position.
+    pub fn position(&self) -> Result<Vector3> {
+        TRANSFORM_GET_POSITION.call((*self,))
+    }
+
+    pub fn set_position(&self, position: Vector3) -> Result<()> {
+        TRANSFORM_SET_POSITION.call((*self, position))
+    }
+
+    /// Position relative to the parent.
+    pub fn local_position(&self) -> Result<Vector3> {
+        TRANSFORM_GET_LOCAL_POSITION.call((*self,))
+    }
+
+    pub fn set_local_position(&self, position: Vector3) -> Result<()> {
+        TRANSFORM_SET_LOCAL_POSITION.call((*self, position))
+    }
+
+    /// World-space rotation as Euler angles in degrees.
+    pub fn euler_angles(&self) -> Result<Vector3> {
+        TRANSFORM_GET_EULER_ANGLES.call((*self,))
+    }
+
+    pub fn rotation(&self) -> Result<Quaternion> {
+        TRANSFORM_GET_ROTATION.call((*self,))
+    }
+
+    pub fn set_rotation(&self, rotation: Quaternion) -> Result<()> {
+        TRANSFORM_SET_ROTATION.call((*self, rotation))
+    }
+
+    /// The parent transform, or `None` at the scene root.
+    pub fn parent(&self) -> Result<Option<Transform>> {
+        let parent = TRANSFORM_GET_PARENT.call((*self,))?;
+        Ok((!parent.is_null()).then_some(parent))
+    }
+
+    pub fn child_count(&self) -> Result<i32> {
+        TRANSFORM_GET_CHILD_COUNT.call((*self,))
+    }
+
+    pub fn child(&self, index: i32) -> Result<Transform> {
+        TRANSFORM_GET_CHILD.call((*self, index))
+    }
+
+    /// A descendant by name or path (e.g. `"HUD/Health"`), or `None`.
+    pub fn find(&self, path: &str) -> Result<Option<Transform>> {
+        let found = TRANSFORM_FIND.call((*self, il2cpp()?.string(path)?))?;
+        Ok((!found.is_null()).then_some(found))
     }
 }
 

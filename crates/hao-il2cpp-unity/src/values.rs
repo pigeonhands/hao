@@ -31,25 +31,132 @@ value_type!(
     /// `UnityEngine.Color`, with components from 0 to 1.
     Color = "UnityEngine" "Color" { r: f32, g: f32, b: f32, a: f32 }
 );
+value_type!(
+    /// `UnityEngine.Quaternion`, a rotation. Use [`Quaternion::euler`] to build one.
+    Quaternion = "UnityEngine" "Quaternion" { x: f32, y: f32, z: f32, w: f32 }
+);
 
 impl Vector2 {
+    pub const ZERO: Self = Self::new(0.0, 0.0);
+    pub const ONE: Self = Self::new(1.0, 1.0);
+
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
+    }
+
+    pub fn magnitude(self) -> f32 {
+        (self.x * self.x + self.y * self.y).sqrt()
+    }
+
+    pub fn normalized(self) -> Self {
+        let m = self.magnitude();
+        if m > 0.0 {
+            Self::new(self.x / m, self.y / m)
+        } else {
+            Self::ZERO
+        }
+    }
+}
+
+impl std::ops::Add for Vector2 {
+    type Output = Self;
+    fn add(self, o: Self) -> Self {
+        Self::new(self.x + o.x, self.y + o.y)
+    }
+}
+
+impl std::ops::Sub for Vector2 {
+    type Output = Self;
+    fn sub(self, o: Self) -> Self {
+        Self::new(self.x - o.x, self.y - o.y)
+    }
+}
+
+impl std::ops::Mul<f32> for Vector2 {
+    type Output = Self;
+    fn mul(self, s: f32) -> Self {
+        Self::new(self.x * s, self.y * s)
     }
 }
 
 impl Vector3 {
+    pub const ZERO: Self = Self::new(0.0, 0.0, 0.0);
+    pub const ONE: Self = Self::new(1.0, 1.0, 1.0);
+    pub const UP: Self = Self::new(0.0, 1.0, 0.0);
+    pub const FORWARD: Self = Self::new(0.0, 0.0, 1.0);
+
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
+    }
+
+    pub fn dot(self, o: Self) -> f32 {
+        self.x * o.x + self.y * o.y + self.z * o.z
+    }
+
+    pub fn magnitude(self) -> f32 {
+        self.dot(self).sqrt()
+    }
+
+    pub fn normalized(self) -> Self {
+        let m = self.magnitude();
+        if m > 0.0 {
+            self * (1.0 / m)
+        } else {
+            Self::ZERO
+        }
+    }
+
+    pub fn distance(self, o: Self) -> f32 {
+        (self - o).magnitude()
+    }
+}
+
+impl std::ops::Add for Vector3 {
+    type Output = Self;
+    fn add(self, o: Self) -> Self {
+        Self::new(self.x + o.x, self.y + o.y, self.z + o.z)
+    }
+}
+
+impl std::ops::Sub for Vector3 {
+    type Output = Self;
+    fn sub(self, o: Self) -> Self {
+        Self::new(self.x - o.x, self.y - o.y, self.z - o.z)
+    }
+}
+
+impl std::ops::Mul<f32> for Vector3 {
+    type Output = Self;
+    fn mul(self, s: f32) -> Self {
+        Self::new(self.x * s, self.y * s, self.z * s)
     }
 }
 
 impl Color {
     pub const WHITE: Self = Self::rgb(1.0, 1.0, 1.0);
     pub const BLACK: Self = Self::rgb(0.0, 0.0, 0.0);
+    pub const RED: Self = Self::rgb(1.0, 0.0, 0.0);
+    pub const GREEN: Self = Self::rgb(0.0, 1.0, 0.0);
+    pub const BLUE: Self = Self::rgb(0.0, 0.0, 1.0);
+    pub const YELLOW: Self = Self::rgb(1.0, 0.92, 0.016);
+    pub const CLEAR: Self = Self::rgba(0.0, 0.0, 0.0, 0.0);
 
     pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
-        Self { r, g, b, a: 1.0 }
+        Self::rgba(r, g, b, 1.0)
+    }
+
+    pub const fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+
+    /// The colour with its alpha replaced.
+    pub const fn with_alpha(self, a: f32) -> Self {
+        Self {
+            r: self.r,
+            g: self.g,
+            b: self.b,
+            a,
+        }
     }
 }
 
@@ -79,4 +186,19 @@ int_enum!(
 int_enum!(
     /// `UnityEngine.RenderMode`, how a [`Canvas`](crate::Canvas) is drawn.
     RenderMode = "UnityEngine" "RenderMode" { SCREEN_SPACE_OVERLAY = 0, SCREEN_SPACE_CAMERA = 1, WORLD_SPACE = 2 }
+);
+int_enum!(
+    /// `UnityEngine.KeyCode`, for [`input`](crate::input). A few common keys are
+    /// named; any other can be made with `KeyCode(value)`.
+    KeyCode = "UnityEngine" "KeyCode" {
+        BACKSPACE = 8, TAB = 9, RETURN = 13, ESCAPE = 27, SPACE = 32,
+        LEFT = 276, RIGHT = 275, UP = 273, DOWN = 274,
+        ALPHA0 = 48, ALPHA1 = 49, ALPHA2 = 50, ALPHA3 = 51,
+        A = 97, B = 98, C = 99, D = 100, E = 101, F = 102, G = 103, H = 104,
+        I = 105, J = 106, K = 107, L = 108, M = 109, N = 110, O = 111, P = 112,
+        Q = 113, R = 114, S = 115, T = 116, U = 117, V = 118, W = 119, X = 120,
+        Y = 121, Z = 122,
+        F1 = 282, F2 = 283, F3 = 284, F4 = 285, F5 = 286, F6 = 287,
+        LEFT_SHIFT = 304, LEFT_CONTROL = 306, LEFT_ALT = 308
+    }
 );
