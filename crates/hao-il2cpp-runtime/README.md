@@ -9,8 +9,12 @@ runtime has started; from there, classes and methods are found by name through t
 ```rust
 use hao_il2cpp_runtime::{Object, Original};
 
-#[ctor::ctor(unsafe)]
-pub fn load() {
+// Runs `load` when the game loads the library.
+#[used]
+#[link_section = ".init_array"]
+static LOAD: extern "C" fn() = load;
+
+extern "C" fn load() {
     hao_il2cpp_runtime::on_init(|il2cpp| {
         let health = il2cpp.class("Assembly-CSharp", "Assets.Scripts.Inventory__Items__Pickups", "PlayerHealth")?;
         // `int PlayerHealth.Heal(float amount, bool allowOverheal)`: the instance comes first.

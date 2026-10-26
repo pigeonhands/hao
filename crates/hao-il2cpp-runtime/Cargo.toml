@@ -22,5 +22,4 @@ name = "heal_mod"
 crate-type = ["cdylib"]
 
 [dev-dependencies]
-ctor = "1"
 libc = "0.2"

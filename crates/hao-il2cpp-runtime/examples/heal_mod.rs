@@ -13,9 +13,12 @@
 
 use hao_il2cpp_runtime::{read_field, Object, Original};
 
-/// Runs when the library is loaded into the game.
-#[ctor::ctor(unsafe)]
-pub fn load() {
+/// Runs `load` when the game loads the library, like a C constructor.
+#[used]
+#[link_section = ".init_array"]
+static LOAD: extern "C" fn() = load;
+
+extern "C" fn load() {
     hao_il2cpp_runtime::on_init(|il2cpp| {
         let health = il2cpp.class(
             "Assembly-CSharp",
