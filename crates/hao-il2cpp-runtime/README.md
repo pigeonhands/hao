@@ -80,7 +80,9 @@ objects kept between calls should be held through a `GcHandle`.
 - `Method::hook_raw` takes an `extern "C"` detour instead, with Il2Cpp's hidden `MethodInfo*` as
   the last parameter. `original!` gets the original function and must be the first thing the
   detour does: it reads the trampoline address from registers the hook sets.
-- `Class::field_offset` with `read_field`/`write_field` reads and writes fields of game objects.
+- `Class::fields` and `Class::field` give each field with its `name`, `type_name`, `offset` and
+  `is_static`; `Class::field_offset` with `read_field`/`write_field` reads and writes instance
+  fields of game objects.
 - `on_init` also runs straight away if the mod is injected after the game's Il2Cpp runtime has
   already started (it attaches the injecting thread first), not only when loaded before it.
 - `Il2Cpp::load` + `init_standalone` run a game's Il2Cpp runtime without Unity, which is how the

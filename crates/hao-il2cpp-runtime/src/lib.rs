@@ -323,8 +323,8 @@ impl Class {
         })
     }
 
-    /// The byte offset of an instance field from the start of an object.
-    pub fn field_offset(&self, name: &str) -> Result<usize> {
+    /// A field by name, with its type, offset and whether it is static.
+    pub fn field(&self, name: &str) -> Result<Field> {
         let c_name = cstring(name)?;
         let field = unsafe {
             (self.il2cpp.api.il2cpp_class_get_field_from_name)(self.ptr, c_name.as_ptr())
@@ -332,7 +332,66 @@ impl Class {
         if field.is_null() {
             return Err(Error::NotFound(format!("field {}.{}", self.name(), name)));
         }
-        Ok(unsafe { (self.il2cpp.api.il2cpp_field_get_offset)(field) })
+        Ok(Field {
+            il2cpp: self.il2cpp,
+            ptr: field,
+        })
+    }
+
+    /// Every field declared by the class.
+    pub fn fields(&self) -> impl Iterator<Item = Field> + '_ {
+        let mut iter: Ptr = std::ptr::null_mut();
+        std::iter::from_fn(move || {
+            let field = unsafe { (self.il2cpp.api.il2cpp_class_get_fields)(self.ptr, &mut iter) };
+            (!field.is_null()).then_some(Field {
+                il2cpp: self.il2cpp,
+                ptr: field,
+            })
+        })
+    }
+
+    /// The byte offset of an instance field from the start of an object.
+    pub fn field_offset(&self, name: &str) -> Result<usize> {
+        Ok(self.field(name)?.offset())
+    }
+}
+
+/// A managed field (`FieldInfo*`).
+#[derive(Clone, Copy)]
+pub struct Field {
+    il2cpp: &'static Il2Cpp,
+    ptr: Ptr,
+}
+
+unsafe impl Send for Field {}
+unsafe impl Sync for Field {}
+
+/// `FIELD_ATTRIBUTE_STATIC` in the field's flags.
+const FIELD_STATIC: i32 = 0x0010;
+
+impl Field {
+    pub fn as_ptr(&self) -> Ptr {
+        self.ptr
+    }
+
+    pub fn name(&self) -> &'static str {
+        unsafe { c_str((self.il2cpp.api.il2cpp_field_get_name)(self.ptr)) }
+    }
+
+    /// The managed type name, e.g. `System.Single`.
+    pub fn type_name(&self) -> String {
+        let ty = unsafe { (self.il2cpp.api.il2cpp_field_get_type)(self.ptr) };
+        unsafe { c_str((self.il2cpp.api.il2cpp_type_get_name)(ty)) }.to_owned()
+    }
+
+    /// The byte offset from the start of an object (for instance fields), with
+    /// [`read_field`]/[`write_field`].
+    pub fn offset(&self) -> usize {
+        unsafe { (self.il2cpp.api.il2cpp_field_get_offset)(self.ptr) }
+    }
+
+    pub fn is_static(&self) -> bool {
+        unsafe { (self.il2cpp.api.il2cpp_field_get_flags)(self.ptr) & FIELD_STATIC != 0 }
     }
 }
 

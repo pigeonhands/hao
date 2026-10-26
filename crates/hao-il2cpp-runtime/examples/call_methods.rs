@@ -26,6 +26,23 @@ fn main() -> Result<()> {
     il2cpp.init_standalone(&data_dir)?;
 
     let string = il2cpp.class("mscorlib", "System", "String")?;
+
+    println!("System.String fields:");
+    for field in string.fields() {
+        let kind = if field.is_static() {
+            "static"
+        } else {
+            "instance"
+        };
+        println!(
+            "  {} {} {} (offset {:#x})",
+            kind,
+            field.type_name(),
+            field.name(),
+            field.offset()
+        );
+    }
+
     println!(
         "System.String has {} methods, e.g.:",
         string.methods().count()

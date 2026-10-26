@@ -42,6 +42,10 @@ api! {
     il2cpp_class_get_namespace: fn(Ptr) -> *const c_char;
     il2cpp_class_get_method_from_name: fn(Ptr, *const c_char, i32) -> Ptr;
     il2cpp_class_get_field_from_name: fn(Ptr, *const c_char) -> Ptr;
+    il2cpp_class_get_fields: fn(Ptr, *mut Ptr) -> Ptr;
+    il2cpp_field_get_name: fn(Ptr) -> *const c_char;
+    il2cpp_field_get_type: fn(Ptr) -> Ptr;
+    il2cpp_field_get_flags: fn(Ptr) -> i32;
     il2cpp_field_get_offset: fn(Ptr) -> usize;
     il2cpp_method_get_name: fn(Ptr) -> *const c_char;
     il2cpp_object_get_class: fn(Ptr) -> Ptr;

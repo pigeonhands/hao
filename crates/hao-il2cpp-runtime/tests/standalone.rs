@@ -80,6 +80,17 @@ fn hooks_il2cpp_code() {
         2 * std::mem::size_of::<usize>()
     );
 
+    // Fields are available with their name, type, offset and static flag.
+    let length = string.field("_stringLength").unwrap();
+    assert_eq!(length.name(), "_stringLength");
+    assert_eq!(length.type_name(), "System.Int32");
+    assert!(!length.is_static());
+    assert_eq!(length.offset(), 2 * std::mem::size_of::<usize>());
+    // String.Empty is a static field.
+    let empty = string.fields().find(|f| f.name() == "Empty").unwrap();
+    assert!(empty.is_static());
+    assert_eq!(empty.type_name(), "System.String");
+
     let method = string
         .methods()
         .find(|m| m.signature() == "static System.String Concat(System.String, System.String)")
