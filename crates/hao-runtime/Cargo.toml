@@ -1,0 +1,21 @@
+[package]
+name = "hao-runtime"
+authors = ["Sam M."]
+version = "0.0.1"
+edition = "2021"
+description = "Host the .net runtime (CoreCLR or Mono) in a rust process"
+license = "MIT"
+repository = "https://github.com/pigeonhands/hao"
+keywords = ["dotnet", "coreclr", "mono", "hosting", "interop"]
+
+[dependencies]
+libloading = "0.8"
+thiserror = "1.0.35"
+
+[dev-dependencies]
+hao = { path = "../hao" }
+
+[features]
+default = ["coreclr"]
+coreclr = []
+mono = []
