@@ -31,7 +31,17 @@ for field in health.fields() {
     println!("    {}", field); // `static int maxMaxHp`, `float shield`, ...
 }
 for method in health.methods() {
-    println!("    {}", method); // `int Heal(float amount, bool allowOverheal)`, ...
+    // The whole signature via Display...
+    println!("    {}", method); // `int Heal(float amount, bool allowOverheal)`
+
+    // ...or each part on its own: name, static flag, return type, and the
+    // parameters with their own names and types.
+    println!("      name:    {}", method.name());        // "Heal"
+    println!("      static:  {}", method.is_static());
+    println!("      returns: {}", method.return_type_name());
+    for parameter in method.parameters() {
+        println!("      param:   {} {}", parameter.type_name(), parameter.name());
+    }
 }
 
 // One declaration assembly per image, for ILSpy or to compile against.
@@ -58,6 +68,7 @@ They contain no game logic: for that you'd disassemble `GameAssembly`.
 
 ```sh
 cargo run --release -p hao-il2cpp --example game_info -- path/to/game System.String
+cargo run --release -p hao-il2cpp --example game_info -- path/to/game System.String Concat
 cargo run --release -p hao-il2cpp --example generate_dlls -- path/to/game out
 ```
 
