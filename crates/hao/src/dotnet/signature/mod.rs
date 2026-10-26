@@ -160,6 +160,8 @@ impl TypeSig {
     pub const FLOAT64: Self = Self::Primitive(PrimitiveType::R8);
     pub const STRING: Self = Self::Primitive(PrimitiveType::String);
     pub const OBJECT: Self = Self::Primitive(PrimitiveType::Object);
+    /// `nint` / `System.IntPtr`.
+    pub const NATIVE_INT: Self = Self::Primitive(PrimitiveType::I);
 
     pub fn class(ty: TypeDefOrRef) -> Self {
         Self::Class(ty)
@@ -175,6 +177,11 @@ impl TypeSig {
             generic: Box::new(Self::Class(ty)),
             args,
         }
+    }
+
+    /// An unmanaged pointer, `element*`.
+    pub fn ptr(element: TypeSig) -> Self {
+        Self::Ptr(Box::new(element))
     }
 
     pub fn sz_array(element: TypeSig) -> Self {

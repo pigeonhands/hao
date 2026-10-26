@@ -152,10 +152,57 @@ impl Module {
         self.import_type_from(&name, full_name)
     }
 
+    /// A method of a core library type, e.g. `System.Math::Max`.
+    pub fn import_corlib_method(
+        &mut self,
+        type_full_name: &str,
+        name: &str,
+        signature: crate::dotnet::signature::MethodSig,
+    ) -> crate::error::Result<crate::dotnet::il::MemberToken> {
+        let ty = self.corlib_type(type_full_name)?;
+        self.import_method_on(&ty, name, signature)
+    }
+
+    /// The parameterless constructor of a core library attribute, for
+    /// [`Method::with_attribute`](crate::dotnet::entries::Method::with_attribute), e.g.
+    /// `System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute`.
+    pub fn corlib_attribute(
+        &mut self,
+        full_name: &str,
+    ) -> crate::error::Result<crate::dotnet::entries::CustomAttributeCtor> {
+        use crate::dotnet::signature::{MethodSig, TypeSig};
+        let ctor = self.import_corlib_method(
+            full_name,
+            ".ctor",
+            MethodSig::new_instance(TypeSig::VOID, vec![]),
+        )?;
+        ctor.try_into().map_err(|_| {
+            crate::error::HaoError::BadImageFormat("attribute constructor is not a method")
+        })
+    }
+
     /// Adds a new top level type.
     pub fn add_type(&mut self, ty: TypeDef) -> Entry<TypeDef> {
         let ty = Entry::new(ty);
         self.types.push(ty.clone());
         ty
+    }
+
+    /// Adds a `public static class`.
+    pub fn add_static_class(
+        &mut self,
+        namespace: &str,
+        name: &str,
+    ) -> crate::error::Result<Entry<TypeDef>> {
+        let object = self.corlib_type("System.Object")?;
+        Ok(self.add_type(TypeDef::new_static_class(namespace, name, object)))
+    }
+
+    /// Renames the assembly, e.g. to load an edited copy next to the original.
+    pub fn set_assembly_name(&mut self, name: &str) {
+        if let Some(assembly) = &self.assembly {
+            assembly.get_mut().name = name.to_string();
+        }
+        self.module.get_mut().name = format!("{}.dll", name);
     }
 }

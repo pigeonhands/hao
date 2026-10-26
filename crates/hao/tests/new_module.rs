@@ -256,3 +256,78 @@ fn call_into_another_module() {
     );
     assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
 }
+
+#[test]
+fn builder_helpers() {
+    use hao::dotnet::{
+        entries::CustomAttributeCtor,
+        il::{Emitter, HandlerKind},
+    };
+
+    let mut module = Module::new(
+        "Helpers",
+        ModuleKind::Dll,
+        TargetRuntime::NetCoreImplementation(8),
+    );
+    let exports = module.add_static_class("Native", "Exports").unwrap();
+    let uco = module
+        .corlib_attribute("System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute")
+        .unwrap();
+    let exception = module.corlib_type("System.Exception").unwrap();
+    let max = module
+        .import_corlib_method(
+            "System.Math",
+            "Max",
+            MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32; 2]),
+        )
+        .unwrap();
+
+    // try { result = Math.Max(a, b); } catch (Exception) { result = -1; } return result;
+    let mut e = Emitter::new();
+    let result = e.declare_local(TypeSig::INT32);
+    e.try_catch(
+        exception,
+        |e| {
+            e.ldarg(0).ldarg(1).call(&max).stloc(result);
+        },
+        |e| {
+            e.pop().ldc_i4(-1).stloc(result);
+        },
+    );
+    e.ldloc(result).ret();
+    TypeDef::add_method(
+        &exports,
+        Method::public_static(
+            "SafeMax",
+            MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32; 2]),
+        )
+        .with_attribute(uco)
+        .with_body(e.finish()),
+    );
+    module.set_assembly_name("Helpers.Renamed");
+
+    let reloaded = Module::from_bytes(&module.write().unwrap()).unwrap();
+    assert_eq!(
+        reloaded.assembly.as_ref().unwrap().get().name,
+        "Helpers.Renamed"
+    );
+    let ty = reloaded.find_type("Native", "Exports").unwrap();
+    assert!(ty.get().is_static() && ty.get().is_visible());
+    let method = reloaded.find_method("Native.Exports", "SafeMax").unwrap();
+    let method = method.get();
+    assert!(method.is_public() && method.is_static());
+    assert_eq!(
+        method.custom_attributes[0].type_name(),
+        "System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute"
+    );
+    assert!(matches!(
+        method.custom_attributes[0].constructor,
+        CustomAttributeCtor::MemberRef(_)
+    ));
+    let body = method.body.as_ref().unwrap();
+    assert_eq!(body.exception_handlers.len(), 1);
+    assert!(matches!(
+        body.exception_handlers[0].kind,
+        HandlerKind::Catch(_)
+    ));
+}

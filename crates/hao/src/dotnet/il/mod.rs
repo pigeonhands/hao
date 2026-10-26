@@ -35,6 +35,12 @@ pub enum MemberToken {
     MethodSpec(Entry<MethodSpec>),
 }
 
+impl From<&MemberToken> for MemberToken {
+    fn from(value: &MemberToken) -> Self {
+        value.clone()
+    }
+}
+
 impl From<TypeDefOrRef> for MemberToken {
     fn from(value: TypeDefOrRef) -> Self {
         match value {

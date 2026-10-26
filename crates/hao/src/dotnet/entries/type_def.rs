@@ -1,6 +1,6 @@
 use super::{
-    well_known::SystemType, Constant, CustomAttribute, DeclSecurity, Entry, EntryName, ImplMap,
-    MethodDefOrRef, TypeDefOrRef, WeakEntry,
+    well_known::SystemType, Constant, CustomAttribute, CustomAttributeCtor, DeclSecurity, Entry,
+    EntryName, ImplMap, MethodDefOrRef, TypeDefOrRef, WeakEntry,
 };
 use crate::dotnet::{
     il::MethodBody,
@@ -72,6 +72,38 @@ impl TypeDef {
             namespace: namespace.into(),
             extends,
             ..Default::default()
+        }
+    }
+
+    /// `public static class`: abstract and sealed, extending `object`.
+    pub fn new_static_class(
+        namespace: impl Into<String>,
+        name: impl Into<String>,
+        object: TypeDefOrRef,
+    ) -> Self {
+        Self::new(
+            TypeAttributes::Public | TypeAttributes::Abstract | TypeAttributes::Sealed,
+            namespace,
+            name,
+            Some(object),
+        )
+    }
+
+    /// Public, and if nested, only inside other visible types.
+    pub fn is_visible(&self) -> bool {
+        let visibility = self.flags & TypeAttributes::VisibilityMask;
+        (visibility == TypeAttributes::Public || visibility == TypeAttributes::NestedPublic)
+            && self
+                .declaring_type
+                .upgrade()
+                .is_none_or(|parent| parent.get().is_visible())
+    }
+
+    /// The namespace of the outermost declaring type, as nested types have none.
+    pub fn top_level_namespace(&self) -> String {
+        match self.declaring_type.upgrade() {
+            Some(parent) => parent.get().top_level_namespace(),
+            None => self.namespace.clone(),
         }
     }
 
@@ -240,6 +272,31 @@ impl Method {
             signature,
             ..Default::default()
         }
+    }
+
+    /// A `public static` method.
+    pub fn public_static(name: impl Into<String>, signature: MethodSig) -> Self {
+        Self::new(
+            MethodFlags::Public | MethodFlags::Static | MethodFlags::HideBySig,
+            name,
+            signature,
+        )
+    }
+
+    pub fn with_body(mut self, body: MethodBody) -> Self {
+        self.body = Some(body);
+        self
+    }
+
+    /// Adds an attribute applied with its parameterless constructor.
+    pub fn with_attribute(mut self, constructor: CustomAttributeCtor) -> Self {
+        self.custom_attributes
+            .push(CustomAttribute::without_arguments(constructor));
+        self
+    }
+
+    pub fn is_public(&self) -> bool {
+        self.flags & MethodFlags::MemberAccessMask == MethodFlags::Public
     }
 
     pub fn is_static(&self) -> bool {

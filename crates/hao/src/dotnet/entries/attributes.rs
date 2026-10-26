@@ -1,5 +1,7 @@
 use super::{Entry, MemberRef, Method, ModuleRef};
-use crate::dotnet::{md::streams::tables_stream::PInvokeMapFlags, signature::ElementType};
+use crate::dotnet::{
+    il::MemberToken, md::streams::tables_stream::PInvokeMapFlags, signature::ElementType,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustomAttributeCtor {
@@ -14,7 +16,28 @@ pub struct CustomAttribute {
     pub value: Vec<u8>,
 }
 
+impl TryFrom<MemberToken> for CustomAttributeCtor {
+    type Error = MemberToken;
+
+    fn try_from(value: MemberToken) -> std::result::Result<Self, MemberToken> {
+        match value {
+            MemberToken::Method(m) => Ok(Self::Method(m)),
+            MemberToken::MemberRef(m) => Ok(Self::MemberRef(m)),
+            other => Err(other),
+        }
+    }
+}
+
 impl CustomAttribute {
+    /// An attribute applied with its parameterless constructor, like `[Serializable]`.
+    pub fn without_arguments(constructor: CustomAttributeCtor) -> Self {
+        // The prolog and a zero count of named arguments.
+        Self {
+            constructor,
+            value: vec![0x01, 0x00, 0x00, 0x00],
+        }
+    }
+
     /// Full name of the attribute type.
     pub fn type_name(&self) -> String {
         match &self.constructor {
