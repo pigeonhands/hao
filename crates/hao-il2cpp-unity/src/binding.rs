@@ -66,12 +66,14 @@ impl<Args: MethodArgs, R: Il2CppValue> Check for Binding<Args, R> {
     }
 }
 
+/// Declares a group of bindings plus a `$checks` function listing them (used to
+/// aggregate [`check_bindings`](crate::check_bindings) across the concern files).
 macro_rules! bindings {
-    ($($name:ident: $assembly:literal $namespace:literal $class:literal $method:literal ($($arg:ty),*) -> $ret:ty;)*) => {
+    ($checks:ident; $($name:ident: $assembly:literal $namespace:literal $class:literal $method:literal ($($arg:ty),*) -> $ret:ty;)*) => {
         $(pub(crate) static $name: $crate::binding::Binding<($($arg,)*), $ret> =
             $crate::binding::Binding::new($assembly, $namespace, $class, $method);)*
 
-        pub(crate) fn all() -> Vec<&'static dyn $crate::binding::Check> {
+        pub(crate) fn $checks() -> ::std::vec::Vec<&'static dyn $crate::binding::Check> {
             vec![$(&$name),*]
         }
     };
