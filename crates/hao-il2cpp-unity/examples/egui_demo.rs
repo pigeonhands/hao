@@ -19,12 +19,17 @@ static LOAD: extern "C" fn() = load;
 static FRAMES: AtomicU64 = AtomicU64::new(0);
 /// Shown by default; F1 toggles it.
 static VISIBLE: AtomicBool = AtomicBool::new(true);
+/// Previous held state of F1, so we toggle once per press (its own edge), not
+/// via GetKeyDown, whose per-frame edge is unreliable from the render callback.
+static F1_DOWN: AtomicBool = AtomicBool::new(false);
 
 extern "C" fn load() {
     init_logging();
     hao_il2cpp_unity::on_init(|_| {
         egui::on_egui(|ctx| {
-            if input::key_down(KeyCode::F1).unwrap_or(false) {
+            let f1 = input::key(KeyCode::F1).unwrap_or(false);
+            let f1_was_down = F1_DOWN.swap(f1, Ordering::Relaxed);
+            if f1 && !f1_was_down {
                 VISIBLE.fetch_xor(true, Ordering::Relaxed);
             }
             if !VISIBLE.load(Ordering::Relaxed) {
