@@ -35,21 +35,6 @@ value_type!(
     /// `UnityEngine.Quaternion`, a rotation. Use [`Quaternion::euler`] to build one.
     Quaternion = "UnityEngine" "Quaternion" { x: f32, y: f32, z: f32, w: f32 }
 );
-value_type!(
-    /// `UnityEngine.Rect`, in pixels with the origin at the bottom left.
-    Rect = "UnityEngine" "Rect" { x: f32, y: f32, width: f32, height: f32 }
-);
-
-impl Rect {
-    pub const fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-}
 
 impl Vector2 {
     pub const ZERO: Self = Self::new(0.0, 0.0);
@@ -205,6 +190,11 @@ int_enum!(
 int_enum!(
     /// `UnityEngine.TextureFormat`.
     TextureFormat = "UnityEngine" "TextureFormat" { ALPHA8 = 1, RGBA32 = 4, ARGB32 = 5, RGB24 = 3 }
+);
+int_enum!(
+    /// `UnityEngine.FilterMode`, how a texture is sampled. `POINT` samples the
+    /// nearest texel exactly (no blending with neighbours).
+    FilterMode = "UnityEngine" "FilterMode" { POINT = 0, BILINEAR = 1, TRILINEAR = 2 }
 );
 int_enum!(
     /// `UnityEngine.HideFlags`. `HIDE_AND_DONT_SAVE` keeps a runtime-created

@@ -3,7 +3,7 @@
 use hao_il2cpp_runtime::{Il2CppString, Object};
 
 use crate::{
-    binding::bindings, Camera, Color, Material, Rect, RenderTexture, Shader, Texture2D,
+    binding::bindings, Camera, Color, FilterMode, Material, RenderTexture, Shader, Texture2D,
     TextureFormat,
 };
 
@@ -40,7 +40,6 @@ bindings! { rendering_checks;
     TEXTURE2D_CTOR: "UnityEngine.CoreModule" "UnityEngine" "Texture2D" ".ctor" (Texture2D, i32, i32, TextureFormat, bool) -> ();
     TEXTURE2D_LOAD_RAW: "UnityEngine.CoreModule" "UnityEngine" "Texture2D" "LoadRawTextureData" (Texture2D, Object) -> ();
     TEXTURE2D_APPLY: "UnityEngine.CoreModule" "UnityEngine" "Texture2D" "Apply" (Texture2D) -> ();
-    // Debugging: read pixels back from the active render target to inspect them.
-    TEXTURE2D_READ_PIXELS: "UnityEngine.CoreModule" "UnityEngine" "Texture2D" "ReadPixels" (Texture2D, Rect, i32, i32, bool) -> ();
-    TEXTURE2D_GET_PIXEL: "UnityEngine.CoreModule" "UnityEngine" "Texture2D" "GetPixel" (Texture2D, i32, i32) -> Color;
+    // set_filterMode is declared on the Texture base class.
+    TEXTURE_SET_FILTER_MODE: "UnityEngine.CoreModule" "UnityEngine" "Texture" "set_filterMode" (Texture2D, FilterMode) -> ();
 }

@@ -27,10 +27,12 @@ common Unity functionality the same way for any Unity game:
 
 `on_render` runs your callback in Unity's render pipeline (it hooks
 `Camera.FireOnPostRender`, which the engine calls from native code per camera render). From there
-you can draw with the `gl` immediate-mode module, or drive an immediate-mode UI such as egui by
-translating its tessellated output into `gl` calls. A full GPU-backed egui surface instead hooks
-the native graphics present (D3D/Vulkan/GL) — that part is renderer-specific and up to the mod;
-this crate gives you the Unity-side render callback and drawing primitives.
+you can draw with the `gl` immediate-mode module.
+
+For a full UI, enable the `egui` feature and call `egui::on_egui(|ctx| { … })`: it renders an
+[egui](https://github.com/emilk/egui) interface into a `RenderTexture` and shows it on a
+top-most screen-space-overlay canvas, so it draws above the game's own UI and takes mouse input.
+See `examples/egui_demo.rs`.
 
 Each Unity method is looked up the first time it's used and checked against the game's real
 signature, so a game built with a different Unity version gives an error instead of a crash.

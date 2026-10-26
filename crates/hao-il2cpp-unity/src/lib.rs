@@ -55,8 +55,8 @@ pub use objects::{
 pub use overlay::TextOverlay;
 pub use scene::{on_scene_loaded, Scene};
 pub use values::{
-    Color, HideFlags, KeyCode, LoadSceneMode, Quaternion, Rect, RenderMode, TextureFormat, Vector2,
-    Vector3,
+    Color, FilterMode, HideFlags, KeyCode, LoadSceneMode, Quaternion, RenderMode, TextureFormat,
+    Vector2, Vector3,
 };
 
 impl Quaternion {

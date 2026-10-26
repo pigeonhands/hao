@@ -1,6 +1,5 @@
-//! Experimental egui overlay for Megabonk's Linux build (or any Unity Il2Cpp
-//! game). Draws an egui window over the game. **Rendering is unverified** — the
-//! shader/blend/colour handling may need tuning per game.
+//! An egui overlay for Megabonk's Linux build (or any Unity Il2Cpp game). Draws
+//! an egui window over the game, on top of its UI, with F1 to toggle it.
 //!
 //! ```sh
 //! cargo build --release -p hao-il2cpp-unity --features egui --example egui_demo
@@ -35,14 +34,12 @@ extern "C" fn load() {
             if !VISIBLE.load(Ordering::Relaxed) {
                 return;
             }
-            // egui's default window fill is slightly see-through; make it opaque so
-            // it reads clearly over the game.
-            ctx.style_mut(|style| {
-                style.visuals.window_fill = egui::Color32::from_rgb(27, 27, 27);
-                style.visuals.panel_fill = egui::Color32::from_rgb(27, 27, 27);
-            });
             let frames = FRAMES.fetch_add(1, Ordering::Relaxed);
+            // egui's default window frame is translucent; force an opaque fill so
+            // the overlay reads clearly over the game.
+            let frame = egui::Frame::window(&ctx.style()).fill(egui::Color32::from_rgb(24, 24, 28));
             egui::Window::new("hao + egui")
+                .frame(frame)
                 .default_pos([24.0, 24.0])
                 .show(ctx, |ui| {
                     ui.label("Drawn over the game with egui. F1 to toggle.");

@@ -268,16 +268,9 @@ impl Texture2D {
         TEXTURE2D_APPLY.call((*self,))
     }
 
-    /// Copies a region of the active `RenderTexture` into this texture's CPU
-    /// pixels (readable with [`get_pixel`](Self::get_pixel)). For debugging.
-    pub fn read_pixels(&self, source: crate::Rect, dest_x: i32, dest_y: i32) -> Result<()> {
-        TEXTURE2D_READ_PIXELS.call((*self, source, dest_x, dest_y, false))
-    }
-
-    /// A single pixel's colour (after [`read_pixels`](Self::read_pixels) or a
-    /// CPU upload). For debugging.
-    pub fn get_pixel(&self, x: i32, y: i32) -> Result<Color> {
-        TEXTURE2D_GET_PIXEL.call((*self, x, y))
+    /// How the texture is sampled (`Point` avoids blending neighbouring texels).
+    pub fn set_filter_mode(&self, mode: crate::FilterMode) -> Result<()> {
+        TEXTURE_SET_FILTER_MODE.call((*self, mode))
     }
 }
 

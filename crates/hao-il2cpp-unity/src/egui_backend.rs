@@ -1,17 +1,14 @@
-//! Experimental: draw an [`egui`] UI over the game from the render hook.
-//!
-//! **Unverified rendering.** The data flow (input, tessellation, texture upload,
-//! GL draw) is complete, but the shader/blend/colour-space details are the kind
-//! of thing that needs tuning against a real game. Enable with the `egui`
-//! feature.
+//! Draw an [`egui`] UI over the game from the render hook. Enable with the
+//! `egui` feature.
 //!
 //! egui is rendered with Unity's immediate-mode [`gl`](crate::gl): its font atlas
-//! is uploaded to a [`Texture2D`], bound through a `Material`, and each tessellated
-//! triangle is emitted into a [`RenderTexture`]. That texture is shown by a
-//! [`RawImage`] on our own screen-space-overlay [`Canvas`] with the maximum sorting
-//! order, so the UI draws on top of the game's own overlay canvases (which the
-//! engine composites after camera rendering, where a plain `gl` draw would sit
-//! underneath). See [`on_egui`].
+//! is uploaded to a [`Texture2D`] (point-sampled, so solid fills stay opaque),
+//! bound through a `Material`, and each tessellated triangle is emitted into a
+//! [`RenderTexture`] with its colours converted from gamma to linear. That texture
+//! is shown by a [`RawImage`] on our own screen-space-overlay [`Canvas`] with the
+//! maximum sorting order, so the UI draws on top of the game's own overlay canvases
+//! (which the engine composites after camera rendering, where a plain `gl` draw
+//! would sit underneath). See [`on_egui`].
 
 use std::sync::{Arc, Mutex};
 
@@ -73,10 +70,6 @@ struct EguiState {
     rt: Option<(GcHandle, [i32; 2])>,
     /// The `RawImage` on the overlay canvas that displays `rt` on top of the game.
     raw_image: Option<GcHandle>,
-    /// A 1x1 texture used to read a pixel back from the target for debugging.
-    readback: Option<GcHandle>,
-    /// Counts rendered frames, to throttle the debug pixel log.
-    frame_index: u64,
 }
 
 /// Builds the egui material: a textured, vertex-coloured, alpha-blended shader.
@@ -92,7 +85,7 @@ fn make_material() -> Result<Material> {
             })?,
         ),
     };
-    tracing::info!(shader = name, "egui material shader");
+    tracing::debug!(shader = name, "egui material shader");
     let material = Material::new(shader)?;
     material.set_hide_flags(crate::HideFlags::HIDE_AND_DONT_SAVE)?;
     Ok(material)
@@ -111,8 +104,6 @@ impl EguiState {
             pointer_down: [false; 2],
             rt: None,
             raw_image: None,
-            readback: None,
-            frame_index: 0,
         })
     }
 
@@ -183,28 +174,20 @@ impl EguiState {
 
     fn frame(&mut self, ui: &(impl Fn(&egui::Context) + ?Sized)) -> Result<()> {
         self.ensure_alive()?;
-
-        // Step logs: whichever appears last in Player.log before a managed
-        // exception is the call that threw. Enable with RUST_LOG=debug.
-        tracing::debug!("egui frame: screen size");
         let (sw, sh) = screen::size()?;
         let (iw, ih) = (sw.max(1), sh.max(1));
         let (w, h) = (iw as f32, ih as f32);
         self.ensure_overlay(iw, ih)?;
 
-        tracing::debug!("egui frame: input");
         let input = self.raw_input(w, h)?;
-        tracing::debug!("egui frame: run ui");
         let output = self.ctx.run(input, |ctx| ui(ctx));
         for (id, delta) in output.textures_delta.set {
             // Only the egui font atlas (managed texture 0) is handled here.
             if matches!(id, egui::TextureId::Managed(_)) {
-                tracing::debug!(size = ?delta.image.size(), "egui frame: upload texture");
                 self.update_texture(&delta)?;
             }
         }
         let primitives = self.ctx.tessellate(output.shapes, 1.0);
-        tracing::debug!(primitives = primitives.len(), "egui frame: render");
         self.render(w, h, &primitives)
     }
 
@@ -280,13 +263,17 @@ impl EguiState {
             let texture = Texture2D::new(size[0] as i32, size[1] as i32, TextureFormat::RGBA32)?;
             // Survive scene loads, as for the material.
             texture.set_hide_flags(crate::HideFlags::HIDE_AND_DONT_SAVE)?;
+            // Point sampling: egui's solid fills sample the atlas's white texel, and
+            // bilinear filtering blends it with transparent neighbours, which capped
+            // every fill's alpha below 1 and made the whole UI look see-through.
+            texture.set_filter_mode(crate::FilterMode::POINT)?;
             let handle = GcHandle::new(crate::il2cpp()?, texture.object());
             self.texture = Some((handle, size));
         }
         Ok(())
     }
 
-    fn render(&mut self, w: f32, h: f32, primitives: &[egui::ClippedPrimitive]) -> Result<()> {
+    fn render(&self, w: f32, h: f32, primitives: &[egui::ClippedPrimitive]) -> Result<()> {
         let Some((texture, _)) = &self.texture else {
             return Ok(());
         };
@@ -297,69 +284,10 @@ impl EguiState {
         let material = self.material();
         material.set_main_texture(Texture2D(texture.target()))?;
 
-        self.frame_index += 1;
-        // Log the pipeline state once a second or so (at ~60fps), without spamming.
-        let trace = self.frame_index % 60 == 0;
-        if trace {
-            let (meshes, verts, mut max_a) = (
-                primitives.len(),
-                primitives
-                    .iter()
-                    .filter_map(|p| match &p.primitive {
-                        egui::epaint::Primitive::Mesh(m) => Some(m.vertices.len()),
-                        _ => None,
-                    })
-                    .sum::<usize>(),
-                0u8,
-            );
-            // The largest alpha egui emitted this frame: tells us whether the
-            // transparency is in egui's output or added later in the pipeline.
-            for p in primitives {
-                if let egui::epaint::Primitive::Mesh(m) = &p.primitive {
-                    for v in &m.vertices {
-                        max_a = max_a.max(v.color.to_array()[3]);
-                    }
-                }
-            }
-            tracing::info!(
-                meshes,
-                verts,
-                max_vertex_alpha = max_a,
-                screen = ?(w, h),
-                "egui draw"
-            );
-        }
-
-        // egui's content bounding box, so the readback samples where the UI is.
-        let content_center = if trace {
-            let mut min = (f32::MAX, f32::MAX);
-            let mut max = (f32::MIN, f32::MIN);
-            for p in primitives {
-                if let egui::epaint::Primitive::Mesh(m) = &p.primitive {
-                    for v in &m.vertices {
-                        min = (min.0.min(v.pos.x), min.1.min(v.pos.y));
-                        max = (max.0.max(v.pos.x), max.1.max(v.pos.y));
-                    }
-                }
-            }
-            tracing::info!(?min, ?max, "egui content bounds (egui coords)");
-            Some((min, max))
-        } else {
-            None
-        };
-
         // Draw into our render target, then restore whatever the camera was using
         // even if a step fails, so the game's own rendering is left untouched.
         let previous = RenderTexture::active()?;
         RenderTexture::set_active(Some(rt))?;
-        if trace {
-            // Confirm our target is actually the active render target now.
-            let active = RenderTexture::active()?;
-            tracing::info!(
-                bound = active.map(|a| a.object() == rt.object()).unwrap_or(false),
-                "render target set active"
-            );
-        }
         let result = (|| {
             // Start transparent so last frame's UI doesn't linger.
             gl::clear(false, Color::CLEAR)?;
@@ -374,54 +302,19 @@ impl EguiState {
                 gl::begin(gl::Mode::Triangles)?;
                 for &index in &mesh.indices {
                     let v = mesh.vertices[index as usize];
-                    let [r, g, b, a] = v.color.to_array();
-                    let scale = 1.0 / 255.0;
-                    gl::color(Color::rgba(
-                        r as f32 * scale,
-                        g as f32 * scale,
-                        b as f32 * scale,
-                        a as f32 * scale,
-                    ))?;
+                    // egui's Color32 is gamma (sRGB); Unity's linear colour space
+                    // wants linear values from GL.Color, so convert (otherwise the
+                    // dark UI is brightened into grey). Both are premultiplied.
+                    let c = egui::Rgba::from(v.color);
+                    gl::color(Color::rgba(c.r(), c.g(), c.b(), c.a()))?;
                     gl::tex_coord(v.uv.x, v.uv.y)?;
                     gl::vertex(v.pos.x, v.pos.y)?;
                 }
                 gl::end()?;
             }
-            // While the target is still active, read pixels back from egui's
-            // content to see what landed in the target: the centre (likely a
-            // widget) and a point just below the title bar (plain window fill).
-            if let Some((min, max)) = content_center {
-                let center = ((min.0 + max.0) / 2.0, (min.1 + max.1) / 2.0);
-                let fill = (min.0 + 20.0, min.1 + 40.0);
-                for (label, (x, y)) in [("center", center), ("fill", fill)] {
-                    if let Err(e) = self.sample_target(label, x, y, h) {
-                        tracing::warn!("target readback failed: {}", e);
-                    }
-                }
-            }
             gl::pop_matrix()
         })();
         RenderTexture::set_active(previous)?;
         result
-    }
-
-    /// Debug: reads the active target at egui's content centre `(cx, cy)` (in
-    /// egui coords) and logs the colour, so we can see what landed in the target.
-    fn sample_target(&mut self, label: &str, cx: f32, cy: f32, h: f32) -> Result<()> {
-        let readback = match &self.readback {
-            Some(handle) => Texture2D(handle.target()),
-            None => {
-                let tex = Texture2D::new(1, 1, crate::TextureFormat::RGBA32)?;
-                tex.set_hide_flags(crate::HideFlags::HIDE_AND_DONT_SAVE)?;
-                self.readback = Some(GcHandle::new(crate::il2cpp()?, tex.object()));
-                tex
-            }
-        };
-        // The target is bottom-left origin, egui is top-left, so flip Y.
-        let py = h - cy;
-        readback.read_pixels(crate::Rect::new(cx, py, 1.0, 1.0), 0, 0)?;
-        let c = readback.get_pixel(0, 0)?;
-        tracing::info!(r = c.r, g = c.g, b = c.b, a = c.a, at = label, "target pixel");
-        Ok(())
     }
 }
