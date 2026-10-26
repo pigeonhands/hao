@@ -60,10 +60,11 @@ impl Game {
     pub fn from_bytes(metadata: Vec<u8>, binary: &[u8]) -> Result<Self> {
         let metadata = Metadata::parse(metadata)?;
         // ELF (`GameAssembly.so`) or PE (`GameAssembly.dll`), by magic.
+        let image_error = |e| Error::Binary(format!("{:?}", e));
         let binary = if pewter::elf::ElfFile::is_elf(binary) {
-            Binary::read(&ElfImage::parse(binary)?, &metadata)?
+            Binary::read(&ElfImage::parse(binary).map_err(image_error)?, &metadata)?
         } else if binary.starts_with(b"MZ") {
-            Binary::read(&PeImage::parse(binary)?, &metadata)?
+            Binary::read(&PeImage::parse(binary).map_err(image_error)?, &metadata)?
         } else {
             return Err(Error::Binary(
                 "the game binary is neither ELF nor PE".into(),

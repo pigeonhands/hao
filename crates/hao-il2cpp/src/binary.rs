@@ -1,147 +1,15 @@
 //! The game binary (`GameAssembly`): the registration tables and the
 //! `Il2CppType` table that metadata type indices refer to.
+//!
+//! The binary is read through pewter's [`LoadedImage`], which abstracts over
+//! ELF (`.so`) and PE (`.dll`) and resolves virtual addresses after relocation.
 
-use pewter::{
-    elf::{ElfFile, RelocatedPointers, SegmentFlags, SegmentType},
-    pe::{file::definition::PEImageDef, sections::SectionFlags},
-};
+pub use pewter::image::{ElfImage, LoadedImage, PeImage};
 
 use crate::{
     error::{Error, Result},
     metadata::{Metadata, TypeDefinitionIndex},
 };
-
-/// Reads virtual addresses of a loaded binary as they will be after relocation.
-pub trait BinaryImage {
-    fn is_64(&self) -> bool;
-    fn bytes(&self, vaddr: u64, len: usize) -> Option<&[u8]>;
-    /// A pointer sized value, after relocation.
-    fn pointer(&self, vaddr: u64) -> Option<u64>;
-    /// Address ranges of writable or read-only data that may hold registration tables.
-    fn data_ranges(&self) -> Vec<(u64, u64)>;
-
-    fn pointer_size(&self) -> u64 {
-        if self.is_64() {
-            8
-        } else {
-            4
-        }
-    }
-
-    fn u32(&self, vaddr: u64) -> Option<u32> {
-        self.bytes(vaddr, 4)
-            .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
-    }
-
-    fn u8(&self, vaddr: u64) -> Option<u8> {
-        self.bytes(vaddr, 1).map(|b| b[0])
-    }
-
-    fn is_mapped(&self, vaddr: u64) -> bool {
-        vaddr != 0 && self.bytes(vaddr, 1).is_some()
-    }
-}
-
-/// A `GameAssembly.so` (or any Il2Cpp ELF binary).
-pub struct ElfImage<'a> {
-    elf: ElfFile<'a>,
-    pointers: RelocatedPointers,
-}
-
-impl<'a> ElfImage<'a> {
-    pub fn parse(data: &'a [u8]) -> Result<Self> {
-        let elf = ElfFile::parse(data).map_err(|e| Error::Binary(format!("{:?}", e)))?;
-        let pointers = elf
-            .relocated_pointers()
-            .map_err(|e| Error::Binary(format!("{:?}", e)))?;
-        Ok(Self { elf, pointers })
-    }
-}
-
-impl BinaryImage for ElfImage<'_> {
-    fn is_64(&self) -> bool {
-        self.elf.is_64()
-    }
-
-    fn bytes(&self, vaddr: u64, len: usize) -> Option<&[u8]> {
-        self.elf.data_at_vaddr(vaddr)?.get(..len)
-    }
-
-    fn pointer(&self, vaddr: u64) -> Option<u64> {
-        let value = self.elf.read_pointer(vaddr, &self.pointers)?;
-        Some(if self.is_64() {
-            value
-        } else {
-            value & 0xFFFF_FFFF
-        })
-    }
-
-    fn data_ranges(&self) -> Vec<(u64, u64)> {
-        self.elf
-            .program_headers
-            .iter()
-            .filter(|p| {
-                p.segment_type == SegmentType::Load && !p.flags.contains(SegmentFlags::EXECUTE)
-            })
-            .map(|p| (p.vaddr, p.vaddr + p.file_size))
-            .collect()
-    }
-}
-
-/// A `GameAssembly.dll` (or any Il2Cpp PE binary), e.g. a Unity 6 / Windows game.
-///
-/// Pointers stored in a PE hold absolute virtual addresses at the preferred
-/// image base, so no relocation step is needed: the on-disk values and the
-/// addresses we compute are both in that base's space.
-pub struct PeImage {
-    pe: PEImageDef,
-    image_base: u64,
-}
-
-impl PeImage {
-    pub fn parse(data: &[u8]) -> Result<Self> {
-        let pe = PEImageDef::parse(data).map_err(|e| Error::Binary(format!("{:?}", e)))?;
-        let image_base = pe.optional_header.windows_specific_fields.image_base();
-        Ok(Self { pe, image_base })
-    }
-}
-
-impl BinaryImage for PeImage {
-    fn is_64(&self) -> bool {
-        self.pe
-            .optional_header
-            .windows_specific_fields
-            .is_pe32_plus()
-    }
-
-    fn bytes(&self, vaddr: u64, len: usize) -> Option<&[u8]> {
-        let rva = vaddr.checked_sub(self.image_base)?;
-        self.pe.read_at_rva(u32::try_from(rva).ok()?, len)
-    }
-
-    fn pointer(&self, vaddr: u64) -> Option<u64> {
-        let size = self.pointer_size() as usize;
-        let bytes = self.bytes(vaddr, size)?;
-        let mut buf = [0u8; 8];
-        buf[..size].copy_from_slice(bytes);
-        Some(u64::from_le_bytes(buf))
-    }
-
-    fn data_ranges(&self) -> Vec<(u64, u64)> {
-        self.pe
-            .sections
-            .iter()
-            .filter(|s| {
-                !s.characteristics.contains(SectionFlags::MEM_EXECUTE)
-                    && !s.characteristics.contains(SectionFlags::CNT_CODE)
-            })
-            .map(|s| {
-                let start = self.image_base + s.virtual_address as u64;
-                (start, start + s.virtual_size() as u64)
-            })
-            .collect()
-    }
-}
 
 /// `Il2CppTypeEnum`, the same values as ECMA-335 element types.
 pub mod element {
@@ -207,13 +75,13 @@ pub struct MetadataRegistration {
 impl MetadataRegistration {
     /// Finds the registration by its two counts that equal the number of type definitions
     /// (`fieldOffsetsCount` and `typeDefinitionsSizesCount`).
-    pub fn find(image: &impl BinaryImage, metadata: &Metadata) -> Result<Self> {
+    pub fn find(image: &impl LoadedImage, metadata: &Metadata) -> Result<Self> {
         let p = image.pointer_size();
         let count = metadata.type_definitions.len() as u64;
         let word = |v: u64| image.pointer(v).unwrap_or(0);
         let pair = |v: u64| (word(v), word(v + p));
         let mut found = Vec::new();
-        for (start, end) in image.data_ranges() {
+        for (start, end) in image.data_segments() {
             let mut vaddr = start;
             while vaddr + 4 * p <= end {
                 if word(vaddr) == count
@@ -258,7 +126,7 @@ pub struct Binary {
 }
 
 impl Binary {
-    pub fn read(image: &impl BinaryImage, metadata: &Metadata) -> Result<Self> {
+    pub fn read(image: &impl LoadedImage, metadata: &Metadata) -> Result<Self> {
         let registration = MetadataRegistration::find(image, metadata)?;
         let p = image.pointer_size();
         let (count, array) = registration.types;
@@ -281,7 +149,7 @@ impl Binary {
     }
 }
 
-fn read_type(image: &impl BinaryImage, address: u64, depth: usize) -> Result<Il2CppType> {
+fn read_type(image: &impl LoadedImage, address: u64, depth: usize) -> Result<Il2CppType> {
     if depth > 32 {
         return Err(Error::Binary("type nesting is too deep".into()));
     }
