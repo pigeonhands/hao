@@ -47,9 +47,22 @@ macro_rules! object_type {
                 OBJECT_SET_NAME.call((UnityObject(self.0), il2cpp()?.string(name)?))
             }
 
-            /// Keeps the object when a new scene loads.
+            /// Keeps the object when a new scene loads. Only works for GameObjects;
+            /// for assets (`Material`, `Texture2D`) use [`set_hide_flags`](Self::set_hide_flags).
             pub fn dont_destroy_on_load(&self) -> Result<()> {
                 OBJECT_DONT_DESTROY_ON_LOAD.call((UnityObject(self.0),))
+            }
+
+            /// Sets the object's `HideFlags`. `HideFlags::HIDE_AND_DONT_SAVE` keeps a
+            /// runtime-created asset from being unloaded on scene load.
+            pub fn set_hide_flags(&self, flags: crate::HideFlags) -> Result<()> {
+                OBJECT_SET_HIDE_FLAGS.call((UnityObject(self.0), flags))
+            }
+
+            /// Whether the object is still alive (Unity's `(bool)obj`): `false` once
+            /// it has been destroyed, even though the managed wrapper still exists.
+            pub fn is_alive(&self) -> Result<bool> {
+                OBJECT_IS_ALIVE.call((UnityObject(self.0),))
             }
 
             /// Destroys the object at the end of the frame.

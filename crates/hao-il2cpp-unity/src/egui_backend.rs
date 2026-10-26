@@ -50,23 +50,26 @@ struct EguiState {
     atlas: Vec<u8>,
 }
 
+/// Builds the egui material: a textured, vertex-coloured, alpha-blended shader.
+/// `HideAndDontSave` keeps Unity from destroying it (and throwing NRE on later
+/// use) when a scene loads, which `DontDestroyOnLoad` does not do for assets.
+fn make_material() -> Result<Material> {
+    let shader = Shader::find("Sprites/Default")?
+        .or(Shader::find("UI/Default")?)
+        .ok_or_else(|| hao_il2cpp_runtime::Error::NotFound("a sprite/UI shader for egui".into()))?;
+    let material = Material::new(shader)?;
+    material.set_hide_flags(crate::HideFlags::HIDE_AND_DONT_SAVE)?;
+    Ok(material)
+}
+
 impl EguiState {
     fn new() -> Result<Self> {
         let ctx = egui::Context::default();
         ctx.set_pixels_per_point(1.0);
-        let il2cpp = crate::il2cpp()?;
-        // A textured, vertex-coloured, alpha-blended shader (what egui needs).
-        let shader = Shader::find("Sprites/Default")?
-            .or(Shader::find("UI/Default")?)
-            .ok_or_else(|| {
-                hao_il2cpp_runtime::Error::NotFound("a sprite/UI shader for egui".into())
-            })?;
-        let material = Material::new(shader)?;
-        // Survive scene loads; otherwise Unity destroys it and later calls throw NRE.
-        material.dont_destroy_on_load()?;
+        let material = make_material()?;
         Ok(Self {
             ctx,
-            material: GcHandle::new(il2cpp, material.object()),
+            material: GcHandle::new(crate::il2cpp()?, material.object()),
             texture: None,
             atlas: Vec::new(),
         })
@@ -76,7 +79,27 @@ impl EguiState {
         Material(self.material.target())
     }
 
+    /// Rebuilds the material and font texture if a scene load destroyed them
+    /// despite `HideAndDontSave`. The GC handles keep the C# wrappers alive, so
+    /// their sizes survive; only the underlying Unity objects are remade.
+    fn ensure_alive(&mut self) -> Result<()> {
+        if self.material().is_alive()? {
+            return Ok(());
+        }
+        tracing::debug!("egui: resources were destroyed, recreating");
+        self.material = GcHandle::new(crate::il2cpp()?, make_material()?.object());
+        if let Some((_, size)) = self.texture.take() {
+            self.ensure_texture(size)?;
+            if !self.atlas.is_empty() {
+                Texture2D(self.texture.as_ref().unwrap().0.target()).load_raw(&self.atlas)?;
+            }
+        }
+        Ok(())
+    }
+
     fn frame(&mut self, ui: &(impl Fn(&egui::Context) + ?Sized)) -> Result<()> {
+        self.ensure_alive()?;
+
         // Step logs: whichever appears last in Player.log before a managed
         // exception is the call that threw. Enable with RUST_LOG=debug.
         tracing::debug!("egui frame: screen size");
@@ -162,7 +185,7 @@ impl EguiState {
         if self.texture.as_ref().map(|(_, s)| *s) != Some(size) {
             let texture = Texture2D::new(size[0] as i32, size[1] as i32, TextureFormat::RGBA32)?;
             // Survive scene loads, as for the material.
-            texture.dont_destroy_on_load()?;
+            texture.set_hide_flags(crate::HideFlags::HIDE_AND_DONT_SAVE)?;
             let handle = GcHandle::new(crate::il2cpp()?, texture.object());
             self.texture = Some((handle, size));
         }

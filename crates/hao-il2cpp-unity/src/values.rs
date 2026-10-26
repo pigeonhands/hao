@@ -192,6 +192,11 @@ int_enum!(
     TextureFormat = "UnityEngine" "TextureFormat" { ALPHA8 = 1, RGBA32 = 4, ARGB32 = 5, RGB24 = 3 }
 );
 int_enum!(
+    /// `UnityEngine.HideFlags`. `HIDE_AND_DONT_SAVE` keeps a runtime-created
+    /// object (e.g. a `Material`) from being destroyed on scene load.
+    HideFlags = "UnityEngine" "HideFlags" { NONE = 0, DONT_UNLOAD_UNUSED_ASSET = 32, HIDE_AND_DONT_SAVE = 61 }
+);
+int_enum!(
     /// `UnityEngine.KeyCode`, for [`input`](crate::input). A few common keys are
     /// named; any other can be made with `KeyCode(value)`.
     KeyCode = "UnityEngine" "KeyCode" {
