@@ -21,6 +21,7 @@ assert_eq!(calculator.add(5)?, 15);
 |---|---|
 | `assembly = "path"` | the assembly, relative to the crate's `Cargo.toml` |
 | `assembly_env = "VAR"` | read the path from an environment variable at compile time, e.g. one set by a build script |
+| `framework = "Name"` | an assembly of the installed .NET, e.g. `System.Private.CoreLib` (CoreCLR only) |
 | `types = ["Ns.Type", ...]` | only bind these types (`+` for nested types) |
 
 ## What gets generated
@@ -28,7 +29,10 @@ assert_eq!(calculator.add(5)?, 15);
 Each namespace becomes a module (`MyLib.Shapes` → `my_lib::shapes`) and each public,
 non-generic class becomes a struct wrapping a `hao_runtime::Object`:
 
-- constructors become `new`, `new_1`, ... in declaration order
+- constructors become `new`
+- overloads after the first are named after their parameter types: `append`, `append_i32`,
+  `append_str_i32_i32`, `new_str`
+- a class whose base class is bound too derefs to it, so it has the base's methods
 - static methods take `&Runtime` as their first argument
 - instance methods take `&self`
 - every call returns `hao_runtime::Result`, with .NET exceptions as `Error::Managed`
@@ -54,3 +58,22 @@ library and the thunks are loaded on first use, so calls go straight through fun
 with no reflection.
 
 The library's path is baked in at compile time and loaded from there.
+
+The source follows those steps: `options.rs` parses the input, `model.rs` picks the types and
+methods to bind and names them, `ty.rs` says how each kind of value crosses the native boundary,
+`thunks.rs` builds the thunk assembly and `codegen.rs` the Rust code.
+
+## Examples
+
+```sh
+cargo run -p hao-runtime-macros --example corelib
+cargo run -p hao-runtime-macros --example regex
+```
+
+- [`corelib`](examples/corelib.rs): binds `StringBuilder`, `Path` and `Environment` from .NET's
+  class library.
+- [`regex`](examples/regex.rs): uses .NET's `Regex`, with typed results, inherited methods and
+  exceptions as errors.
+
+Both bind assemblies of the installed .NET with `framework = "..."`, so they need .NET 8+ but no
+SDK. [`hao-runtime-tests`](../hao-runtime-tests) binds a C# library built from source.

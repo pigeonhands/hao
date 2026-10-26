@@ -16,3 +16,6 @@ hao = { path = "../hao" }
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "3", features = ["full"] }
+
+[dev-dependencies]
+hao-runtime = { path = "../hao-runtime" }
