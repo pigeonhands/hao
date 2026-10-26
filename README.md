@@ -36,6 +36,14 @@ A library for reading, editing and writing .NET assemblies in Rust.
 - Writes C#-like declarations (optionally with IL listings) through `CSharpWriter`.
 - Supports compressed (`#~`) and uncompressed (`#-`) metadata.
 
+## Crates
+
+| crate | |
+|---|---|
+| [`hao`](crates/hao) | read, edit and write .NET assemblies |
+| [`hao-runtime`](crates/hao-runtime) | host CoreCLR (`coreclr` feature, .NET 8+) or Mono (`mono` feature) in a Rust process |
+| [`hao-runtime-macros`](crates/hao-runtime-macros) | `bind!` generates Rust bindings to a .NET assembly for `hao-runtime` |
+
 ## Loading
 
 ```rust
@@ -101,6 +109,25 @@ let with_il = module.to_csharp_with(CSharpOptions { il_bodies: true, ..Default::
 crates/hao/tests/fixtures/build.sh
 cargo run --example dump_csharp -- crates/hao/tests/fixtures/out/Sample.dll --il
 ```
+
+## Calling .NET from Rust
+
+`bind!` reads an assembly with hao and generates a struct per public class. Calls go through
+a small thunk assembly the macro builds and embeds, so there's no reflection at runtime.
+
+```rust
+mod my_lib {
+    hao_runtime_macros::bind! { assembly = "dotnet/MyLib.dll" }
+}
+
+let runtime = hao_runtime::Runtime::coreclr()?; // or Runtime::mono(&MonoOptions::default())
+let calculator = my_lib::my_lib::Calculator::new(&runtime, 10)?;
+assert_eq!(calculator.add(5)?, 15);
+assert_eq!(calculator.describe("total=")?.as_deref(), Some("total=15"));
+```
+
+Primitives, strings and classes can be passed and returned. Exceptions come back as
+`hao_runtime::Error::Managed`. Generic types and methods, structs and arrays aren't bound yet.
 
 ## Thread safety
 
