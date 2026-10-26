@@ -28,7 +28,7 @@ pub mod game;
 pub mod generate;
 pub mod metadata;
 
-pub use binary::{Binary, BinaryImage, ElfImage};
+pub use binary::{Binary, BinaryImage, ElfImage, PeImage};
 pub use error::{Error, Result};
 pub use game::{FieldView, Game, MethodView, ParameterView, TypeView};
 pub use generate::{generate, GeneratedAssembly};

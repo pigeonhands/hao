@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    binary::{Binary, ElfImage, Il2CppType},
+    binary::{Binary, ElfImage, Il2CppType, PeImage},
     error::{Error, Result},
     generate::{generate, GeneratedAssembly},
     metadata::{
@@ -59,12 +59,16 @@ impl Game {
     /// e.g. files uploaded to a web page.
     pub fn from_bytes(metadata: Vec<u8>, binary: &[u8]) -> Result<Self> {
         let metadata = Metadata::parse(metadata)?;
-        if !pewter::elf::ElfFile::is_elf(binary) {
+        // ELF (`GameAssembly.so`) or PE (`GameAssembly.dll`), by magic.
+        let binary = if pewter::elf::ElfFile::is_elf(binary) {
+            Binary::read(&ElfImage::parse(binary)?, &metadata)?
+        } else if binary.starts_with(b"MZ") {
+            Binary::read(&PeImage::parse(binary)?, &metadata)?
+        } else {
             return Err(Error::Binary(
-                "the game binary is not ELF; PE game binaries aren't supported yet".into(),
+                "the game binary is neither ELF nor PE".into(),
             ));
-        }
-        let binary = Binary::read(&ElfImage::parse(binary)?, &metadata)?;
+        };
         Ok(Self::new(metadata, binary))
     }
 

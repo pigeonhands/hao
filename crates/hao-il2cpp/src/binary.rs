@@ -1,7 +1,10 @@
 //! The game binary (`GameAssembly`): the registration tables and the
 //! `Il2CppType` table that metadata type indices refer to.
 
-use pewter::elf::{ElfFile, RelocatedPointers, SegmentFlags, SegmentType};
+use pewter::{
+    elf::{ElfFile, RelocatedPointers, SegmentFlags, SegmentType},
+    pe::{file::definition::PEImageDef, sections::SectionFlags},
+};
 
 use crate::{
     error::{Error, Result},
@@ -81,6 +84,61 @@ impl BinaryImage for ElfImage<'_> {
                 p.segment_type == SegmentType::Load && !p.flags.contains(SegmentFlags::EXECUTE)
             })
             .map(|p| (p.vaddr, p.vaddr + p.file_size))
+            .collect()
+    }
+}
+
+/// A `GameAssembly.dll` (or any Il2Cpp PE binary), e.g. a Unity 6 / Windows game.
+///
+/// Pointers stored in a PE hold absolute virtual addresses at the preferred
+/// image base, so no relocation step is needed: the on-disk values and the
+/// addresses we compute are both in that base's space.
+pub struct PeImage {
+    pe: PEImageDef,
+    image_base: u64,
+}
+
+impl PeImage {
+    pub fn parse(data: &[u8]) -> Result<Self> {
+        let pe = PEImageDef::parse(data).map_err(|e| Error::Binary(format!("{:?}", e)))?;
+        let image_base = pe.optional_header.windows_specific_fields.image_base();
+        Ok(Self { pe, image_base })
+    }
+}
+
+impl BinaryImage for PeImage {
+    fn is_64(&self) -> bool {
+        self.pe
+            .optional_header
+            .windows_specific_fields
+            .is_pe32_plus()
+    }
+
+    fn bytes(&self, vaddr: u64, len: usize) -> Option<&[u8]> {
+        let rva = vaddr.checked_sub(self.image_base)?;
+        self.pe.read_at_rva(u32::try_from(rva).ok()?, len)
+    }
+
+    fn pointer(&self, vaddr: u64) -> Option<u64> {
+        let size = self.pointer_size() as usize;
+        let bytes = self.bytes(vaddr, size)?;
+        let mut buf = [0u8; 8];
+        buf[..size].copy_from_slice(bytes);
+        Some(u64::from_le_bytes(buf))
+    }
+
+    fn data_ranges(&self) -> Vec<(u64, u64)> {
+        self.pe
+            .sections
+            .iter()
+            .filter(|s| {
+                !s.characteristics.contains(SectionFlags::MEM_EXECUTE)
+                    && !s.characteristics.contains(SectionFlags::CNT_CODE)
+            })
+            .map(|s| {
+                let start = self.image_base + s.virtual_address as u64;
+                (start, start + s.virtual_size() as u64)
+            })
             .collect()
     }
 }

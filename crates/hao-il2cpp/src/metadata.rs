@@ -10,7 +10,8 @@
 //!   `element_type_index` and narrowed `generic_container_index`; `methods`
 //!   narrowed its middle index fields (moving `parameter_start`); `images` and
 //!   `assemblies` were reordered; `generic_parameters` narrowed `owner_index`.
-//!   The v39 layout was reverse-engineered against real Unity 6 games.
+//!   The v39 layout was reverse-engineered and validated against real Unity 6
+//!   games (which ship Windows PE binaries, read via pewter's PE support).
 
 use std::collections::HashMap;
 
@@ -340,13 +341,17 @@ impl Metadata {
     fn read_tables(&mut self) -> Result<()> {
         let v39 = self.version >= 39;
         if v39 {
-            // Unity 6 reordered images (type_start/type_count moved to the end)
-            // and inserted a custom-attribute index into the assembly name block.
+            // Unity 6 packs the image record unaligned and no longer stores
+            // type_start; type_count is at offset 10 and types are laid out in
+            // image order, so type_start is filled in as a running total below.
             self.images = self.table("images", 36, |c| {
-                let (name_index, assembly_index, token, entry_point_index) =
-                    (c.u32(), c.i32(), c.u32(), c.i32());
-                let (exported_type_start, exported_type_count, custom_attribute_start) =
-                    (c.i32(), c.u32(), c.i32());
+                let name_index = c.u32();
+                let assembly_index = c.i32();
+                let _pad = c.u16();
+                let type_count = c.u32();
+                let (token, entry_point_index, exported_type_start) = (c.u32(), c.i32(), c.i32());
+                let (exported_type_count, custom_attribute_start) = (c.u32(), c.i32());
+                let _tail = c.u16();
                 ImageDefinition {
                     name_index,
                     assembly_index,
@@ -356,10 +361,15 @@ impl Metadata {
                     exported_type_count,
                     custom_attribute_start,
                     custom_attribute_count: 0,
-                    type_start: c.i32(),
-                    type_count: c.u32(),
+                    type_start: 0,
+                    type_count,
                 }
             })?;
+            let mut start = 0;
+            for image in &mut self.images {
+                image.type_start = start;
+                start += image.type_count as i32;
+            }
             self.assemblies = self.table("assemblies", 68, |c| {
                 let (image_index, token) = (c.i32(), c.u32());
                 let (referenced_assembly_start, referenced_assembly_count) = (c.i32(), c.i32());
@@ -469,14 +479,17 @@ impl Metadata {
             })
         };
         self.type_definitions = self.table("type_definitions", type_size, read_type)?;
-        // v39 keeps the 32-byte method record but shrank the middle index fields,
-        // so parameter_start moves to offset 14; token/flags/counts stay put.
+        // v39 packs the 32-byte method record unaligned: declaring_type is 16-bit,
+        // return_type sits at offset 6, and parameter_start at offset 14. token and
+        // the trailing flags/slot/count u16s stay where v29 had them.
         self.methods = if v39 {
             self.table("methods", 32, |c| {
-                let (name_index, declaring_type, return_type) = (c.u32(), c.i32(), c.i32());
-                let _pad = c.u16();
+                let name_index = c.u32();
+                let declaring_type = c.u16() as i32;
+                let return_type = c.i32();
+                let generic_container_index = c.i32();
                 let parameter_start = c.i32();
-                let generic_container_index = c.i16() as i32;
+                let _pad = c.u16();
                 MethodDefinition {
                     name_index,
                     declaring_type,

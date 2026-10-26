@@ -10,15 +10,13 @@ Read Unity Il2Cpp games, with the goal of generating .NET proxy assemblies for t
 - [x] `global-metadata.dat` reader for metadata **v29** (Unity 2021.2 – 2023.x) and **v39**
       (Unity 6): images, assemblies, types, methods, fields, parameters, properties, events and
       generic parameters, with names
-- [x] `GameAssembly` binary (ELF): finds `MetadataRegistration` and decodes the `Il2CppType`
-      table, giving the types of fields, parameters and return values
+- [x] `GameAssembly` binary, **ELF (`.so`) and PE (`.dll`)**: finds `MetadataRegistration` and
+      decodes the `Il2CppType` table, giving the types of fields, parameters and return values.
+      Validated end-to-end on a native Linux game (v29) and a Windows / Unity 6 game (v39).
 - [x] declaration assemblies ("dummy DLLs"): one assembly per image with every type, field,
       constant, method signature, property, event, generic parameter and interface, with stub
       bodies. Other code compiles against them.
 - [ ] custom attributes (only `[DefaultMember]` for indexers is generated so far)
-- [ ] PE game binaries (`GameAssembly.dll`) — needed for the binary side of Unity 6 games, which
-      ship Windows builds; v39 metadata reading is validated, but its `Il2CppType` resolution and
-      DLL generation aren't yet, pending PE support
 - [ ] more metadata versions (v31)
 - [ ] `CodeRegistration` and method addresses
 - [ ] runtime proxy assemblies that call into the game, like Il2CppInterop
