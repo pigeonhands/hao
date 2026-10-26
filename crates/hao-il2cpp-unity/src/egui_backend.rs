@@ -30,7 +30,18 @@ use crate::{
 pub fn on_egui(ui: impl Fn(&egui::Context) + Send + Sync + 'static) -> Result<()> {
     let ui = Arc::new(ui);
     let state: Mutex<Option<EguiState>> = Mutex::new(None);
+    // The render hook fires once per camera, so several times per frame. Run egui
+    // (input + layout) only on the first callback of each frame: otherwise a click
+    // edge is read in whichever camera's pass happened to catch it, so presses get
+    // dropped. The render target persists, so one draw per frame is enough.
+    let last_frame = std::sync::atomic::AtomicI32::new(-1);
     crate::on_render(move |_camera| {
+        match crate::time::frame_count() {
+            Ok(frame) if last_frame.swap(frame, std::sync::atomic::Ordering::Relaxed) == frame => {
+                return
+            }
+            _ => {}
+        }
         let mut guard = state.lock().unwrap_or_else(|e| e.into_inner());
         let state = match guard.as_mut() {
             Some(state) => state,

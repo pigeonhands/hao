@@ -9,6 +9,7 @@ bindings! { engine_checks;
     TIME_GET_SCALE: "UnityEngine.CoreModule" "UnityEngine" "Time" "get_timeScale" () -> f32;
     TIME_SET_SCALE: "UnityEngine.CoreModule" "UnityEngine" "Time" "set_timeScale" (f32) -> ();
     TIME_GET_TIME: "UnityEngine.CoreModule" "UnityEngine" "Time" "get_time" () -> f32;
+    TIME_FRAME_COUNT: "UnityEngine.CoreModule" "UnityEngine" "Time" "get_frameCount" () -> i32;
     TIME_REALTIME: "UnityEngine.CoreModule" "UnityEngine" "Time" "get_realtimeSinceStartup" () -> f32;
 
     SCREEN_WIDTH: "UnityEngine.CoreModule" "UnityEngine" "Screen" "get_width" () -> i32;

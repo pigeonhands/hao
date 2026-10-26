@@ -96,6 +96,11 @@ pub mod time {
         TIME_DELTA.call(())
     }
 
+    /// The total number of frames rendered since startup.
+    pub fn frame_count() -> Result<i32> {
+        TIME_FRAME_COUNT.call(())
+    }
+
     /// How fast game time passes; 0 pauses most games.
     pub fn scale() -> Result<f32> {
         TIME_GET_SCALE.call(())
