@@ -155,8 +155,10 @@ impl Runtime {
 
     /// A native pointer to the static method `type_name::method` in `assembly`.
     ///
-    /// On CoreCLR the method must be `[UnmanagedCallersOnly]`. On Mono the
-    /// returned thunk takes an extra trailing `*mut *mut c_void` exception argument.
+    /// On CoreCLR the method must be `[UnmanagedCallersOnly]`; for a method that
+    /// isn't, use [`method_pointer`](Self::method_pointer) instead, which calls
+    /// any method by JIT-compiling it. On Mono the returned thunk takes an extra
+    /// trailing `*mut *mut c_void` exception argument.
     pub fn function_pointer(
         &self,
         assembly: &str,

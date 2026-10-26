@@ -369,19 +369,27 @@ impl CoreClr {
         type_name: &str,
         method: &str,
     ) -> Result<*const c_void> {
-        let type_name = wide(&format!("{}, {}", type_name, assembly));
-        let method = wide(method);
+        let full_type = wide(&format!("{}, {}", type_name, assembly));
+        let method_name = wide(method);
         let mut function = ptr::null_mut();
         let code = unsafe {
             (self.get_function_pointer)(
-                type_name.as_ptr(),
-                method.as_ptr(),
+                full_type.as_ptr(),
+                method_name.as_ptr(),
                 UNMANAGED_CALLERS_ONLY,
                 ptr::null_mut(),
                 ptr::null_mut(),
                 &mut function,
             )
         };
+        // GetFunctionPointer returns COR_E_INVALIDOPERATION for a method that
+        // isn't [UnmanagedCallersOnly]. Point at the method that handles those.
+        if code as u32 == 0x8013_1509 {
+            return Err(Error::Other(format!(
+                "{}::{} is not [UnmanagedCallersOnly]; use Runtime::method_pointer to call it",
+                type_name, method
+            )));
+        }
         check("get_function_pointer", code)?;
         Ok(function)
     }
