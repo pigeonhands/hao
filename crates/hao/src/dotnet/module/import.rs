@@ -4,7 +4,7 @@ use crate::{
     dotnet::{
         entries::*,
         il::MemberToken,
-        signature::{FieldSig, MemberRefSig, MethodSig},
+        signature::{FieldSig, MemberRefSig, MethodSig, TypeSig},
     },
     error::{HaoError, Result},
 };
@@ -222,5 +222,168 @@ impl Entry<Method> {
     /// Runs `f` on the method body. Returns `None` if the method has no body.
     pub fn edit_body<R>(&self, f: impl FnOnce(&mut crate::dotnet::il::MethodBody) -> R) -> Option<R> {
         self.get_mut().body.as_mut().map(f)
+    }
+}
+
+impl Module {
+    fn import_assembly_ref(&mut self, assembly: &Entry<AssemblyRef>) -> Entry<AssemblyRef> {
+        let name = assembly.get().name.clone();
+        if let Some(existing) = self.find_assembly_ref(&name) {
+            return existing;
+        }
+        let copy = Entry::new(AssemblyRef {
+            custom_attributes: Vec::new(),
+            ..assembly.get().clone()
+        });
+        self.assembly_refs.push(copy.clone());
+        copy
+    }
+
+    fn find_or_add_type_ref(&mut self, scope: ResolutionScope, namespace: &str, name: &str) -> Entry<TypeRef> {
+        if let Some(existing) = self.type_refs.iter().find(|t| {
+            let t = t.get();
+            t.full_name_is(namespace, name) && t.scope.as_ref() == Some(&scope)
+        }) {
+            return existing.clone();
+        }
+        let type_ref = Entry::new(TypeRef::new(scope, namespace, name));
+        self.type_refs.push(type_ref.clone());
+        type_ref
+    }
+
+    fn import_foreign_type_ref(&mut self, ty: &TypeDefOrRef, source: &Module) -> Result<Entry<TypeRef>> {
+        let unsupported = || HaoError::WriteError(format!("can't import {}", ty.full_name()));
+        let (scope, namespace, name) = match ty {
+            TypeDefOrRef::TypeDef(def) => {
+                let (parent, namespace, name) = {
+                    let d = def.get();
+                    (d.declaring_type.upgrade(), d.namespace.clone(), d.name.clone())
+                };
+                let scope = match parent {
+                    Some(parent) => ResolutionScope::TypeRef(
+                        self.import_foreign_type_ref(&TypeDefOrRef::TypeDef(parent), source)?,
+                    ),
+                    None => ResolutionScope::AssemblyRef(self.add_reference_to(source)?),
+                };
+                (scope, namespace, name)
+            }
+            TypeDefOrRef::TypeRef(r) => {
+                let (scope, namespace, name) = {
+                    let r = r.get();
+                    (r.scope.clone(), r.namespace.clone(), r.name.clone())
+                };
+                let scope = match scope.ok_or_else(unsupported)? {
+                    ResolutionScope::AssemblyRef(a) => ResolutionScope::AssemblyRef(self.import_assembly_ref(&a)),
+                    ResolutionScope::TypeRef(parent) => ResolutionScope::TypeRef(
+                        self.import_foreign_type_ref(&TypeDefOrRef::TypeRef(parent), source)?,
+                    ),
+                    ResolutionScope::Module(_) => ResolutionScope::AssemblyRef(self.add_reference_to(source)?),
+                    ResolutionScope::ModuleRef(_) => return Err(unsupported()),
+                };
+                (scope, namespace, name)
+            }
+            TypeDefOrRef::TypeSpec(_) => return Err(unsupported()),
+        };
+        Ok(self.find_or_add_type_ref(scope, &namespace, &name))
+    }
+
+    /// Imports a type that belongs to `source` so it can be used in this module.
+    pub fn import_foreign_type(&mut self, ty: &TypeDefOrRef, source: &Module) -> Result<TypeDefOrRef> {
+        match ty {
+            TypeDefOrRef::TypeSpec(spec) => {
+                let signature = spec.get().signature.clone();
+                let spec = Entry::new(TypeSpec {
+                    signature: self.import_foreign_signature(&signature, source)?,
+                    custom_attributes: Vec::new(),
+                });
+                self.type_specs.push(spec.clone());
+                Ok(TypeDefOrRef::TypeSpec(spec))
+            }
+            _ => self.import_foreign_type_ref(ty, source).map(TypeDefOrRef::TypeRef),
+        }
+    }
+
+    /// Imports every type in a signature from `source`.
+    pub fn import_foreign_signature(&mut self, sig: &TypeSig, source: &Module) -> Result<TypeSig> {
+        let boxed = |t: &TypeSig, this: &mut Self| this.import_foreign_signature(t, source).map(Box::new);
+        Ok(match sig {
+            TypeSig::Primitive(p) => TypeSig::Primitive(*p),
+            TypeSig::ValueType(t) => TypeSig::ValueType(self.import_foreign_type(t, source)?),
+            TypeSig::Class(t) => TypeSig::Class(self.import_foreign_type(t, source)?),
+            TypeSig::Ptr(t) => TypeSig::Ptr(boxed(t, self)?),
+            TypeSig::ByRef(t) => TypeSig::ByRef(boxed(t, self)?),
+            TypeSig::Pinned(t) => TypeSig::Pinned(boxed(t, self)?),
+            TypeSig::SzArray(t) => TypeSig::SzArray(boxed(t, self)?),
+            TypeSig::Array { element, shape } => TypeSig::Array {
+                element: boxed(element, self)?,
+                shape: shape.clone(),
+            },
+            TypeSig::GenericInst { generic, args } => TypeSig::GenericInst {
+                generic: boxed(generic, self)?,
+                args: args
+                    .iter()
+                    .map(|a| self.import_foreign_signature(a, source))
+                    .collect::<Result<_>>()?,
+            },
+            TypeSig::Var(i) => TypeSig::Var(*i),
+            TypeSig::MVar(i) => TypeSig::MVar(*i),
+            TypeSig::FnPtr(m) => TypeSig::FnPtr(Box::new(self.import_foreign_method_sig(m, source)?)),
+            TypeSig::Modified { required, modifier, ty } => TypeSig::Modified {
+                required: *required,
+                modifier: self.import_foreign_type(modifier, source)?,
+                ty: boxed(ty, self)?,
+            },
+        })
+    }
+
+    pub fn import_foreign_method_sig(&mut self, sig: &MethodSig, source: &Module) -> Result<MethodSig> {
+        Ok(MethodSig {
+            ret: self.import_foreign_signature(&sig.ret, source)?,
+            params: sig
+                .params
+                .iter()
+                .map(|p| self.import_foreign_signature(p, source))
+                .collect::<Result<_>>()?,
+            varargs: sig
+                .varargs
+                .iter()
+                .map(|p| self.import_foreign_signature(p, source))
+                .collect::<Result<_>>()?,
+            ..sig.clone()
+        })
+    }
+
+    /// A reference to `method`, which is defined in `source`.
+    pub fn import_foreign_method(&mut self, method: &Entry<Method>, source: &Module) -> Result<MemberToken> {
+        let (declaring, name, signature) = {
+            let m = method.get();
+            (m.declaring_type.upgrade(), m.name.clone(), m.signature.clone())
+        };
+        let declaring = declaring.ok_or_else(|| HaoError::WriteError(format!("{} has no declaring type", name)))?;
+        if !declaring.get().generic_params.is_empty() {
+            return Err(HaoError::WriteError(format!(
+                "importing methods of generic types is not supported ({})",
+                declaring.get().full_name()
+            )));
+        }
+        let parent = self.import_foreign_type(&TypeDefOrRef::TypeDef(declaring), source)?;
+        let signature = self.import_foreign_method_sig(&signature, source)?;
+        self.import_method_on(&parent, &name, signature)
+    }
+
+    /// A reference to `field`, which is defined in `source`.
+    pub fn import_foreign_field(&mut self, field: &Entry<Field>, source: &Module) -> Result<MemberToken> {
+        let (declaring, name, signature) = {
+            let f = field.get();
+            (f.declaring_type.upgrade(), f.name.clone(), f.signature.clone())
+        };
+        let declaring = declaring.ok_or_else(|| HaoError::WriteError(format!("{} has no declaring type", name)))?;
+        let parent = self.import_foreign_type(&TypeDefOrRef::TypeDef(declaring), source)?;
+        let ty = self.import_foreign_signature(&signature.ty, source)?;
+        Ok(MemberToken::MemberRef(self.import_member_ref(
+            parent,
+            &name,
+            MemberRefSig::Field(FieldSig { ty }),
+        )))
     }
 }
