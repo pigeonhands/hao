@@ -10,7 +10,10 @@ use crate::{
     binary::{Binary, ElfImage, Il2CppType},
     error::{Error, Result},
     generate::{generate, GeneratedAssembly},
-    metadata::{FieldDefinition, Metadata, MethodDefinition, ParameterDefinition, TypeDefinition, TypeDefinitionIndex},
+    metadata::{
+        FieldDefinition, Metadata, MethodDefinition, ParameterDefinition, TypeDefinition,
+        TypeDefinitionIndex,
+    },
 };
 
 const FIELD_STATIC: u16 = 0x10;
@@ -28,9 +31,17 @@ impl Game {
     pub fn open(dir: impl AsRef<Path>) -> Result<Self> {
         let dir = dir.as_ref();
         let metadata = std::fs::read_dir(dir)?
-            .filter_map(|e| e.ok().map(|e| e.path().join("il2cpp_data/Metadata/global-metadata.dat")))
+            .filter_map(|e| {
+                e.ok()
+                    .map(|e| e.path().join("il2cpp_data/Metadata/global-metadata.dat"))
+            })
             .find(|p| p.exists())
-            .ok_or_else(|| Error::NotFound(format!("*_Data/il2cpp_data/Metadata/global-metadata.dat in {}", dir.display())))?;
+            .ok_or_else(|| {
+                Error::NotFound(format!(
+                    "*_Data/il2cpp_data/Metadata/global-metadata.dat in {}",
+                    dir.display()
+                ))
+            })?;
         let binary = ["GameAssembly.so", "GameAssembly.dll"]
             .iter()
             .map(|name| dir.join(name))
@@ -78,7 +89,8 @@ impl Game {
 
     /// Every type definition in the game.
     pub fn types(&self) -> impl Iterator<Item = TypeView<'_>> {
-        (0..self.metadata.type_definitions.len() as TypeDefinitionIndex).map(|index| TypeView { game: self, index })
+        (0..self.metadata.type_definitions.len() as TypeDefinitionIndex)
+            .map(|index| TypeView { game: self, index })
     }
 
     /// Finds a type by its full name (`Namespace.Name`, `Outer/Nested`, `List`1`).
@@ -91,7 +103,10 @@ impl Game {
 
     /// The assembly names in the game, e.g. `Assembly-CSharp.dll`.
     pub fn image_names(&self) -> impl Iterator<Item = &str> {
-        self.metadata.images.iter().map(|i| self.metadata.image_name(i))
+        self.metadata
+            .images
+            .iter()
+            .map(|i| self.metadata.image_name(i))
     }
 
     /// Builds a declaration assembly for every image.
@@ -171,7 +186,13 @@ impl<'g> TypeView<'g> {
     }
 
     pub fn declaring_type(&self) -> Option<TypeView<'g>> {
-        self.game.metadata.declaring_type_definition(self.index).map(|index| TypeView { game: self.game, index })
+        self.game
+            .metadata
+            .declaring_type_definition(self.index)
+            .map(|index| TypeView {
+                game: self.game,
+                index,
+            })
     }
 
     pub fn nested_types(&self) -> impl Iterator<Item = TypeView<'g>> + 'g {
@@ -183,7 +204,10 @@ impl<'g> TypeView<'g> {
             .get(start..start + def.nested_type_count as usize)
             .unwrap_or(&[])
             .iter()
-            .map(move |index| TypeView { game, index: *index })
+            .map(move |index| TypeView {
+                game,
+                index: *index,
+            })
     }
 
     pub fn fields(&self) -> impl Iterator<Item = FieldView<'g>> + 'g {
@@ -319,7 +343,16 @@ impl std::fmt::Display for MethodView<'_> {
         if self.is_static() {
             write!(f, "static ")?;
         }
-        let params: Vec<String> = self.parameters().map(|p| format!("{} {}", p.type_name(), p.name())).collect();
-        write!(f, "{} {}({})", self.return_type_name(), self.name(), params.join(", "))
+        let params: Vec<String> = self
+            .parameters()
+            .map(|p| format!("{} {}", p.type_name(), p.name()))
+            .collect();
+        write!(
+            f,
+            "{} {}({})",
+            self.return_type_name(),
+            self.name(),
+            params.join(", ")
+        )
     }
 }

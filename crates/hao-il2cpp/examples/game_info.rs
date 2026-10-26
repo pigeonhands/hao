@@ -11,11 +11,17 @@ use hao_il2cpp::Game;
 
 fn main() -> hao_il2cpp::Result<()> {
     let mut args = std::env::args().skip(1);
-    let dir = args.next().expect("usage: game_info <game folder> [type name] [method name]");
+    let dir = args
+        .next()
+        .expect("usage: game_info <game folder> [type name] [method name]");
     let game = Game::open(dir)?;
 
     let Some(type_name) = args.next() else {
-        println!("{} types in {} assemblies:", game.types().count(), game.image_names().count());
+        println!(
+            "{} types in {} assemblies:",
+            game.types().count(),
+            game.image_names().count()
+        );
         for name in game.image_names() {
             println!("  {}", name);
         }
@@ -24,7 +30,14 @@ fn main() -> hao_il2cpp::Result<()> {
 
     let Some(ty) = game.find_type(&type_name) else {
         println!("no type named {}; similar names:", type_name);
-        for t in game.types().filter(|t| t.name().contains(type_name.rsplit('.').next().unwrap_or(&type_name))).take(10) {
+        for t in game
+            .types()
+            .filter(|t| {
+                t.name()
+                    .contains(type_name.rsplit('.').next().unwrap_or(&type_name))
+            })
+            .take(10)
+        {
             println!("  {}", t.full_name());
         }
         return Ok(());

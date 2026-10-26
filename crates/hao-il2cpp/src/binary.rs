@@ -26,7 +26,8 @@ pub trait BinaryImage {
     }
 
     fn u32(&self, vaddr: u64) -> Option<u32> {
-        self.bytes(vaddr, 4).map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+        self.bytes(vaddr, 4)
+            .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
     }
 
     fn u8(&self, vaddr: u64) -> Option<u8> {
@@ -65,14 +66,20 @@ impl BinaryImage for ElfImage<'_> {
 
     fn pointer(&self, vaddr: u64) -> Option<u64> {
         let value = self.elf.read_pointer(vaddr, &self.pointers)?;
-        Some(if self.is_64() { value } else { value & 0xFFFF_FFFF })
+        Some(if self.is_64() {
+            value
+        } else {
+            value & 0xFFFF_FFFF
+        })
     }
 
     fn data_ranges(&self) -> Vec<(u64, u64)> {
         self.elf
             .program_headers
             .iter()
-            .filter(|p| p.segment_type == SegmentType::Load && !p.flags.contains(SegmentFlags::EXECUTE))
+            .filter(|p| {
+                p.segment_type == SegmentType::Load && !p.flags.contains(SegmentFlags::EXECUTE)
+            })
             .map(|p| (p.vaddr, p.vaddr + p.file_size))
             .collect()
     }
@@ -103,9 +110,15 @@ pub enum TypeKind {
     Class(TypeDefinitionIndex),
     ValueType(TypeDefinitionIndex),
     SzArray(Box<Il2CppType>),
-    Array { element: Box<Il2CppType>, rank: u8 },
+    Array {
+        element: Box<Il2CppType>,
+        rank: u8,
+    },
     Ptr(Box<Il2CppType>),
-    GenericInst { generic: Box<Il2CppType>, args: Vec<Il2CppType> },
+    GenericInst {
+        generic: Box<Il2CppType>,
+        args: Vec<Il2CppType>,
+    },
     /// Index into [`Metadata::generic_parameters`].
     Var(i32),
     MVar(i32),
@@ -172,7 +185,10 @@ impl MetadataRegistration {
         match found.len() {
             1 => Ok(found.remove(0)),
             0 => Err(Error::Binary("MetadataRegistration not found".into())),
-            n => Err(Error::Binary(format!("{} candidates for MetadataRegistration", n))),
+            n => Err(Error::Binary(format!(
+                "{} candidates for MetadataRegistration",
+                n
+            ))),
         }
     }
 }
@@ -239,7 +255,10 @@ fn read_type(image: &impl BinaryImage, address: u64, depth: usize) -> Result<Il2
             let argc = image.pointer(class_inst).ok_or_else(unmapped)?;
             let argv = image.pointer(class_inst + p).ok_or_else(unmapped)?;
             if argc > 64 {
-                return Err(Error::Binary(format!("generic instance at {:#x} has {} arguments", data, argc)));
+                return Err(Error::Binary(format!(
+                    "generic instance at {:#x} has {} arguments",
+                    data, argc
+                )));
             }
             let args = (0..argc)
                 .map(|i| {
@@ -250,7 +269,9 @@ fn read_type(image: &impl BinaryImage, address: u64, depth: usize) -> Result<Il2
             TypeKind::GenericInst { generic, args }
         }
         element::FNPTR => TypeKind::FnPtr,
-        0x01..=0x0E | element::TYPEDBYREF | 0x18 | 0x19 | element::OBJECT => TypeKind::Primitive(element),
+        0x01..=0x0E | element::TYPEDBYREF | 0x18 | 0x19 | element::OBJECT => {
+            TypeKind::Primitive(element)
+        }
         other => TypeKind::Unknown(other),
     };
     Ok(Il2CppType { kind, attrs, byref })
@@ -304,7 +325,11 @@ impl Il2CppType {
             TypeKind::Class(t) | TypeKind::ValueType(t) => metadata.type_full_name(*t),
             TypeKind::SzArray(e) => format!("{}[]", e.name(metadata)),
             TypeKind::Array { element, rank } => {
-                format!("{}[{}]", element.name(metadata), ",".repeat(rank.saturating_sub(1) as usize))
+                format!(
+                    "{}[{}]",
+                    element.name(metadata),
+                    ",".repeat(rank.saturating_sub(1) as usize)
+                )
             }
             TypeKind::Ptr(e) => format!("{}*", e.name(metadata)),
             TypeKind::GenericInst { generic, args } => {

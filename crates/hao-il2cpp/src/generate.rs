@@ -5,20 +5,21 @@ use std::collections::HashMap;
 
 use hao::{
     dotnet::{
+        entries::MemberRef,
         entries::{
-            AssemblyRef, CustomAttribute, CustomAttributeCtor, CustomAttributeValue, Constant, Entry, Event, Field, GenericParam, GenericParamConstraint, InterfaceImpl, Method,
+            AssemblyRef, Constant, CustomAttribute, CustomAttributeCtor, CustomAttributeValue,
+            Entry, Event, Field, GenericParam, GenericParamConstraint, InterfaceImpl, Method,
             Param, Property, ResolutionScope, TypeDef, TypeDefOrRef, TypeRef, TypeSpec, Version,
         },
-        entries::MemberRef,
         il::{Instruction, MethodBody, OpCode},
         md::streams::tables_stream::{
-            EventFlags, FieldFlags, GenericParamFlags, MethodFlags, MethodImplFlags, ParamFlags, PropertyFlags,
-            TypeAttributes,
+            EventFlags, FieldFlags, GenericParamFlags, MethodFlags, MethodImplFlags, ParamFlags,
+            PropertyFlags, TypeAttributes,
         },
         module::{ModuleKind, TargetRuntime},
         signature::{
-            ArrayShape, CallingConvention, ElementType, FieldSig, MemberRefSig, MethodSig, PrimitiveType, PropertySig,
-            SignatureFlags, TypeSig,
+            ArrayShape, CallingConvention, ElementType, FieldSig, MemberRefSig, MethodSig,
+            PrimitiveType, PropertySig, SignatureFlags, TypeSig,
         },
     },
     Module,
@@ -88,8 +89,12 @@ fn constant(element_type: u8, data: &[u8]) -> Option<Constant> {
     let value = match element_type {
         0x02 | 0x04 | 0x05 => fixed(1)?,
         0x03 | 0x06 | 0x07 => fixed(2)?,
-        0x08 => read_compressed_i32(data, &mut position)?.to_le_bytes().to_vec(),
-        0x09 => read_compressed_u32(data, &mut position)?.to_le_bytes().to_vec(),
+        0x08 => read_compressed_i32(data, &mut position)?
+            .to_le_bytes()
+            .to_vec(),
+        0x09 => read_compressed_u32(data, &mut position)?
+            .to_le_bytes()
+            .to_vec(),
         0x0A | 0x0B | 0x0D => fixed(8)?,
         0x0C => fixed(4)?,
         element::STRING => {
@@ -192,7 +197,11 @@ impl<'a> Generator<'a> {
         } else {
             assembly.public_key_token.to_vec()
         };
-        self.modules[module].add_assembly_ref(self.metadata.string(assembly.name_index), version(assembly.version), &token)
+        self.modules[module].add_assembly_ref(
+            self.metadata.string(assembly.name_index),
+            version(assembly.version),
+            &token,
+        )
     }
 
     /// A reference from `module` to type definition `index`.
@@ -210,7 +219,9 @@ impl<'a> Generator<'a> {
                 TypeDefOrRef::TypeRef(r) => ResolutionScope::TypeRef(r),
                 _ => unreachable!("the parent is in another image"),
             },
-            None => ResolutionScope::AssemblyRef(self.assembly_ref(module, self.type_image[index as usize])),
+            None => ResolutionScope::AssemblyRef(
+                self.assembly_ref(module, self.type_image[index as usize]),
+            ),
         };
         let namespace = if matches!(scope, ResolutionScope::TypeRef(_)) {
             String::new()
@@ -284,7 +295,10 @@ impl<'a> Generator<'a> {
     }
 
     fn generic_params(&mut self, module: usize, container: i32) -> Vec<Entry<GenericParam>> {
-        let params = self.metadata.generic_container_parameters(container).to_vec();
+        let params = self
+            .metadata
+            .generic_container_parameters(container)
+            .to_vec();
         params
             .iter()
             .map(|g| {
@@ -319,7 +333,12 @@ impl<'a> Generator<'a> {
         let signature = MethodSig::new_instance(TypeSig::VOID, vec![TypeSig::STRING]);
         let constructor = match self.type_ref(module, index) {
             TypeDefOrRef::TypeDef(def) => {
-                let ctor = def.get().methods.iter().find(|m| m.get().is_ctor() && m.get().signature == signature).cloned()?;
+                let ctor = def
+                    .get()
+                    .methods
+                    .iter()
+                    .find(|m| m.get().is_ctor() && m.get().signature == signature)
+                    .cloned()?;
                 CustomAttributeCtor::Method(ctor)
             }
             TypeDefOrRef::TypeRef(r) => CustomAttributeCtor::MemberRef(Entry::new(MemberRef {
@@ -352,7 +371,11 @@ impl<'a> Generator<'a> {
 
         for (i, def) in self.metadata.type_definitions.iter().enumerate() {
             let start = def.nested_types_start.max(0) as usize;
-            let nested = self.metadata.nested_types.get(start..start + def.nested_type_count as usize).unwrap_or(&[]);
+            let nested = self
+                .metadata
+                .nested_types
+                .get(start..start + def.nested_type_count as usize)
+                .unwrap_or(&[]);
             for n in nested {
                 let child = &self.types[*n as usize];
                 child.get_mut().declaring_type = self.types[i].downgrade();
@@ -373,8 +396,15 @@ impl<'a> Generator<'a> {
             }
         }
         for module in &mut self.modules {
-            if module.types.first().is_none_or(|t| t.get().name != "<Module>") {
-                module.types.insert(0, Entry::new(TypeDef::new(TypeAttributes::empty(), "", "<Module>", None)));
+            if module
+                .types
+                .first()
+                .is_none_or(|t| t.get().name != "<Module>")
+            {
+                module.types.insert(
+                    0,
+                    Entry::new(TypeDef::new(TypeAttributes::empty(), "", "<Module>", None)),
+                );
             }
         }
     }
@@ -384,7 +414,8 @@ impl<'a> Generator<'a> {
         let def = self.metadata.type_definitions[index].clone();
         let entry = self.types[index].clone();
 
-        let is_interface = def.flags & TypeAttributes::ClassSemanticsMask.bits() == TypeAttributes::Interface.bits();
+        let is_interface = def.flags & TypeAttributes::ClassSemanticsMask.bits()
+            == TypeAttributes::Interface.bits();
         let extends = if def.parent_index >= 0 && !is_interface {
             self.type_def_or_ref(module, def.parent_index)
         } else {
@@ -414,18 +445,30 @@ impl<'a> Generator<'a> {
             let ty = self.binary.type_at(f.type_index).cloned();
             let attrs = ty.as_ref().map_or(0, |t| t.attrs);
             let mut flags = FieldFlags::from_bits_retain(attrs);
-            flags.remove(FieldFlags::HasFieldRVA | FieldFlags::HasFieldMarshal | FieldFlags::HasDefault);
+            flags.remove(
+                FieldFlags::HasFieldRVA | FieldFlags::HasFieldMarshal | FieldFlags::HasDefault,
+            );
             let signature = FieldSig {
                 ty: ty.map(|t| self.sig(module, &t)).unwrap_or(TypeSig::OBJECT),
             };
             let mut field = Field::new(flags, self.metadata.string(f.name_index), signature);
             let field_index = (field_start + offset) as i32;
-            if let Some(default) = self.metadata.field_default_values.iter().find(|d| d.field_index == field_index) {
-                let element = self.binary.type_at(default.type_index).and_then(|t| match t.kind {
-                    TypeKind::Primitive(e) => Some(e),
-                    _ => None,
+            if let Some(default) = self
+                .metadata
+                .field_default_values
+                .iter()
+                .find(|d| d.field_index == field_index)
+            {
+                let element = self
+                    .binary
+                    .type_at(default.type_index)
+                    .and_then(|t| match t.kind {
+                        TypeKind::Primitive(e) => Some(e),
+                        _ => None,
+                    });
+                field.constant = element.and_then(|e| {
+                    constant(e, self.metadata.default_value_data(default.data_index))
                 });
-                field.constant = element.and_then(|e| constant(e, self.metadata.default_value_data(default.data_index)));
                 if field.constant.is_some() {
                     field.flags.insert(FieldFlags::HasDefault);
                 }
@@ -438,7 +481,10 @@ impl<'a> Generator<'a> {
             let mut flags = MethodFlags::from_bits_retain(m.flags);
             let impl_flags = MethodImplFlags::from_bits_retain(m.iflags);
             let parameters = self.metadata.method_parameters(&m).to_vec();
-            let params: Vec<TypeSig> = parameters.iter().map(|p| self.sig_at(module, p.type_index)).collect();
+            let params: Vec<TypeSig> = parameters
+                .iter()
+                .map(|p| self.sig_at(module, p.type_index))
+                .collect();
             let generic_params = self.generic_params(module, m.generic_container_index);
             let signature = MethodSig {
                 calling_convention: CallingConvention::Default,
@@ -475,7 +521,10 @@ impl<'a> Generator<'a> {
                 && !impl_flags.contains(MethodImplFlags::InternalCall);
             if has_body {
                 method.body = Some(MethodBody {
-                    instructions: vec![Instruction::simple(OpCode::Ldnull), Instruction::simple(OpCode::Throw)],
+                    instructions: vec![
+                        Instruction::simple(OpCode::Ldnull),
+                        Instruction::simple(OpCode::Throw),
+                    ],
                     ..Default::default()
                 });
             }
@@ -483,13 +532,28 @@ impl<'a> Generator<'a> {
         }
 
         let property_start = def.property_start.max(0) as usize;
-        for p in self.metadata.properties.get(property_start..property_start + def.property_count as usize).unwrap_or(&[]).to_vec() {
-            let method = |i: i32| usize::try_from(i).ok().and_then(|i| methods.get(i)).cloned();
+        for p in self
+            .metadata
+            .properties
+            .get(property_start..property_start + def.property_count as usize)
+            .unwrap_or(&[])
+            .to_vec()
+        {
+            let method = |i: i32| {
+                usize::try_from(i)
+                    .ok()
+                    .and_then(|i| methods.get(i))
+                    .cloned()
+            };
             let (getter, setter) = (method(p.get), method(p.set));
             let (has_this, ty, params) = match (&getter, &setter) {
                 (Some(g), _) => {
                     let g = g.get();
-                    (g.signature.has_this(), g.signature.ret.clone(), g.signature.params.clone())
+                    (
+                        g.signature.has_this(),
+                        g.signature.ret.clone(),
+                        g.signature.params.clone(),
+                    )
                 }
                 (None, Some(s)) => {
                     let s = s.get();
@@ -502,7 +566,11 @@ impl<'a> Generator<'a> {
             let property = Property {
                 flags: PropertyFlags::from_bits_retain(p.attrs as u16),
                 name: self.metadata.string(p.name_index).to_owned(),
-                signature: PropertySig { has_this, ty, params },
+                signature: PropertySig {
+                    has_this,
+                    ty,
+                    params,
+                },
                 getter,
                 setter,
                 ..Default::default()
@@ -511,8 +579,19 @@ impl<'a> Generator<'a> {
         }
 
         let event_start = def.event_start.max(0) as usize;
-        for e in self.metadata.events.get(event_start..event_start + def.event_count as usize).unwrap_or(&[]).to_vec() {
-            let method = |i: i32| usize::try_from(i).ok().and_then(|i| methods.get(i)).cloned();
+        for e in self
+            .metadata
+            .events
+            .get(event_start..event_start + def.event_count as usize)
+            .unwrap_or(&[])
+            .to_vec()
+        {
+            let method = |i: i32| {
+                usize::try_from(i)
+                    .ok()
+                    .and_then(|i| methods.get(i))
+                    .cloned()
+            };
             let event = Event {
                 flags: EventFlags::empty(),
                 name: self.metadata.string(e.name_index).to_owned(),
@@ -545,9 +624,15 @@ pub fn generate(metadata: &Metadata, binary: &Binary) -> Result<Vec<GeneratedAss
     }
     for i in 0..metadata.type_definitions.len() {
         let entry = generator.types[i].clone();
-        let has_indexer = entry.get().properties.iter().any(|p| !p.get().signature.params.is_empty());
+        let has_indexer = entry
+            .get()
+            .properties
+            .iter()
+            .any(|p| !p.get().signature.params.is_empty());
         if has_indexer {
-            if let Some(attribute) = generator.default_member_attribute(generator.type_image[i], "Item") {
+            if let Some(attribute) =
+                generator.default_member_attribute(generator.type_image[i], "Item")
+            {
                 entry.get_mut().custom_attributes.push(attribute);
             }
         }
@@ -574,7 +659,10 @@ mod tests {
         assert_eq!(decode(&[0x02]), 1);
         assert_eq!(decode(&[0x01]), -1);
         assert_eq!(decode(&[0xFF]), i32::MIN);
-        assert_eq!(read_compressed_u32(&[0xF0, 0x78, 0x56, 0x34, 0x12], &mut 0), Some(0x1234_5678));
+        assert_eq!(
+            read_compressed_u32(&[0xF0, 0x78, 0x56, 0x34, 0x12], &mut 0),
+            Some(0x1234_5678)
+        );
         assert_eq!(read_compressed_u32(&[0x81, 0x02], &mut 0), Some(0x102));
     }
 }

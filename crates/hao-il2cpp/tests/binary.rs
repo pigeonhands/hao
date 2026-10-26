@@ -12,7 +12,11 @@ fn game() -> Option<Game> {
 }
 
 fn fields(game: &Game, type_name: &str) -> Vec<String> {
-    game.find_type(type_name).unwrap().fields().map(|f| f.to_string()).collect()
+    game.find_type(type_name)
+        .unwrap()
+        .fields()
+        .map(|f| f.to_string())
+        .collect()
 }
 
 #[test]
@@ -28,7 +32,12 @@ fn decodes_the_whole_type_table() {
     }
     // Every type definition's own type points back at it.
     for ty in game.types() {
-        match &game.binary().type_at(ty.definition().byval_type_index).unwrap().kind {
+        match &game
+            .binary()
+            .type_at(ty.definition().byval_type_index)
+            .unwrap()
+            .kind
+        {
             TypeKind::Class(t) | TypeKind::ValueType(t) => assert_eq!(*t, ty.index()),
             TypeKind::GenericInst { .. } => {}
             // Built in types such as System.String use their element type.
@@ -47,8 +56,11 @@ fn field_types_of_framework_types() {
     assert!(string.contains(&"static string Empty".to_owned()));
 
     let dictionary = fields(&game, "System.Collections.Generic.Dictionary`2");
-    assert!(dictionary.contains(&"System.Collections.Generic.Dictionary/Entry<TKey, TValue>[] _entries".to_owned()));
-    assert!(dictionary.contains(&"System.Collections.Generic.IEqualityComparer<TKey> _comparer".to_owned()));
+    assert!(dictionary.contains(
+        &"System.Collections.Generic.Dictionary/Entry<TKey, TValue>[] _entries".to_owned()
+    ));
+    assert!(dictionary
+        .contains(&"System.Collections.Generic.IEqualityComparer<TKey> _comparer".to_owned()));
 }
 
 #[test]
@@ -59,7 +71,14 @@ fn method_signatures() {
         string
             .methods()
             .filter(|m| m.name() == name)
-            .map(|m| format!("{} {}({})", m.return_type_name(), name, m.parameter_type_names().join(", ")))
+            .map(|m| {
+                format!(
+                    "{} {}({})",
+                    m.return_type_name(),
+                    name,
+                    m.parameter_type_names().join(", ")
+                )
+            })
             .collect()
     };
     assert!(overloads("Concat").contains(&"string Concat(string, string)".to_owned()));
@@ -75,23 +94,48 @@ fn generates_declaration_assemblies() {
     let paths = game.write_assemblies(&out).unwrap();
     assert_eq!(paths.len(), game.image_names().count());
 
-    let modules: Vec<hao::Module> = paths.iter().map(|p| hao::Module::from_path_no_resolve(p).unwrap()).collect();
+    let modules: Vec<hao::Module> = paths
+        .iter()
+        .map(|p| hao::Module::from_path_no_resolve(p).unwrap())
+        .collect();
     let generated_types: usize = modules
         .iter()
-        .map(|m| m.all_types().iter().filter(|t| t.get().name != "<Module>").count())
+        .map(|m| {
+            m.all_types()
+                .iter()
+                .filter(|t| t.get().name != "<Module>")
+                .count()
+        })
         .sum();
-    assert_eq!(generated_types, game.types().filter(|t| t.name() != "<Module>").count());
+    assert_eq!(
+        generated_types,
+        game.types().filter(|t| t.name() != "<Module>").count()
+    );
 
     let mscorlib = modules.iter().find(|m| m.name() == "mscorlib.dll").unwrap();
     // Unused constants are stripped by Il2Cpp, but enum members are kept.
     let day = mscorlib.find_type("System", "DayOfWeek").unwrap();
-    let constant = |name: &str| day.get().find_field(name).unwrap().get().constant.clone().unwrap().as_i64();
+    let constant = |name: &str| {
+        day.get()
+            .find_field(name)
+            .unwrap()
+            .get()
+            .constant
+            .clone()
+            .unwrap()
+            .as_i64()
+    };
     assert_eq!(constant("Sunday"), Some(0));
     assert_eq!(constant("Saturday"), Some(6));
 
-    let dictionary = mscorlib.find_type("System.Collections.Generic", "Dictionary`2").unwrap();
+    let dictionary = mscorlib
+        .find_type("System.Collections.Generic", "Dictionary`2")
+        .unwrap();
     let dictionary = dictionary.get();
     assert_eq!(dictionary.generic_params.len(), 2);
-    assert!(dictionary.custom_attributes.iter().any(|a| a.type_name() == "System.Reflection.DefaultMemberAttribute"));
+    assert!(dictionary
+        .custom_attributes
+        .iter()
+        .any(|a| a.type_name() == "System.Reflection.DefaultMemberAttribute"));
     assert!(dictionary.find_method("TryGetValue").is_some());
 }
