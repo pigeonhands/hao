@@ -16,7 +16,7 @@ readme = "README.md"
 
 [dependencies]
 thiserror = "2"
-pewter = "0.0.6"
+pewter = "0.0.7"
 strum = { version = "0.28", features = ["derive"] }
 bitflags = "2.13"
 uuid = "1.29"

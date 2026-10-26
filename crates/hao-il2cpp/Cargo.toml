@@ -11,6 +11,5 @@ keywords = ["unity", "il2cpp", "dotnet", "modding"]
 
 [dependencies]
 hao = { version = "0.0.4", path = "../hao" }
-# TODO: bump to "0.0.7" once pewter with `image::LoadedImage` is published.
-pewter = { version = "0.0.6", path = "../../../pewter" }
+pewter = "0.0.7"
 thiserror = "2"
