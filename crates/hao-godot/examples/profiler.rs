@@ -25,7 +25,7 @@ static LOAD: extern "C" fn() = load;
 
 extern "C" fn load() {
     hao_godot::log("profiler mod loaded; routing profiler logs to the hao-godot log");
-    hao_runtime::profiler::set_logger(|msg| hao_godot::log(msg));
+    hao_runtime::set_logger(hao_godot::log);
     // Log JITed methods of the game assembly (override with HAO_PROFILE_MODULE).
     let watch = std::env::var("HAO_PROFILE_MODULE").unwrap_or_else(|_| "sts2".to_string());
     hao_runtime::profiler::watch_module(&watch);

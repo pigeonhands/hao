@@ -14,6 +14,12 @@ libloading = "0.9"
 thiserror = "2"
 hao = { version = "0.0.5", path = "../hao", optional = true }
 
+# For `attach`: hooking `coreclr_initialize` to capture a running host. The
+# `hooking` crate's inline hook is x86_64-only, and this path is Linux-specific.
+[target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
+hooking = "0.6"
+libc = "0.2"
+
 [dev-dependencies]
 libloading = "0.9"
 hao = { path = "../hao" }

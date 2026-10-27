@@ -89,25 +89,7 @@ const IID_ICORPROFILERCALLBACK3: Guid = guid(0x4FD2_ED52, 0x7731, 0x4B8D, [0x94,
 const IID_ICORPROFILERCALLBACK4: Guid = guid(0x7B63_B2E3, 0x107D, 0x4D48, [0xB2, 0xF6, 0xF6, 0x1E, 0x22, 0x94, 0x70, 0xD2]);
 const IID_ICORPROFILERINFO: Guid = guid(0x28B5_557D, 0x3F3F, 0x48B4, [0x90, 0xB2, 0x5F, 0x9E, 0xEA, 0x2F, 0x6C, 0x48]);
 
-// --- logging -------------------------------------------------------------
-
-static LOGGER: AtomicPtr<()> = AtomicPtr::new(std::ptr::null_mut());
-
-/// Routes profiler log lines to `f`. Without one, lines go to stderr (which a
-/// sandboxed game may swallow, so a host usually points this at a file).
-pub fn set_logger(f: fn(&str)) {
-    LOGGER.store(f as *mut (), Ordering::SeqCst);
-}
-
-fn log(msg: &str) {
-    let f = LOGGER.load(Ordering::SeqCst);
-    if f.is_null() {
-        eprintln!("[hao-profiler] {msg}");
-    } else {
-        let f: fn(&str) = unsafe { std::mem::transmute(f) };
-        f(msg);
-    }
-}
+use crate::log::log;
 
 /// The captured `ICorProfilerInfo` (really the highest version the runtime gave
 /// us via the base IID). ReJIT and code-info layers read this.
