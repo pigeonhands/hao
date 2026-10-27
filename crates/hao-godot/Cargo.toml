@@ -1,0 +1,14 @@
+[package]
+name = "hao-godot"
+version = "0.0.1"
+edition = "2021"
+description = "Attach to a Godot (CoreCLR / .NET) game's runtime for native mods"
+license = "MIT"
+
+[dependencies]
+hooking = "0.6"
+libc = "0.2"
+
+[[example]]
+name = "capture"
+crate-type = ["cdylib"]
