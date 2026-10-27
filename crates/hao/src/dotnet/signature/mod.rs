@@ -13,6 +13,7 @@ use crate::dotnet::entries::TypeDefOrRef;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, FromRepr)]
 #[repr(u8)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub enum ElementType {
     End = 0x00,
     Void = 0x01,
@@ -53,6 +54,7 @@ pub enum ElementType {
 /// Built-in types, named with their C# keyword.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, FromRepr, IntoStaticStr)]
 #[repr(u8)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub enum PrimitiveType {
     #[strum(serialize = "void")]
     Void = 0x01,
@@ -110,6 +112,7 @@ impl PrimitiveType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ArrayShape {
     pub rank: u32,
     pub sizes: Vec<u32>,
@@ -117,6 +120,8 @@ pub struct ArrayShape {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum TypeSig {
     Primitive(PrimitiveType),
     ValueType(TypeDefOrRef),
@@ -212,6 +217,7 @@ impl TypeSig {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, FromRepr)]
 #[repr(u8)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub enum CallingConvention {
     #[default]
     Default = 0x0,
@@ -230,6 +236,7 @@ pub enum CallingConvention {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct SignatureFlags: u8 {
         const GENERIC = 0x10;
         const HAS_THIS = 0x20;
@@ -238,6 +245,7 @@ bitflags! {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct MethodSig {
     pub calling_convention: CallingConvention,
     pub flags: SignatureFlags,
@@ -282,11 +290,13 @@ impl MethodSig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct FieldSig {
     pub ty: TypeSig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct PropertySig {
     pub has_this: bool,
     pub ty: TypeSig,
@@ -295,6 +305,8 @@ pub struct PropertySig {
 
 /// Signature of a [`MemberRef`](crate::dotnet::entries::MemberRef).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum MemberRefSig {
     Method(MethodSig),
     Field(FieldSig),

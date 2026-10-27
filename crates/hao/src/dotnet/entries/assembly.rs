@@ -8,6 +8,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ModuleDef {
     pub generation: u16,
     pub name: String,
@@ -24,6 +25,7 @@ impl EntryName for ModuleDef {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Version {
     pub major: u16,
     pub minor: u16,
@@ -43,6 +45,7 @@ impl std::fmt::Display for Version {
 
 /// The assembly manifest of the current module.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Assembly {
     pub hash_alg_id: u32,
     pub version: Version,
@@ -61,6 +64,7 @@ impl EntryName for Assembly {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct AssemblyRef {
     pub version: Version,
     pub flags: AssemblyFlags,
@@ -96,6 +100,7 @@ impl EntryName for AssemblyRef {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct File {
     pub flags: FileFlags,
     pub name: String,
@@ -110,6 +115,8 @@ impl EntryName for File {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum Implementation {
     File(Entry<File>),
     AssemblyRef(Entry<AssemblyRef>),
@@ -118,6 +125,7 @@ pub enum Implementation {
 
 /// A type exported (or forwarded) by this assembly.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ExportedType {
     pub flags: TypeAttributes,
     pub type_def_id: u32,
@@ -134,6 +142,8 @@ impl EntryName for ExportedType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum ResourceData {
     Embedded(Vec<u8>),
     Linked {
@@ -149,6 +159,7 @@ impl Default for ResourceData {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ManifestResource {
     pub flags: ManifestResourceFlags,
     pub name: String,

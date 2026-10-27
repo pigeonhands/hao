@@ -19,6 +19,8 @@ const TAG_ENUM: u8 = 0x55;
 
 /// The type of a custom attribute argument.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum CAType {
     /// `bool` through `double`, and `string`.
     Primitive(PrimitiveType),
@@ -34,6 +36,8 @@ pub enum CAType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum CAValue {
     Bool(bool),
     Char(u16),
@@ -146,6 +150,7 @@ impl From<bool> for CAValue {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct CANamedArgument {
     pub is_field: bool,
     pub name: String,
@@ -172,6 +177,7 @@ impl CANamedArgument {
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct CustomAttributeValue {
     pub fixed: Vec<CAValue>,
     pub named: Vec<CANamedArgument>,

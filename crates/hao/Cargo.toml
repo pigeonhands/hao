@@ -20,6 +20,7 @@ pewter = "0.0.9"
 strum = { version = "0.28", features = ["derive"] }
 bitflags = "2.13"
 uuid = "1.29"
+facet = { version = "0.50.0-rc.7", optional = true, features = ["uuid"] }
 
 # Browser wasm has no source of randomness, so new module ids are derived from their name there.
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
@@ -28,3 +29,7 @@ uuid = { version = "1.29", features = ["v4"] }
 [features]
 default = []
 sync = []
+# Compile-time reflection, via facet, for registering hao's types with an
+# external consumer such as a scripting runtime. Implies `sync`: the entry graph
+# is `Arc`/`RwLock`, which facet can reflect, where `Rc`/`RefCell` cannot.
+reflect = ["dep:facet", "sync", "pewter/reflect"]

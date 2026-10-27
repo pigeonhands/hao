@@ -4,6 +4,8 @@ use crate::dotnet::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum CustomAttributeCtor {
     Method(Entry<Method>),
     MemberRef(Entry<MemberRef>),
@@ -11,6 +13,7 @@ pub enum CustomAttributeCtor {
 
 /// A custom attribute. The value is kept as the raw blob (II.23.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct CustomAttribute {
     pub constructor: CustomAttributeCtor,
     pub value: Vec<u8>,
@@ -59,6 +62,7 @@ impl CustomAttribute {
 
 /// A compile time constant for a field, parameter or property.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Constant {
     pub element_type: ElementType,
     pub value: Vec<u8>,
@@ -98,6 +102,7 @@ impl Constant {
 
 /// Declarative security (II.22.11). The permission set is the raw blob.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct DeclSecurity {
     pub action: u16,
     pub permission_set: Vec<u8>,
@@ -106,6 +111,7 @@ pub struct DeclSecurity {
 
 /// P/Invoke information for a method or field.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ImplMap {
     pub flags: PInvokeMapFlags,
     pub import_name: String,

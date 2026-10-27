@@ -7,6 +7,7 @@ use crate::dotnet::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet), repr(C))]
 pub enum ModuleKind {
     #[default]
     Dll,

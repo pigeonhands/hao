@@ -80,6 +80,7 @@ mod imp {
     }
 
     #[derive(Debug, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct RidCell(AtomicU32);
 
     impl RidCell {

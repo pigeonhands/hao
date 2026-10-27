@@ -25,6 +25,7 @@ use crate::{
 /// Entries reference each other freely, so dropping a `Module` clears every
 /// entry it owns to break those cycles. Entries should not outlive their module.
 #[derive(Debug, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Module {
     pub module: Entry<ModuleDef>,
     pub assembly: Option<Entry<Assembly>>,
@@ -42,9 +43,12 @@ pub struct Module {
     pub entry_point: Option<Entry<Method>>,
     /// Metadata version string, e.g. `v4.0.30319`.
     pub runtime_version: String,
+    #[cfg_attr(feature = "reflect", facet(skip))]
     pub(crate) image: Vec<u8>,
+    #[cfg_attr(feature = "reflect", facet(skip))]
     pub(crate) cor20: ImageCor20Header,
     /// Used when writing a module that wasn't loaded from an image.
+    #[cfg_attr(feature = "reflect", facet(skip))]
     pub(crate) kind: super::ModuleKind,
 }
 

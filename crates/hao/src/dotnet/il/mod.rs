@@ -21,10 +21,13 @@ use crate::dotnet::{
 /// Index of an instruction in [`MethodBody::instructions`].
 /// Equal to `instructions.len()` for the end of the method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Label(pub usize);
 
 /// A metadata token operand, resolved to its entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum MemberToken {
     TypeDef(Entry<TypeDef>),
     TypeRef(Entry<TypeRef>),
@@ -105,6 +108,8 @@ impl MemberToken {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum Operand {
     None,
     Int32(i32),
@@ -139,6 +144,7 @@ impl From<MemberToken> for Operand {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Instruction {
     pub opcode: OpCode,
     pub operand: Operand,
@@ -267,6 +273,8 @@ pub fn instruction_offsets(instructions: &[Instruction]) -> Vec<u32> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum HandlerKind {
     Catch(TypeDefOrRef),
     Filter(Label),
@@ -275,6 +283,7 @@ pub enum HandlerKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ExceptionHandler {
     pub kind: HandlerKind,
     pub try_start: Label,
@@ -295,6 +304,7 @@ impl ExceptionHandler {
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct MethodBody {
     pub max_stack: u16,
     pub init_locals: bool,

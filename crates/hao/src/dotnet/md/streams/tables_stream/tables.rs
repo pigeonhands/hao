@@ -73,6 +73,7 @@ impl<'a> ReadData<TypeRefTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct TypeAttributes: u32 {
                  // Use this mask to retrieve the type visibility information.
         const     VisibilityMask        =   0x00000007;
@@ -181,6 +182,7 @@ impl<'a> ReadData<FieldPtrTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct FieldFlags: u16 {
         // member access mask - Use this mask to retrieve accessibility information.
         const FieldAccessMask           =   0x0007;
@@ -259,6 +261,7 @@ impl<'a> ReadData<MethodPtrTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct MethodImplFlags: u16 {
            // code impl mask
         const CodeTypeMask      =   0x0003;   // Flags about code type.
@@ -288,6 +291,7 @@ bitflags! {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct MethodFlags: u16 {
         // member access mask - Use this mask to retrieve accessibility information.
         const MemberAccessMask          =   0x0007;
@@ -384,6 +388,7 @@ impl<'a> ReadData<ParamPtrTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct ParamFlags: u16 {
         const In                        =   0x0001;     // Param is [In]
         const Out                       =   0x0002;     // Param is [out]
@@ -678,6 +683,7 @@ impl<'a> ReadData<EventPtrTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct EventFlags: u16 {
         const SpecialName           =   0x0200;     // const ent is special. Name describes how.
 
@@ -755,6 +761,7 @@ impl<'a> ReadData<PropertyPtrTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct PropertyFlags: u16 {
         const SpecialName           =   0x0200;     // const operty is special. Name describes how.
 
@@ -795,6 +802,7 @@ impl<'a> ReadData<PropertyTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct MethodSemanticsFlags: u16 {
         const Setter    =   0x0001;     // Setter for property
         const Getter    =   0x0002;     // Getter for property
@@ -893,6 +901,7 @@ impl<'a> ReadData<TypeSpecTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct PInvokeMapFlags: u16 {
         const NoMangle          = 0x0001;   // Pinvoke is to use the member name as specified.
 
@@ -1019,6 +1028,7 @@ impl<'a> ReadData<ENCMapTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct AssemblyFlags: u32 {
         const PublicKey             =   0x0001;     // The assembly ref holds the full (unhashed) public key.
 
@@ -1226,6 +1236,7 @@ impl<'a> ReadData<AssemblyRefOSTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct FileFlags: u32 {
         const ContainsMetaData      =   0x0000;     // This is not a resource file
         const ContainsNoMetaData    =   0x0001;     // This is a resource file or other non-metadata-containing file                                      // assembly from a different publisher.
@@ -1290,6 +1301,7 @@ impl<'a> ReadData<ExportedTypeTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct ManifestResourceFlags: u32 {
         const VisibilityMask        =   0x0007;
         const Public                =   0x0001;     // The Resource is exported from the Assembly.
@@ -1349,6 +1361,7 @@ impl<'a> ReadData<NestedClassTableRow> for TablesStreamReader<'a> {
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct GenericParamFlags: u16 {
         // Variance of type parameters; only applicable to generic parameters
         // for generic interfaces and delegates

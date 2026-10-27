@@ -9,6 +9,8 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum TypeDefOrRef {
     TypeDef(Entry<TypeDef>),
     TypeRef(Entry<TypeRef>),
@@ -65,6 +67,8 @@ impl TypeDefOrRef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum ResolutionScope {
     Module(Entry<ModuleDef>),
     ModuleRef(Entry<ModuleRef>),
@@ -73,6 +77,7 @@ pub enum ResolutionScope {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct TypeRef {
     /// `None` means the type is found through the `ExportedType` table.
     pub scope: Option<ResolutionScope>,
@@ -147,6 +152,7 @@ impl EntryName for TypeRef {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct TypeSpec {
     pub signature: TypeSig,
     pub custom_attributes: Vec<CustomAttribute>,
@@ -159,6 +165,8 @@ impl EntryName for TypeSpec {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum MemberRefParent {
     TypeDef(Entry<TypeDef>),
     TypeRef(Entry<TypeRef>),
@@ -186,6 +194,7 @@ impl Default for MemberRefParent {
 
 /// A reference to a field or method, usually in another assembly.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct MemberRef {
     pub parent: MemberRefParent,
     pub name: String,
@@ -205,6 +214,8 @@ impl EntryName for MemberRef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum MethodDefOrRef {
     Method(Entry<Method>),
     MemberRef(Entry<MemberRef>),
@@ -227,6 +238,7 @@ impl Default for MethodDefOrRef {
 
 /// An instantiation of a generic method.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct MethodSpec {
     pub method: MethodDefOrRef,
     pub instantiation: Vec<TypeSig>,
@@ -240,6 +252,7 @@ impl EntryName for MethodSpec {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ModuleRef {
     pub name: String,
     pub custom_attributes: Vec<CustomAttribute>,

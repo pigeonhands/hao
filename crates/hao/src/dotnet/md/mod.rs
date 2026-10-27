@@ -9,6 +9,7 @@ pub struct MDToken(u32);
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct MDStreamFlags: u8 {
         const BigStrings    = 1;
         const BigGUID       = 2;

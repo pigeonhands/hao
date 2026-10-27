@@ -12,12 +12,14 @@ use crate::dotnet::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ClassLayout {
     pub packing_size: u16,
     pub class_size: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct InterfaceImpl {
     pub interface: TypeDefOrRef,
     pub custom_attributes: Vec<CustomAttribute>,
@@ -34,12 +36,14 @@ impl InterfaceImpl {
 
 /// An explicit interface method implementation (II.22.27).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct MethodImpl {
     pub body: MethodDefOrRef,
     pub declaration: MethodDefOrRef,
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct TypeDef {
     pub flags: TypeAttributes,
     pub name: String,
@@ -213,6 +217,7 @@ impl EntryName for TypeDef {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Field {
     pub flags: FieldFlags,
     pub name: String,
@@ -250,6 +255,7 @@ impl EntryName for Field {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Method {
     pub flags: MethodFlags,
     pub impl_flags: MethodImplFlags,
@@ -337,6 +343,7 @@ impl EntryName for Method {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Param {
     pub flags: ParamFlags,
     pub sequence: u16,
@@ -363,6 +370,7 @@ impl EntryName for Param {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Property {
     pub flags: PropertyFlags,
     pub name: String,
@@ -381,6 +389,7 @@ impl EntryName for Property {
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Event {
     pub flags: EventFlags,
     pub name: String,
@@ -399,12 +408,14 @@ impl EntryName for Event {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct GenericParamConstraint {
     pub constraint: TypeDefOrRef,
     pub custom_attributes: Vec<CustomAttribute>,
 }
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct GenericParam {
     pub number: u16,
     pub flags: GenericParamFlags,

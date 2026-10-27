@@ -5,6 +5,7 @@ use std::{
 
 use crate::sync::{self, Lock, ReadGuard, RidCell, Shared, WeakShared, WriteGuard};
 
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 struct EntryInner<T> {
     rid: RidCell,
     value: Lock<T>,
@@ -14,6 +15,7 @@ struct EntryInner<T> {
 ///
 /// Cloning an `Entry` is cheap and produces another handle to the same value.
 /// Entries compare and hash by identity.
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Entry<T>(Shared<EntryInner<T>>);
 
 impl<T> Entry<T> {
@@ -137,6 +139,7 @@ pub trait EntryName {
 }
 
 /// A non-owning [`Entry`] handle, used for back references like a method's declaring type.
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct WeakEntry<T>(WeakShared<EntryInner<T>>);
 
 impl<T> WeakEntry<T> {

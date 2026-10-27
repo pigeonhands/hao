@@ -9,6 +9,7 @@ use bitflags::bitflags;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[cfg_attr(feature = "reflect", derive(facet::Facet), facet(opaque))]
     pub struct TableExistsFlags: u64 {
         const Module	= 1<<0;
         const TypeRef	= 1<<1;

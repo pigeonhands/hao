@@ -1,6 +1,8 @@
 use strum::{EnumIter, FromRepr, IntoStaticStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum OperandType {
     None,
     ShortI,
@@ -35,6 +37,8 @@ impl OperandType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum FlowControl {
     Next,
     Branch,
@@ -48,6 +52,7 @@ pub enum FlowControl {
 
 /// Number of stack slots popped / pushed. `None` means it depends on the operand.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct StackBehaviour {
     pub pop: Option<u8>,
     pub push: Option<u8>,
@@ -67,6 +72,7 @@ macro_rules! opcodes {
         #[allow(non_camel_case_types)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, FromRepr, IntoStaticStr, EnumIter)]
         #[repr(u16)]
+        #[cfg_attr(feature = "reflect", derive(facet::Facet))]
         pub enum OpCode {
             $(
                 #[strum(serialize = $name)]

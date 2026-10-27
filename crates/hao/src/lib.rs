@@ -35,6 +35,8 @@
 pub mod dotnet;
 pub mod error;
 pub mod io;
+#[cfg(feature = "reflect")]
+pub mod reflect;
 pub mod sync;
 
 pub use dotnet::{module::resolver, Module};

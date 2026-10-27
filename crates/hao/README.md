@@ -153,6 +153,16 @@ cargo run --example dump_csharp -- tests/fixtures/out/Sample.dll --il
 Entries use `Rc<RefCell<T>>` by default. Enable the `sync` feature to use `Arc<RwLock<T>>`
 instead, which makes `Module` `Send + Sync`.
 
+## Reflection
+
+The `reflect` feature derives [`facet::Facet`] across the modeled metadata graph, so a consumer
+such as a scripting runtime can register hao's types by walking the shapes in `hao::reflect::roots`
+rather than listing them. It implies `sync`, since facet can reflect `Arc`/`RwLock` but not
+`Rc`/`RefCell`. bitflags sets are reflected opaquely; read their names through
+[`bitflags::Flags::FLAGS`].
+
+[`facet::Facet`]: https://docs.rs/facet
+
 ## Tests
 
 The tests build `tests/fixtures/Sample` with the dotnet SDK and run the rewritten assemblies with
