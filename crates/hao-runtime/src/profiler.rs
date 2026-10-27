@@ -16,8 +16,12 @@
 #![allow(clippy::missing_safety_doc)]
 
 use std::{
+    collections::HashMap,
     ffi::c_void,
-    sync::atomic::{AtomicPtr, Ordering},
+    sync::{
+        atomic::{AtomicPtr, Ordering},
+        Mutex,
+    },
 };
 
 type Hresult = i32;
@@ -27,8 +31,36 @@ const E_POINTER: Hresult = 0x8000_4003u32 as Hresult;
 const CLASS_E_CLASSNOTAVAILABLE: Hresult = 0x8004_0111u32 as Hresult;
 
 // COR_PRF_MONITOR flags (corprof.idl).
+const COR_PRF_MONITOR_MODULE_LOADS: u32 = 0x0000_0004;
 const COR_PRF_MONITOR_JIT_COMPILATION: u32 = 0x0000_0020;
 const COR_PRF_ENABLE_REJIT: u32 = 0x0004_0000;
+
+// ICorProfilerInfo vtable slots (3 IUnknown methods precede ICorProfilerInfo;
+// Info2 follows all 33 Info1 methods). Resolved from corprof.idl.
+const SLOT_GET_FUNCTION_FROM_TOKEN: usize = 8;
+const SLOT_GET_FUNCTION_INFO: usize = 15;
+const SLOT_SET_EVENT_MASK: usize = 16;
+const SLOT_GET_MODULE_INFO: usize = 20;
+const SLOT_GET_CODE_INFO2: usize = 42;
+
+/// `COR_PRF_CODE_INFO`: one contiguous block of a method's native code.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct CodeInfo {
+    start: usize,
+    size: usize,
+}
+
+/// Loaded modules by id, for naming JIT events and resolving `native_code`.
+static MODULES: Mutex<Option<HashMap<usize, String>>> = Mutex::new(None);
+/// A substring: JIT events are logged only for modules whose name contains it.
+static WATCH: Mutex<Option<String>> = Mutex::new(None);
+
+/// Log JITed methods of modules whose name contains `substring` (e.g. the game
+/// assembly). Without this, module loads are still logged but JITs are not.
+pub fn watch_module(substring: &str) {
+    *WATCH.lock().unwrap_or_else(|e| e.into_inner()) = Some(substring.to_string());
+}
 
 /// A COM interface id / class id.
 #[repr(C)]
@@ -95,15 +127,21 @@ struct Callback {
 unsafe impl Sync for CallbackVtbl {}
 unsafe impl Sync for FactoryVtbl {}
 
+// ICorProfilerCallback(1..4) has 95 methods after IUnknown's 3, so the vtable
+// is 98 slots. We implement Initialize (slot 3), ModuleLoadFinished (14) and
+// JITCompilationFinished (24); the gaps between them are filled with one S_OK
+// stub. Slot positions are from the method order in corprof.idl.
 #[repr(C)]
 struct CallbackVtbl {
     query_interface: unsafe extern "C" fn(*mut Callback, *const Guid, *mut *mut c_void) -> Hresult,
     add_ref: unsafe extern "C" fn(*mut Callback) -> u32,
     release: unsafe extern "C" fn(*mut Callback) -> u32,
     initialize: unsafe extern "C" fn(*mut Callback, *mut c_void) -> Hresult,
-    // ICorProfilerCallback has 69 methods, +8 (v2) +3 (v3) +15 (v4) = 95; the
-    // first (Initialize) is above, leaving 94 we don't handle.
-    rest: [*const c_void; 94],
+    gap_a: [*const c_void; 10], // slots 4..=13
+    module_load_finished: unsafe extern "C" fn(*mut Callback, usize, Hresult) -> Hresult, // 14
+    gap_b: [*const c_void; 9], // slots 15..=23
+    jit_compilation_finished: unsafe extern "C" fn(*mut Callback, usize, Hresult, i32) -> Hresult, // 24
+    gap_c: [*const c_void; 73], // slots 25..=97
 }
 
 unsafe extern "C" fn cb_query_interface(
@@ -155,13 +193,61 @@ unsafe extern "C" fn cb_initialize(_this: *mut Callback, unk: *mut c_void) -> Hr
         return E_NOINTERFACE;
     };
     INFO.store(info, Ordering::SeqCst);
+    *MODULES.lock().unwrap_or_else(|e| e.into_inner()) = Some(HashMap::new());
 
-    // SetEventMask (ICorProfilerInfo slot 16): monitor JIT and enable ReJIT.
-    let mask = COR_PRF_MONITOR_JIT_COMPILATION | COR_PRF_ENABLE_REJIT;
-    let hr = unsafe { call_slot_u32(info, 16, mask) };
+    // Monitor module loads and JIT, and enable ReJIT.
+    let mask =
+        COR_PRF_MONITOR_MODULE_LOADS | COR_PRF_MONITOR_JIT_COMPILATION | COR_PRF_ENABLE_REJIT;
+    let hr = unsafe { call_slot_u32(info, SLOT_SET_EVENT_MASK, mask) };
     log(&format!(
         "profiler initialized: ICorProfilerInfo={info:?}, SetEventMask(0x{mask:x})=0x{hr:x}"
     ));
+    S_OK
+}
+
+unsafe extern "C" fn cb_module_load_finished(
+    _this: *mut Callback,
+    module_id: usize,
+    _hr_status: Hresult,
+) -> Hresult {
+    let info = INFO.load(Ordering::SeqCst);
+    if let Some(name) = unsafe { get_module_name(info, module_id) } {
+        log(&format!("module loaded: {name} (id={module_id:#x})"));
+        if let Some(map) = MODULES.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+            map.insert(module_id, name);
+        }
+    }
+    S_OK
+}
+
+unsafe extern "C" fn cb_jit_compilation_finished(
+    _this: *mut Callback,
+    function_id: usize,
+    _hr_status: Hresult,
+    _is_safe_to_block: i32,
+) -> Hresult {
+    let watch = WATCH.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let Some(watch) = watch else { return S_OK };
+    let info = INFO.load(Ordering::SeqCst);
+    let Some((module_id, token)) = (unsafe { get_function_info(info, function_id) }) else {
+        return S_OK;
+    };
+    let name = MODULES
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .and_then(|m| m.get(&module_id).cloned());
+    let Some(name) = name else { return S_OK };
+    if !name.contains(&watch) {
+        return S_OK;
+    }
+    match unsafe { get_code_info(info, function_id) } {
+        Some(code) => log(&format!(
+            "jit {name} token={token:#010x} -> code {:#x} ({} bytes)",
+            code.start, code.size
+        )),
+        None => log(&format!("jit {name} token={token:#010x} (no code info)")),
+    }
     S_OK
 }
 
@@ -170,7 +256,11 @@ static CALLBACK_VTBL: CallbackVtbl = CallbackVtbl {
     add_ref: cb_add_ref,
     release: cb_release,
     initialize: cb_initialize,
-    rest: [cb_stub as *const c_void; 94],
+    gap_a: [cb_stub as *const c_void; 10],
+    module_load_finished: cb_module_load_finished,
+    gap_b: [cb_stub as *const c_void; 9],
+    jit_compilation_finished: cb_jit_compilation_finished,
+    gap_c: [cb_stub as *const c_void; 73],
 };
 
 static mut CALLBACK: Callback = Callback {
@@ -296,4 +386,116 @@ unsafe fn call_slot_u32(iface: *mut c_void, slot: usize, arg: u32) -> Hresult {
     let f: unsafe extern "C" fn(*mut c_void, u32) -> Hresult =
         unsafe { std::mem::transmute(*vtable.add(slot)) };
     unsafe { f(iface, arg) }
+}
+
+/// The raw function pointer at a vtable `slot` on `iface`.
+unsafe fn slot(iface: *mut c_void, slot: usize) -> *const c_void {
+    let vtable = unsafe { *(iface as *const *const *const c_void) };
+    unsafe { *vtable.add(slot) }
+}
+
+/// `ICorProfilerInfo::GetModuleInfo`, returning just the module name.
+unsafe fn get_module_name(info: *mut c_void, module_id: usize) -> Option<String> {
+    if info.is_null() {
+        return None;
+    }
+    type Fn = unsafe extern "C" fn(
+        *mut c_void,
+        usize,            // moduleId
+        *mut *const u8,   // ppBaseLoadAddress
+        u32,              // cchName
+        *mut u32,         // pcchName
+        *mut u16,         // szName[]
+        *mut usize,       // pAssemblyId
+    ) -> Hresult;
+    let f: Fn = unsafe { std::mem::transmute(slot(info, SLOT_GET_MODULE_INFO)) };
+    let mut base = std::ptr::null();
+    let mut needed = 0u32;
+    let mut assembly = 0usize;
+    // First call learns the name length.
+    unsafe {
+        f(info, module_id, &mut base, 0, &mut needed, std::ptr::null_mut(), &mut assembly);
+    }
+    if needed == 0 {
+        return None;
+    }
+    let mut buf = vec![0u16; needed as usize];
+    let hr = unsafe {
+        f(info, module_id, &mut base, needed, &mut needed, buf.as_mut_ptr(), &mut assembly)
+    };
+    if hr != S_OK {
+        return None;
+    }
+    let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+    Some(String::from_utf16_lossy(&buf[..end]))
+}
+
+/// `ICorProfilerInfo::GetFunctionInfo`, returning `(moduleId, metadata token)`.
+unsafe fn get_function_info(info: *mut c_void, function_id: usize) -> Option<(usize, u32)> {
+    if info.is_null() {
+        return None;
+    }
+    type Fn = unsafe extern "C" fn(*mut c_void, usize, *mut usize, *mut usize, *mut u32) -> Hresult;
+    let f: Fn = unsafe { std::mem::transmute(slot(info, SLOT_GET_FUNCTION_INFO)) };
+    let (mut class_id, mut module_id, mut token) = (0usize, 0usize, 0u32);
+    if unsafe { f(info, function_id, &mut class_id, &mut module_id, &mut token) } == S_OK {
+        Some((module_id, token))
+    } else {
+        None
+    }
+}
+
+/// `ICorProfilerInfo::GetFunctionFromToken`, resolving a `FunctionID`.
+unsafe fn get_function_from_token(info: *mut c_void, module_id: usize, token: u32) -> Option<usize> {
+    if info.is_null() {
+        return None;
+    }
+    type Fn = unsafe extern "C" fn(*mut c_void, usize, u32, *mut usize) -> Hresult;
+    let f: Fn = unsafe { std::mem::transmute(slot(info, SLOT_GET_FUNCTION_FROM_TOKEN)) };
+    let mut function_id = 0usize;
+    if unsafe { f(info, module_id, token, &mut function_id) } == S_OK && function_id != 0 {
+        Some(function_id)
+    } else {
+        None
+    }
+}
+
+/// `ICorProfilerInfo2::GetCodeInfo2`, returning the first native code block.
+unsafe fn get_code_info(info: *mut c_void, function_id: usize) -> Option<CodeInfo> {
+    if info.is_null() {
+        return None;
+    }
+    type Fn = unsafe extern "C" fn(*mut c_void, usize, u32, *mut u32, *mut CodeInfo) -> Hresult;
+    let f: Fn = unsafe { std::mem::transmute(slot(info, SLOT_GET_CODE_INFO2)) };
+    let mut count = 0u32;
+    let mut block = CodeInfo::default();
+    if unsafe { f(info, function_id, 1, &mut count, &mut block) } == S_OK && count > 0 {
+        Some(block)
+    } else {
+        None
+    }
+}
+
+/// The native code address and size of a method, for patching it in place (for
+/// example with `iced`). `module_substring` matches a loaded module's name, and
+/// `token` is the method's metadata token (`mdMethodDef`). Returns `None` until
+/// the method has been JIT-compiled.
+///
+/// Available once the profiler is initialised; the method must belong to an
+/// already-loaded module.
+pub fn native_code(module_substring: &str, token: u32) -> Option<(usize, usize)> {
+    let info = INFO.load(Ordering::SeqCst);
+    if info.is_null() {
+        return None;
+    }
+    let module_id = *MODULES
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()?
+        .iter()
+        .find(|(_, name)| name.contains(module_substring))
+        .map(|(id, _)| id)?;
+    let function_id = unsafe { get_function_from_token(info, module_id, token) }?;
+    let code = unsafe { get_code_info(info, function_id) }?;
+    Some((code.start, code.size))
 }
