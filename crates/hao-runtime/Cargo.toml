@@ -12,13 +12,17 @@ keywords = ["dotnet", "coreclr", "mono", "hosting", "interop"]
 [dependencies]
 libloading = "0.9"
 thiserror = "2"
+tracing = "0.1"
 hao = { version = "0.0.5", path = "../hao", optional = true }
 
-# For `attach`: hooking `coreclr_initialize` to capture a running host. The
-# `hooking` crate's inline hook is x86_64-only, and this path is Linux-specific.
-[target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
+# `attach` captures a running host by inline-hooking the loader; the hooking
+# crate's trampoline is x86_64-only (Linux and Windows).
+[target.'cfg(target_arch = "x86_64")'.dependencies]
 hooking = "0.6"
-libc = "0.2"
+
+# `alloc_console` gives a windowed game (no console) somewhere for logs to go.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Console"] }
 
 [dev-dependencies]
 libloading = "0.9"

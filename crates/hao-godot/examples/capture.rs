@@ -4,9 +4,8 @@
 //!
 //! ```sh
 //! cargo build --release -p hao-godot --example capture
-//! # Steam > game > Properties > Launch options:
+//! # Steam > game > Properties > Launch options (run from a terminal to see logs):
 //! LD_PRELOAD=/path/to/target/release/examples/libcapture.so %command%
-//! # Then read ~/.local/share/hao-godot/hao-godot.log
 //! ```
 
 #[used]
@@ -14,11 +13,13 @@
 static LOAD: extern "C" fn() = load;
 
 extern "C" fn load() {
-    hao_godot::log("capture mod loaded (LD_PRELOAD); waiting for CoreCLR");
+    hao_godot::init_logging();
+    tracing::info!("capture mod loaded (LD_PRELOAD); waiting for CoreCLR");
     hao_godot::on_clr_init(|host| {
-        hao_godot::log(&format!(
+        tracing::info!(
             "mod callback ran: CoreCLR host captured (handle={:?}, domain={}) — attach works",
-            host.handle, host.domain
-        ));
+            host.handle,
+            host.domain
+        );
     });
 }

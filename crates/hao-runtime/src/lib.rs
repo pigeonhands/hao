@@ -10,16 +10,14 @@
 //! by `hao-runtime-macros` produce such methods for you.
 
 pub mod bindings;
-#[cfg(all(feature = "coreclr", target_os = "linux", target_arch = "x86_64"))]
+#[cfg(all(feature = "coreclr", target_arch = "x86_64"))]
 pub mod attach;
+pub mod console;
 #[cfg(feature = "coreclr")]
 mod coreclr;
 mod error;
-mod log;
 #[cfg(feature = "coreclr")]
 pub mod profiler;
-
-pub use log::set_logger;
 #[cfg(feature = "mono")]
 mod mono;
 

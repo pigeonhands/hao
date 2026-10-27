@@ -89,7 +89,7 @@ const IID_ICORPROFILERCALLBACK3: Guid = guid(0x4FD2_ED52, 0x7731, 0x4B8D, [0x94,
 const IID_ICORPROFILERCALLBACK4: Guid = guid(0x7B63_B2E3, 0x107D, 0x4D48, [0xB2, 0xF6, 0xF6, 0x1E, 0x22, 0x94, 0x70, 0xD2]);
 const IID_ICORPROFILERINFO: Guid = guid(0x28B5_557D, 0x3F3F, 0x48B4, [0x90, 0xB2, 0x5F, 0x9E, 0xEA, 0x2F, 0x6C, 0x48]);
 
-use crate::log::log;
+use tracing::info;
 
 /// The captured `ICorProfilerInfo` (really the highest version the runtime gave
 /// us via the base IID). ReJIT and code-info layers read this.
@@ -171,7 +171,7 @@ unsafe extern "C" fn cb_initialize(_this: *mut Callback, unk: *mut c_void) -> Hr
     // QueryInterface the given IUnknown for ICorProfilerInfo.
     let info = unsafe { query_interface(unk, &IID_ICORPROFILERINFO) };
     let Some(info) = info else {
-        log("Initialize: ICorProfilerInfo not available");
+        tracing::error!("Initialize: ICorProfilerInfo not available");
         return E_NOINTERFACE;
     };
     INFO.store(info, Ordering::SeqCst);
@@ -181,9 +181,7 @@ unsafe extern "C" fn cb_initialize(_this: *mut Callback, unk: *mut c_void) -> Hr
     let mask =
         COR_PRF_MONITOR_MODULE_LOADS | COR_PRF_MONITOR_JIT_COMPILATION | COR_PRF_ENABLE_REJIT;
     let hr = unsafe { call_slot_u32(info, SLOT_SET_EVENT_MASK, mask) };
-    log(&format!(
-        "profiler initialized: ICorProfilerInfo={info:?}, SetEventMask(0x{mask:x})=0x{hr:x}"
-    ));
+    info!("profiler initialized: ICorProfilerInfo={info:?}, SetEventMask(0x{mask:x})=0x{hr:x}");
     S_OK
 }
 
@@ -194,7 +192,7 @@ unsafe extern "C" fn cb_module_load_finished(
 ) -> Hresult {
     let info = INFO.load(Ordering::SeqCst);
     if let Some(name) = unsafe { get_module_name(info, module_id) } {
-        log(&format!("module loaded: {name} (id={module_id:#x})"));
+        info!("module loaded: {name} (id={module_id:#x})");
         if let Some(map) = MODULES.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
             map.insert(module_id, name);
         }
@@ -224,11 +222,11 @@ unsafe extern "C" fn cb_jit_compilation_finished(
         return S_OK;
     }
     match unsafe { get_code_info(info, function_id) } {
-        Some(code) => log(&format!(
+        Some(code) => info!(
             "jit {name} token={token:#010x} -> code {:#x} ({} bytes)",
             code.start, code.size
-        )),
-        None => log(&format!("jit {name} token={token:#010x} (no code info)")),
+        ),
+        None => info!("jit {name} token={token:#010x} (no code info)"),
     }
     S_OK
 }
