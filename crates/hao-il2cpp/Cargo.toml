@@ -10,6 +10,6 @@ readme = "README.md"
 keywords = ["unity", "il2cpp", "dotnet", "modding"]
 
 [dependencies]
-hao = { version = "0.0.4", path = "../hao" }
+hao = { version = "0.0.5", path = "../hao" }
 pewter = "0.0.10"
 thiserror = "2"
