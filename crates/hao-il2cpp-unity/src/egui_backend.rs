@@ -235,9 +235,13 @@ impl EguiState {
         }
 
         // Typed characters (Unity resolves layout/shift/IME for us). Control
-        // characters are left to the key events above.
-        for c in input::input_string()?.chars().filter(|c| !c.is_control()) {
-            events.push(egui::Event::Text(c.to_string()));
+        // characters are left to the key events above. `Input.inputString` only
+        // exists under the legacy input manager; a game on the new Input System
+        // lacks it, so a failure here is not fatal — just skip text input.
+        if let Ok(typed) = input::input_string() {
+            for c in typed.chars().filter(|c| !c.is_control()) {
+                events.push(egui::Event::Text(c.to_string()));
+            }
         }
 
         Ok(egui::RawInput {
