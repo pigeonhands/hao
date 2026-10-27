@@ -273,7 +273,9 @@ struct Loader {
 }
 
 pub(crate) struct CoreClr {
-    _coreclr: Library,
+    // Kept so libcoreclr stays loaded when hao started it; `None` when attaching
+    // to a runtime the host already started and keeps alive.
+    _coreclr: Option<Library>,
     major: u16,
     get_function_pointer: GetFunctionPointer,
     load_assembly_bytes: LoadAssemblyBytes,
@@ -296,7 +298,33 @@ impl CoreClr {
             get_function_pointer: host.activator_delegate("GetFunctionPointer")?,
             load_assembly_bytes: host.activator_delegate("LoadAssemblyBytes")?,
             loader: OnceLock::new(),
-            _coreclr: coreclr,
+            _coreclr: Some(coreclr),
+        })
+    }
+
+    /// Attaches to a CoreCLR another host (e.g. a game) already started in this
+    /// process, using the host handle, domain and `coreclr_create_delegate`
+    /// captured as it initialised. `major` is the .NET major version (e.g. 9),
+    /// used to build the loader assembly. No new runtime is started.
+    pub fn attach(
+        handle: *mut c_void,
+        domain: u32,
+        create_delegate: *const c_void,
+        major: u16,
+    ) -> Result<Self> {
+        let host = Host {
+            handle,
+            domain,
+            create_delegate: unsafe {
+                std::mem::transmute::<*const c_void, CreateDelegate>(create_delegate)
+            },
+        };
+        Ok(Self {
+            major,
+            get_function_pointer: host.activator_delegate("GetFunctionPointer")?,
+            load_assembly_bytes: host.activator_delegate("LoadAssemblyBytes")?,
+            loader: OnceLock::new(),
+            _coreclr: None,
         })
     }
 

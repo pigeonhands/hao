@@ -82,7 +82,21 @@ impl ClrHost {
         }
         Ok(delegate)
     }
+
+    /// Attaches hao's runtime to the game's CoreCLR, so any managed method can be
+    /// called (via [`Runtime::method_pointer`](hao_runtime::Runtime::method_pointer)).
+    /// `major` is the game's .NET major version (e.g. 9 for Slay the Spire 2).
+    pub fn attach(&self, major: u16) -> hao_runtime::Result<hao_runtime::Runtime> {
+        hao_runtime::Runtime::coreclr_attach(
+            self.handle,
+            self.domain,
+            self.create_delegate as *const c_void,
+            major,
+        )
+    }
 }
+
+pub use hao_runtime::Runtime;
 
 type Callback = Box<dyn FnOnce(ClrHost) + Send>;
 
@@ -92,12 +106,19 @@ static CREATE_DELEGATE: AtomicUsize = AtomicUsize::new(0);
 static DLOPEN_HOOKED: AtomicBool = AtomicBool::new(false);
 static INIT_HOOKED: AtomicBool = AtomicBool::new(false);
 
-/// Runs `callback` once the game's CoreCLR host has been captured (or straight
-/// away if it already has). Call it from a mod's `.init_array` entry, which
-/// `LD_PRELOAD` runs before the game starts the runtime.
+/// Runs `callback` once the game's CoreCLR host has been captured. Call it from a
+/// mod's `.init_array` entry, which `LD_PRELOAD` runs before the game starts the
+/// runtime.
+///
+/// The callback runs on a background thread, **not** on the game's init thread:
+/// running managed code during `coreclr_initialize` corrupts the runtime's
+/// bootstrap and crashes the game. That also means the callback is not on Godot's
+/// main thread, so it may call thread-agnostic (corlib) methods but must not
+/// touch the Godot API until it has a main-thread callback to run on.
 pub fn on_clr_init(callback: impl FnOnce(ClrHost) + Send + 'static) {
     if let Some(host) = HOST.get() {
-        callback(*host);
+        let host = *host;
+        std::thread::spawn(move || callback(host));
         return;
     }
     CALLBACKS
@@ -105,6 +126,16 @@ pub fn on_clr_init(callback: impl FnOnce(ClrHost) + Send + 'static) {
         .unwrap_or_else(|e| e.into_inner())
         .push(Box::new(callback));
     install();
+}
+
+/// Runs the queued callbacks on a background thread, off the init thread.
+fn run_callbacks(host: ClrHost) {
+    std::thread::spawn(move || {
+        let callbacks = std::mem::take(&mut *CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()));
+        for callback in callbacks {
+            callback(host);
+        }
+    });
 }
 
 fn install() {
@@ -196,11 +227,9 @@ extern "C" fn coreclr_init_detour(
                 "captured CLR host: handle={handle:?}, domain={domain}"
             ));
             let _ = HOST.set(host);
-            let callbacks =
-                std::mem::take(&mut *CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()));
-            for callback in callbacks {
-                callback(host);
-            }
+            // Run callbacks off this thread: it is mid-coreclr_initialize, and
+            // managed work here corrupts the game's runtime bootstrap.
+            run_callbacks(host);
         }
     }
     result

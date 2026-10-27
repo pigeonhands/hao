@@ -6,9 +6,14 @@ description = "Attach to a Godot (CoreCLR / .NET) game's runtime for native mods
 license = "MIT"
 
 [dependencies]
+hao-runtime = { version = "0.0.1", path = "../hao-runtime" }
 hooking = "0.6"
 libc = "0.2"
 
 [[example]]
 name = "capture"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "call"
 crate-type = ["cdylib"]

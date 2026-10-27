@@ -60,12 +60,35 @@ impl Runtime {
     /// Starts CoreCLR with `options`. The options are ignored if it is already running.
     #[cfg(feature = "coreclr")]
     pub fn coreclr_with(options: &CoreClrOptions) -> Result<Self> {
+        Self::coreclr_from(|| coreclr::CoreClr::new(options))
+    }
+
+    /// Attaches to a CoreCLR already running in this process, for a native mod
+    /// loaded into a .NET game (e.g. Godot on CoreCLR). `host_handle`, `domain_id`
+    /// and `create_delegate` (`coreclr_create_delegate`) are captured as the
+    /// game's runtime initialises — see the `hao-godot` crate; `major` is the
+    /// .NET major version. After this, assemblies can be loaded and methods
+    /// called as usual. Returns the existing handle if hao already has one.
+    #[cfg(feature = "coreclr")]
+    pub fn coreclr_attach(
+        host_handle: *mut c_void,
+        domain_id: u32,
+        create_delegate: *const c_void,
+        major: u16,
+    ) -> Result<Self> {
+        Self::coreclr_from(|| {
+            coreclr::CoreClr::attach(host_handle, domain_id, create_delegate, major)
+        })
+    }
+
+    #[cfg(feature = "coreclr")]
+    fn coreclr_from(make: impl FnOnce() -> Result<coreclr::CoreClr>) -> Result<Self> {
         static RUNTIME: std::sync::Mutex<Option<Runtime>> = std::sync::Mutex::new(None);
         let mut runtime = RUNTIME.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(runtime) = runtime.as_ref() {
             return Ok(runtime.clone());
         }
-        let started = Runtime(Arc::new(Inner::CoreClr(coreclr::CoreClr::new(options)?)));
+        let started = Runtime(Arc::new(Inner::CoreClr(make()?)));
         *runtime = Some(started.clone());
         Ok(started)
     }
