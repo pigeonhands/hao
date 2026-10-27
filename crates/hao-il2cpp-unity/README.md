@@ -29,10 +29,15 @@ common Unity functionality the same way for any Unity game:
 `Camera.FireOnPostRender`, which the engine calls from native code per camera render). From there
 you can draw with the `gl` immediate-mode module.
 
+A plain `gl` draw sits *under* the game's screen-space UI, which the engine composites after the
+cameras. To draw on top of it, use an `OverlaySurface`: it renders your `gl` drawing into a
+`RenderTexture` shown by a top-most screen-space-overlay canvas, following the screen size and
+surviving scene loads. (`OverlayCanvas` is the bare top-most canvas, and `TextOverlay` a line of
+text built on it.)
+
 For a full UI, enable the `egui` feature and call `egui::on_egui(|ctx| { … })`: it renders an
-[egui](https://github.com/emilk/egui) interface into a `RenderTexture` and shows it on a
-top-most screen-space-overlay canvas, so it draws above the game's own UI and takes mouse input.
-See `examples/egui_demo.rs`.
+[egui](https://github.com/emilk/egui) interface onto an `OverlaySurface`, above the game's own UI
+and taking mouse input. See `examples/egui_demo.rs`.
 
 Each Unity method is looked up the first time it's used and checked against the game's real
 signature, so a game built with a different Unity version gives an error instead of a crash.

@@ -3,21 +3,15 @@
 //!
 //! egui is rendered with Unity's immediate-mode [`gl`](crate::gl): its font atlas
 //! is uploaded to a [`Texture2D`] (point-sampled, so solid fills stay opaque),
-//! bound through a `Material`, and each tessellated triangle is emitted into a
-//! [`RenderTexture`] with its colours converted from gamma to linear. That texture
-//! is shown by a [`RawImage`] on our own screen-space-overlay [`Canvas`] with the
-//! maximum sorting order, so the UI draws on top of the game's own overlay canvases
-//! (which the engine composites after camera rendering, where a plain `gl` draw
-//! would sit underneath). See [`on_egui`].
+//! bound through a `Material`, and each tessellated triangle is emitted (with its
+//! colours converted from gamma to linear) into an [`OverlaySurface`], which draws
+//! it on top of the game's own UI. See [`on_egui`].
 
 use std::sync::{Arc, Mutex};
 
 use hao_il2cpp_runtime::{GcHandle, Result};
 
-use crate::{
-    gl, input, screen, Canvas, Color, GameObject, Material, RawImage, RenderMode, RenderTexture,
-    Shader, Texture2D, TextureFormat, Vector2,
-};
+use crate::{gl, input, screen, Color, Material, OverlaySurface, Shader, Texture2D, TextureFormat};
 
 /// Runs `ui` every frame to build and draw an egui interface over the game.
 ///
@@ -66,10 +60,8 @@ struct EguiState {
     /// Previous state of the left/right mouse buttons, so a press or release is
     /// sent to egui only on the edge (egui is event-based, not level-based).
     pointer_down: [bool; 2],
-    /// The off-screen target egui draws into, plus its pixel size (the screen size).
-    rt: Option<(GcHandle, [i32; 2])>,
-    /// The `RawImage` on the overlay canvas that displays `rt` on top of the game.
-    raw_image: Option<GcHandle>,
+    /// The top-most render target egui draws into and is composited from.
+    surface: OverlaySurface,
 }
 
 /// Builds the egui material: a textured, vertex-coloured, alpha-blended shader.
@@ -102,8 +94,7 @@ impl EguiState {
             texture: None,
             atlas: Vec::new(),
             pointer_down: [false; 2],
-            rt: None,
-            raw_image: None,
+            surface: OverlaySurface::new("hao-egui-overlay"),
         })
     }
 
@@ -129,55 +120,11 @@ impl EguiState {
         Ok(())
     }
 
-    /// (Re)creates the render target and the overlay canvas that shows it. The
-    /// target is remade when the screen size changes; the canvas is a
-    /// `DontDestroyOnLoad` object, but is rebuilt if something ever destroys it.
-    fn ensure_overlay(&mut self, w: i32, h: i32) -> Result<()> {
-        let rt_ok = match &self.rt {
-            Some((handle, size)) => *size == [w, h] && RenderTexture(handle.target()).is_alive()?,
-            None => false,
-        };
-        if !rt_ok {
-            let rt = RenderTexture::new(w, h, 0)?;
-            rt.set_hide_flags(crate::HideFlags::HIDE_AND_DONT_SAVE)?;
-            self.rt = Some((GcHandle::new(crate::il2cpp()?, rt.object()), [w, h]));
-            if let Some(image) = &self.raw_image {
-                RawImage(image.target()).set_texture(rt.object())?;
-            }
-        }
-
-        let needs_overlay = match &self.raw_image {
-            Some(image) => !RawImage(image.target()).is_alive()?,
-            None => true,
-        };
-        if needs_overlay {
-            let go = GameObject::new("hao-egui-overlay")?;
-            go.dont_destroy_on_load()?;
-            let canvas = go.add_component::<Canvas>()?;
-            canvas.set_render_mode(RenderMode::SCREEN_SPACE_OVERLAY)?;
-            // Above the game's own overlay canvases (sorting order is a short).
-            canvas.set_sorting_order(i16::MAX as i32)?;
-            let image = go.add_component::<RawImage>()?;
-            // Stretch to fill the canvas (the whole screen).
-            if let Some(rect) = go.rect_transform()? {
-                rect.set_anchors(Vector2::ZERO, Vector2::ONE, Vector2::new(0.5, 0.5))?;
-                rect.set_anchored_position(Vector2::ZERO)?;
-                rect.set_size(Vector2::ZERO)?;
-            }
-            if let Some((rt, _)) = &self.rt {
-                image.set_texture(RenderTexture(rt.target()).object())?;
-            }
-            self.raw_image = Some(GcHandle::new(crate::il2cpp()?, image.object()));
-        }
-        Ok(())
-    }
-
     fn frame(&mut self, ui: &(impl Fn(&egui::Context) + ?Sized)) -> Result<()> {
         self.ensure_alive()?;
         let (sw, sh) = screen::size()?;
         let (iw, ih) = (sw.max(1), sh.max(1));
         let (w, h) = (iw as f32, ih as f32);
-        self.ensure_overlay(iw, ih)?;
 
         let input = self.raw_input(w, h)?;
         let output = self.ctx.run(input, |ctx| ui(ctx));
@@ -188,7 +135,7 @@ impl EguiState {
             }
         }
         let primitives = self.ctx.tessellate(output.shapes, 1.0);
-        self.render(w, h, &primitives)
+        self.render(w, h, (iw, ih), &primitives)
     }
 
     fn raw_input(&mut self, w: f32, h: f32) -> Result<egui::RawInput> {
@@ -273,24 +220,22 @@ impl EguiState {
         Ok(())
     }
 
-    fn render(&self, w: f32, h: f32, primitives: &[egui::ClippedPrimitive]) -> Result<()> {
+    fn render(
+        &mut self,
+        w: f32,
+        h: f32,
+        size: (i32, i32),
+        primitives: &[egui::ClippedPrimitive],
+    ) -> Result<()> {
         let Some((texture, _)) = &self.texture else {
             return Ok(());
         };
-        let Some((rt, _)) = &self.rt else {
-            return Ok(());
-        };
-        let rt = RenderTexture(rt.target());
         let material = self.material();
         material.set_main_texture(Texture2D(texture.target()))?;
 
-        // Draw into our render target, then restore whatever the camera was using
-        // even if a step fails, so the game's own rendering is left untouched.
-        let previous = RenderTexture::active()?;
-        RenderTexture::set_active(Some(rt))?;
-        let result = (|| {
-            // Start transparent so last frame's UI doesn't linger.
-            gl::clear(false, Color::CLEAR)?;
+        // Draw the tessellated UI into the overlay surface (cleared transparent so
+        // last frame's UI doesn't linger), which composites it on top of the game.
+        self.surface.draw(size, Color::CLEAR, || {
             gl::push_matrix()?;
             // Flip Y so egui's top-left origin maps to Unity's bottom-left.
             gl::load_pixel_matrix(0.0, w, h, 0.0)?;
@@ -313,8 +258,6 @@ impl EguiState {
                 gl::end()?;
             }
             gl::pop_matrix()
-        })();
-        RenderTexture::set_active(previous)?;
-        result
+        })
     }
 }

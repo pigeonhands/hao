@@ -52,7 +52,7 @@ pub use objects::{
     GameObject, Material, RawImage, RectTransform, RenderTexture, Shader, TextMeshPro, Texture2D,
     Transform, UnityObject,
 };
-pub use overlay::TextOverlay;
+pub use overlay::{OverlayCanvas, OverlaySurface, TextOverlay};
 pub use scene::{on_scene_loaded, Scene};
 pub use values::{
     Color, FilterMode, HideFlags, KeyCode, LoadSceneMode, Quaternion, RenderMode, TextureFormat,
