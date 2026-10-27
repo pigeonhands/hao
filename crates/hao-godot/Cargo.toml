@@ -20,3 +20,7 @@ crate-type = ["cdylib"]
 [[example]]
 name = "call"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "profiler"
+crate-type = ["cdylib"]

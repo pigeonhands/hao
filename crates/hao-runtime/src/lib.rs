@@ -13,6 +13,8 @@ pub mod bindings;
 #[cfg(feature = "coreclr")]
 mod coreclr;
 mod error;
+#[cfg(feature = "coreclr")]
+pub mod profiler;
 #[cfg(feature = "mono")]
 mod mono;
 
