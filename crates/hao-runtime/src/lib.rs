@@ -18,6 +18,8 @@ mod coreclr;
 mod error;
 #[cfg(feature = "coreclr")]
 pub mod profiler;
+#[cfg(feature = "hao")]
+pub mod rewrite;
 #[cfg(feature = "mono")]
 mod mono;
 
