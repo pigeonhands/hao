@@ -28,3 +28,7 @@ crate-type = ["cdylib"]
 [[example]]
 name = "godot_types"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "rewrite"
+crate-type = ["cdylib"]

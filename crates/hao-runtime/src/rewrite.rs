@@ -74,6 +74,151 @@ pub fn patch_call(
         .map_err(|e| Error::Other(format!("writing assembly: {e}")))
 }
 
+#[cfg(all(unix, target_arch = "x86_64"))]
+pub use intercept::intercept_assembly;
+
+/// Hooks the file loader so that when the runtime opens a target assembly, it
+/// gets a rewritten copy instead. The only platform-specific part of the
+/// assembly-rewrite path.
+#[cfg(all(unix, target_arch = "x86_64"))]
+mod intercept {
+    use std::{
+        cell::Cell,
+        ffi::{c_char, c_int, CStr, CString},
+        os::unix::ffi::OsStrExt,
+        sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Mutex,
+        },
+    };
+
+    use crate::Result;
+
+    type PatchFn = Box<dyn Fn(&[u8]) -> Result<Vec<u8>> + Send + Sync>;
+
+    struct Target {
+        /// The file name (not path) to match, e.g. `sts2.dll`.
+        basename: String,
+        patch: PatchFn,
+        /// The rewritten copy on disk, built on first open.
+        patched: Mutex<Option<CString>>,
+    }
+
+    static TARGETS: Mutex<Vec<Target>> = Mutex::new(Vec::new());
+    static HOOKED: AtomicBool = AtomicBool::new(false);
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    thread_local! {
+        // Set while we read/write the rewritten copy, so our own file I/O isn't
+        // itself intercepted.
+        static BUILDING: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// Serves a rewritten copy of `basename` (matched by file name) whenever the
+    /// runtime opens it. `patch` receives the original bytes and returns the
+    /// replacement (see [`patch_call`](super::patch_call)). Call it from a mod's
+    /// entry point, before the runtime loads the assembly.
+    pub fn intercept_assembly(
+        basename: &str,
+        patch: impl Fn(&[u8]) -> Result<Vec<u8>> + Send + Sync + 'static,
+    ) {
+        TARGETS.lock().unwrap_or_else(|e| e.into_inner()).push(Target {
+            basename: basename.to_string(),
+            patch: Box::new(patch),
+            patched: Mutex::new(None),
+        });
+        install();
+    }
+
+    fn install() {
+        if HOOKED.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        // Hook the common libc entry points for opening a file by path. Which one
+        // the runtime uses varies, so hook them all; a missing symbol is skipped.
+        hook(c"open", open_detour as *mut u8);
+        hook(c"open64", open_detour as *mut u8);
+        hook(c"openat", openat_detour as *mut u8);
+        hook(c"openat64", openat_detour as *mut u8);
+    }
+
+    fn hook(name: &CStr, detour: *mut u8) {
+        match unsafe { hooking::Hook::by_name(None, name, detour) } {
+            Ok(mut hook) => {
+                if let Err(e) = unsafe { hook.apply_hook() } {
+                    tracing::warn!("applying the {name:?} hook failed: {e:?}");
+                }
+                std::mem::forget(hook);
+            }
+            Err(e) => tracing::debug!("not hooking {name:?}: {e:?}"),
+        }
+    }
+
+    /// If `path` names a target assembly, the path of its rewritten copy.
+    fn redirect(path: *const c_char) -> Option<CString> {
+        if path.is_null() || BUILDING.with(Cell::get) {
+            return None;
+        }
+        let path = unsafe { CStr::from_ptr(path) }.to_string_lossy().into_owned();
+        let name = path.rsplit('/').next().unwrap_or(&path);
+        let targets = TARGETS.lock().unwrap_or_else(|e| e.into_inner());
+        let target = targets.iter().find(|t| t.basename == name)?;
+        let mut cache = target.patched.lock().unwrap_or_else(|e| e.into_inner());
+        if cache.is_none() {
+            *cache = build(&path, &target.patch);
+        }
+        cache.clone()
+    }
+
+    /// Reads the original assembly, rewrites it, and writes the copy to a temp
+    /// file, returning its path.
+    fn build(path: &str, patch: &PatchFn) -> Option<CString> {
+        BUILDING.with(|b| b.set(true));
+        let result = (|| {
+            let original = std::fs::read(path).ok()?;
+            let patched = match patch(&original) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    tracing::error!("rewriting {path} failed: {e}");
+                    return None;
+                }
+            };
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let out = std::env::temp_dir().join(format!("hao-rewrite-{}-{n}.bin", std::process::id()));
+            std::fs::write(&out, &patched).ok()?;
+            tracing::info!("serving a rewritten {path} from {}", out.display());
+            CString::new(out.as_os_str().as_bytes()).ok()
+        })();
+        BUILDING.with(|b| b.set(false));
+        result
+    }
+
+    extern "C" fn open_detour(path: *const c_char, flags: c_int, mode: c_int) -> c_int {
+        let original = hooking::original_function_ptr().expect("original! inside the open hook");
+        let original: unsafe extern "C" fn(*const c_char, c_int, c_int) -> c_int =
+            unsafe { std::mem::transmute(original.as_ptr()) };
+        match redirect(path) {
+            Some(temp) => unsafe { original(temp.as_ptr(), flags, mode) },
+            None => unsafe { original(path, flags, mode) },
+        }
+    }
+
+    extern "C" fn openat_detour(
+        dirfd: c_int,
+        path: *const c_char,
+        flags: c_int,
+        mode: c_int,
+    ) -> c_int {
+        let original = hooking::original_function_ptr().expect("original! inside the openat hook");
+        let original: unsafe extern "C" fn(c_int, *const c_char, c_int, c_int) -> c_int =
+            unsafe { std::mem::transmute(original.as_ptr()) };
+        match redirect(path) {
+            Some(temp) => unsafe { original(dirfd, temp.as_ptr(), flags, mode) },
+            None => unsafe { original(dirfd, path, flags, mode) },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
