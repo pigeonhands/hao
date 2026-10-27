@@ -11,5 +11,5 @@ keywords = ["unity", "il2cpp", "dotnet", "modding"]
 
 [dependencies]
 hao = { version = "0.0.4", path = "../hao" }
-pewter = "0.0.9"
+pewter = "0.0.10"
 thiserror = "2"
