@@ -1,7 +1,7 @@
 [package]
 name = "hao-il2cpp-runtime"
 authors = ["Sam M."]
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 description = "Hook and call into Unity Il2Cpp games from inside the game process"
 license = "MIT"
