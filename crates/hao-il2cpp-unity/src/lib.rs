@@ -40,6 +40,8 @@ mod lifecycle;
 mod objects;
 mod overlay;
 mod scene;
+#[cfg(feature = "reflect")]
+pub mod reflect;
 mod values;
 
 pub use hao_il2cpp_runtime as runtime;

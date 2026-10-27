@@ -20,6 +20,8 @@ mod error;
 pub mod profiler;
 #[cfg(feature = "hao")]
 pub mod rewrite;
+#[cfg(feature = "reflect")]
+pub mod reflect;
 #[cfg(feature = "mono")]
 mod mono;
 

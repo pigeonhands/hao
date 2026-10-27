@@ -27,6 +27,8 @@ mod error;
 pub mod game;
 pub mod generate;
 pub mod metadata;
+#[cfg(feature = "reflect")]
+pub mod reflect;
 
 pub use binary::{Binary, LoadedImage};
 pub use error::{Error, Result};

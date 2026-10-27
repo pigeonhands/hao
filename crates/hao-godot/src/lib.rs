@@ -5,6 +5,9 @@
 //! the running host — lives in [`hao_runtime::attach`]; this crate re-exports it
 //! and adds [`init_logging`], a one-call `tracing` setup for an injected mod.
 
+#[cfg(feature = "reflect")]
+pub mod reflect;
+
 pub use hao_runtime::attach::{on_clr_init, ClrHost};
 pub use hao_runtime::Runtime;
 

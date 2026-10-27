@@ -25,6 +25,8 @@ mod error;
 #[cfg(unix)]
 mod loader;
 mod typed;
+#[cfg(feature = "reflect")]
+pub mod reflect;
 
 use std::{
     ffi::{c_void, CStr, CString},
