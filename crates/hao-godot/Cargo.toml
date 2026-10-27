@@ -1,17 +1,17 @@
 [package]
 name = "hao-godot"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 description = "Attach to a Godot (CoreCLR / .NET) game's runtime for native mods"
 license = "MIT"
 
 [dependencies]
-hao-runtime = { version = "0.0.2", path = "../hao-runtime" }
+hao-runtime = { version = "0.0.3", path = "../hao-runtime" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
-hao-runtime-macros = { version = "0.0.2", path = "../hao-runtime-macros" }
+hao-runtime-macros = { version = "0.0.3", path = "../hao-runtime-macros" }
 
 [[example]]
 name = "capture"
