@@ -7,7 +7,10 @@
 //! LD_PRELOAD=/path/to/target/release/examples/libegui_demo.so %command%
 //! ```
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Mutex,
+};
 
 use hao_il2cpp_unity::{egui, input, time, KeyCode};
 
@@ -21,6 +24,8 @@ static VISIBLE: AtomicBool = AtomicBool::new(true);
 /// Previous held state of F1, so we toggle once per press (its own edge), not
 /// via GetKeyDown, whose per-frame edge is unreliable from the render callback.
 static F1_DOWN: AtomicBool = AtomicBool::new(false);
+/// Contents of the demo text field (keyboard input test).
+static NOTE: Mutex<String> = Mutex::new(String::new());
 
 extern "C" fn load() {
     init_logging();
@@ -64,6 +69,22 @@ extern "C" fn load() {
                         }
                         if ui.button("fast (2x)").clicked() {
                             let _ = time::set_scale(2.0);
+                        }
+                    });
+
+                    ui.separator();
+                    // Keyboard test: click the field and type (editing keys and
+                    // ctrl+A/C/V/X work).
+                    ui.horizontal(|ui| {
+                        ui.label("note:");
+                        let mut note = NOTE.lock().unwrap_or_else(|e| e.into_inner());
+                        ui.text_edit_singleline(&mut *note);
+                    });
+
+                    // Scroll test.
+                    egui::ScrollArea::vertical().max_height(120.0).show(ui, |ui| {
+                        for i in 1..=40 {
+                            ui.label(format!("scrollable line {i}"));
                         }
                     });
                 });

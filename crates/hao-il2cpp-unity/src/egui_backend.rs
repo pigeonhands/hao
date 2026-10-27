@@ -60,9 +60,41 @@ struct EguiState {
     /// Previous state of the left/right mouse buttons, so a press or release is
     /// sent to egui only on the edge (egui is event-based, not level-based).
     pointer_down: [bool; 2],
+    /// Previous held state of each key in [`KEYS`], for the same edge detection
+    /// (read from the held state, as GetKeyDown is unreliable off the main thread).
+    keys_down: [bool; KEYS.len()],
     /// The top-most render target egui draws into and is composited from.
     surface: OverlaySurface,
 }
+
+/// Non-text keys forwarded to egui for editing and navigation. Typed characters
+/// go through `Input.inputString` instead (see [`EguiState::raw_input`]).
+const KEYS: &[(crate::KeyCode, egui::Key)] = {
+    use crate::KeyCode as K;
+    use egui::Key;
+    &[
+        (K::BACKSPACE, Key::Backspace),
+        (K::DELETE, Key::Delete),
+        (K::RETURN, Key::Enter),
+        (K::TAB, Key::Tab),
+        (K::ESCAPE, Key::Escape),
+        (K::LEFT, Key::ArrowLeft),
+        (K::RIGHT, Key::ArrowRight),
+        (K::UP, Key::ArrowUp),
+        (K::DOWN, Key::ArrowDown),
+        (K::HOME, Key::Home),
+        (K::END, Key::End),
+        (K::PAGE_UP, Key::PageUp),
+        (K::PAGE_DOWN, Key::PageDown),
+        (K::SPACE, Key::Space),
+        // With a held ctrl/cmd these drive select-all/copy/paste/cut/undo.
+        (K::A, Key::A),
+        (K::C, Key::C),
+        (K::V, Key::V),
+        (K::X, Key::X),
+        (K::Z, Key::Z),
+    ]
+};
 
 /// Builds the egui material: a textured, vertex-coloured, alpha-blended shader.
 /// `HideAndDontSave` keeps Unity from destroying it (and throwing NRE on later
@@ -94,6 +126,7 @@ impl EguiState {
             texture: None,
             atlas: Vec::new(),
             pointer_down: [false; 2],
+            keys_down: [false; KEYS.len()],
             surface: OverlaySurface::new("hao-egui-overlay"),
         })
     }
@@ -139,6 +172,18 @@ impl EguiState {
     }
 
     fn raw_input(&mut self, w: f32, h: f32) -> Result<egui::RawInput> {
+        use crate::KeyCode as K;
+        let held = |k| input::key(k).unwrap_or(false);
+        let ctrl = held(K::LEFT_CONTROL) || held(K::RIGHT_CONTROL);
+        let modifiers = egui::Modifiers {
+            alt: held(K::LEFT_ALT) || held(K::RIGHT_ALT),
+            ctrl,
+            shift: held(K::LEFT_SHIFT) || held(K::RIGHT_SHIFT),
+            mac_cmd: false,
+            // On non-mac this is ctrl; egui's shortcuts check `command`.
+            command: ctrl,
+        };
+
         let mouse = input::mouse_position()?;
         // Unity's origin is bottom-left; egui's is top-left.
         let pos = egui::pos2(mouse.x, h - mouse.y);
@@ -160,15 +205,47 @@ impl EguiState {
                     pos,
                     button: egui_button,
                     pressed: down,
-                    modifiers: egui::Modifiers::default(),
+                    modifiers,
                 });
             }
         }
+
+        let scroll = input::scroll_delta()?;
+        if scroll.x != 0.0 || scroll.y != 0.0 {
+            events.push(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Line,
+                delta: egui::vec2(scroll.x, scroll.y),
+                modifiers,
+            });
+        }
+
+        // Non-text keys, edge-detected from the held state (see KEYS).
+        for (i, &(key_code, key)) in KEYS.iter().enumerate() {
+            let down = held(key_code);
+            if down != self.keys_down[i] {
+                self.keys_down[i] = down;
+                events.push(egui::Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed: down,
+                    repeat: false,
+                    modifiers,
+                });
+            }
+        }
+
+        // Typed characters (Unity resolves layout/shift/IME for us). Control
+        // characters are left to the key events above.
+        for c in input::input_string()?.chars().filter(|c| !c.is_control()) {
+            events.push(egui::Event::Text(c.to_string()));
+        }
+
         Ok(egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::pos2(0.0, 0.0),
                 egui::vec2(w, h),
             )),
+            modifiers,
             events,
             ..Default::default()
         })

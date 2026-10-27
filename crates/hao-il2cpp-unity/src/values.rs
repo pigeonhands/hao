@@ -205,14 +205,16 @@ int_enum!(
     /// `UnityEngine.KeyCode`, for [`input`](crate::input). A few common keys are
     /// named; any other can be made with `KeyCode(value)`.
     KeyCode = "UnityEngine" "KeyCode" {
-        BACKSPACE = 8, TAB = 9, RETURN = 13, ESCAPE = 27, SPACE = 32,
+        BACKSPACE = 8, TAB = 9, RETURN = 13, ESCAPE = 27, SPACE = 32, DELETE = 127,
         LEFT = 276, RIGHT = 275, UP = 273, DOWN = 274,
+        INSERT = 277, HOME = 278, END = 279, PAGE_UP = 280, PAGE_DOWN = 281,
         ALPHA0 = 48, ALPHA1 = 49, ALPHA2 = 50, ALPHA3 = 51,
         A = 97, B = 98, C = 99, D = 100, E = 101, F = 102, G = 103, H = 104,
         I = 105, J = 106, K = 107, L = 108, M = 109, N = 110, O = 111, P = 112,
         Q = 113, R = 114, S = 115, T = 116, U = 117, V = 118, W = 119, X = 120,
         Y = 121, Z = 122,
         F1 = 282, F2 = 283, F3 = 284, F4 = 285, F5 = 286, F6 = 287,
-        LEFT_SHIFT = 304, LEFT_CONTROL = 306, LEFT_ALT = 308
+        RIGHT_SHIFT = 303, LEFT_SHIFT = 304, RIGHT_CONTROL = 305, LEFT_CONTROL = 306,
+        RIGHT_ALT = 307, LEFT_ALT = 308
     }
 );

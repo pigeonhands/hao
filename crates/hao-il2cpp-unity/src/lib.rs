@@ -167,6 +167,17 @@ pub mod input {
     pub fn mouse_position() -> Result<Vector3> {
         INPUT_MOUSE_POSITION.call(())
     }
+
+    /// The scroll wheel movement this frame (`x` horizontal, `y` vertical).
+    pub fn scroll_delta() -> Result<Vector2> {
+        INPUT_SCROLL_DELTA.call(())
+    }
+
+    /// The characters typed this frame (including `\b` for backspace and `\r`
+    /// for return), for driving a text field.
+    pub fn input_string() -> Result<String> {
+        Ok(INPUT_STRING.call(())?.to_rust().unwrap_or_default())
+    }
 }
 
 /// `UnityEngine.Application`.
