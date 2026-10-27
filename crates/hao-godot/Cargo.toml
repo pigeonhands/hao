@@ -10,6 +10,9 @@ hao-runtime = { version = "0.0.1", path = "../hao-runtime" }
 hooking = "0.6"
 libc = "0.2"
 
+[dev-dependencies]
+hao-runtime-macros = { version = "0.0.1", path = "../hao-runtime-macros" }
+
 [[example]]
 name = "capture"
 crate-type = ["cdylib"]
