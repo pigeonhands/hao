@@ -49,6 +49,7 @@ macro_rules! __call_thunk {
 }
 
 /// A .NET assembly bound with `hao_runtime_macros::bind!`.
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct BoundAssembly {
     pub assembly_name: &'static str,
     pub assembly_path: &'static str,

@@ -85,6 +85,7 @@ fn check(function: &'static str, code: i32) -> Result<()> {
 
 /// Where to find .NET and which framework version to run.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct CoreClrOptions {
     /// Defaults to `DOTNET_ROOT` or the standard install locations.
     pub dotnet_root: Option<PathBuf>,

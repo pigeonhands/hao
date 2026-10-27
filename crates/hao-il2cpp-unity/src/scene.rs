@@ -12,6 +12,7 @@ use crate::{bindings::*, values::LoadSceneMode};
 /// `UnityEngine.SceneManagement.Scene`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Scene {
     pub handle: i32,
 }

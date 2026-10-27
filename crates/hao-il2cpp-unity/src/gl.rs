@@ -32,6 +32,8 @@ use crate::{
 
 /// The primitive topology passed to [`draw`]/[`begin`], matching Unity's `GL` modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum Mode {
     Lines = 1,
     LineStrip = 2,

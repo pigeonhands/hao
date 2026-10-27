@@ -13,3 +13,7 @@ keywords = ["unity", "il2cpp", "dotnet", "modding"]
 hao = { version = "0.0.5", path = "../hao" }
 pewter = "0.0.10"
 thiserror = "2"
+facet = { version = "0.50.0-rc.7", optional = true }
+
+[features]
+reflect = ["dep:facet", "hao/reflect"]

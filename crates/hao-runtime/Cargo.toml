@@ -12,6 +12,7 @@ keywords = ["dotnet", "coreclr", "mono", "hosting", "interop"]
 [dependencies]
 libloading = "0.9"
 thiserror = "2"
+facet = { version = "0.50.0-rc.7", optional = true }
 tracing = "0.1"
 hao = { version = "0.0.5", path = "../hao", optional = true }
 
@@ -42,3 +43,4 @@ coreclr = ["hao"]
 # `Runtime::load_module` for modules built or edited with hao.
 hao = ["dep:hao"]
 mono = []
+reflect = ["dep:facet", "hao?/reflect"]

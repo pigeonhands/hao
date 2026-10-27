@@ -15,6 +15,7 @@ type Ptr = *mut c_void;
 
 /// Where to find Mono.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct MonoOptions {
     /// Path to the Mono shared library (`libmonosgen-2.0.so`, `mono-2.0-bdwgc.dll`, ...).
     /// Defaults to the system Mono.
@@ -42,6 +43,7 @@ struct Api {
     get_root_domain: unsafe extern "C" fn() -> Ptr,
 }
 
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub(crate) struct Mono {
     _library: Library,
     api: Api,

@@ -65,6 +65,7 @@ pub fn watch_module(substring: &str) {
 /// A COM interface id / class id.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Guid {
     data1: u32,
     data2: u16,

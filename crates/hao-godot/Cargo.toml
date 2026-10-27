@@ -32,3 +32,6 @@ crate-type = ["cdylib"]
 [[example]]
 name = "rewrite"
 crate-type = ["cdylib"]
+
+[features]
+reflect = ["hao-runtime/reflect"]

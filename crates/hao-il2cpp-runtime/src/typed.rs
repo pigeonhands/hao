@@ -35,6 +35,7 @@ pub mod element {
 
 /// The managed type of a parameter or return value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct TypeInfo {
     /// The `Il2CppTypeEnum` value. For enums, the element type of the underlying integer.
     pub element: i32,
@@ -59,6 +60,7 @@ impl TypeInfo {
 
 /// A method parameter's name and managed type name, from [`Method::parameters`].
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Parameter {
     /// The declared name, e.g. `amount` (often `arg0` in release builds).
     pub name: String,

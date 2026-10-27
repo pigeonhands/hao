@@ -32,6 +32,7 @@ use crate::{
 };
 
 /// One generated assembly per Il2Cpp image.
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct GeneratedAssembly {
     /// The image name, e.g. `Assembly-CSharp.dll`.
     pub file_name: String,

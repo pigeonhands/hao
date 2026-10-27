@@ -30,6 +30,8 @@ pub mod element {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum TypeKind {
     /// `void`, `bool`, ..., `string`, `object`, `IntPtr`, `TypedReference`.
     Primitive(u8),
@@ -53,6 +55,7 @@ pub enum TypeKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Il2CppType {
     pub kind: TypeKind,
     pub attrs: u16,
@@ -61,6 +64,7 @@ pub struct Il2CppType {
 
 /// `Il2CppMetadataRegistration` (v29).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct MetadataRegistration {
     pub address: u64,
     pub generic_classes: (u64, u64),
@@ -122,6 +126,7 @@ impl MetadataRegistration {
 }
 
 /// The game binary's type table, decoded.
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Binary {
     pub metadata_registration: MetadataRegistration,
     pub types: Vec<Il2CppType>,

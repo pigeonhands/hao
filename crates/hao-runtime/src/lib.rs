@@ -34,6 +34,8 @@ pub use coreclr::{find_dotnet_root, CoreClrOptions};
 pub use mono::MonoOptions;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+#[cfg_attr(feature = "reflect", repr(C))]
 pub enum Backend {
     CoreClr,
     Mono,

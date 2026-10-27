@@ -105,6 +105,7 @@ pub type TypeIndex = i32;
 pub type TypeDefinitionIndex = i32;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ImageDefinition {
     pub name_index: u32,
     pub assembly_index: i32,
@@ -119,6 +120,7 @@ pub struct ImageDefinition {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct AssemblyDefinition {
     pub image_index: i32,
     pub token: u32,
@@ -135,6 +137,7 @@ pub struct AssemblyDefinition {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct TypeDefinition {
     pub name_index: u32,
     pub namespace_index: u32,
@@ -165,6 +168,7 @@ pub struct TypeDefinition {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct MethodDefinition {
     pub name_index: u32,
     pub declaring_type: TypeDefinitionIndex,
@@ -179,6 +183,7 @@ pub struct MethodDefinition {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct FieldDefinition {
     pub name_index: u32,
     pub type_index: TypeIndex,
@@ -186,6 +191,7 @@ pub struct FieldDefinition {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ParameterDefinition {
     pub name_index: u32,
     pub token: u32,
@@ -193,6 +199,7 @@ pub struct ParameterDefinition {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct PropertyDefinition {
     pub name_index: u32,
     /// Method index relative to the declaring type's `method_start`, or -1.
@@ -203,6 +210,7 @@ pub struct PropertyDefinition {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct EventDefinition {
     pub name_index: u32,
     pub type_index: TypeIndex,
@@ -213,6 +221,7 @@ pub struct EventDefinition {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct GenericContainer {
     /// A type definition index, or a method index when `is_method`.
     pub owner_index: i32,
@@ -222,6 +231,7 @@ pub struct GenericContainer {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct GenericParameter {
     pub owner_index: i32,
     pub name_index: u32,
@@ -231,6 +241,7 @@ pub struct GenericParameter {
     pub flags: u16,
 }
 
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Metadata {
     pub version: u32,
     data: Vec<u8>,
@@ -254,6 +265,7 @@ pub struct Metadata {
 
 /// A constant value for a field, stored in the default value data section.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct FieldDefaultValue {
     pub field_index: i32,
     pub type_index: TypeIndex,

@@ -20,6 +20,7 @@ const FIELD_STATIC: u16 = 0x10;
 const METHOD_STATIC: u16 = 0x10;
 
 /// A Unity Il2Cpp game: its metadata and the type table from its binary.
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Game {
     metadata: Metadata,
     binary: Binary,
@@ -135,6 +136,7 @@ impl Game {
 }
 
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct TypeView<'g> {
     game: &'g Game,
     index: TypeDefinitionIndex,
@@ -241,6 +243,7 @@ impl std::fmt::Debug for TypeView<'_> {
 }
 
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct FieldView<'g> {
     game: &'g Game,
     field: &'g FieldDefinition,
@@ -275,12 +278,14 @@ impl std::fmt::Display for FieldView<'_> {
 }
 
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct MethodView<'g> {
     game: &'g Game,
     method: &'g MethodDefinition,
 }
 
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct ParameterView<'g> {
     game: &'g Game,
     parameter: &'g ParameterDefinition,
