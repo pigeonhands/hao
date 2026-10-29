@@ -1,7 +1,7 @@
 [package]
 name = "hao-runtime-macros"
 authors = ["Sam M."]
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 description = "Generate rust bindings to .net assemblies for hao-runtime"
 license = "MIT"
@@ -13,7 +13,7 @@ readme = "README.md"
 proc-macro = true
 
 [dependencies]
-hao = { version = "0.0.8", path = "../hao" }
+hao = { version = "0.0.9", path = "../hao" }
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "3", features = ["full"] }
