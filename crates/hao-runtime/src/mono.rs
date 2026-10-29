@@ -43,7 +43,6 @@ struct Api {
     get_root_domain: unsafe extern "C" fn() -> Ptr,
 }
 
-#[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub(crate) struct Mono {
     _library: Library,
     api: Api,
