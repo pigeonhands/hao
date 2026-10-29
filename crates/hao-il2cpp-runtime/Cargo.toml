@@ -6,6 +6,7 @@ edition = "2021"
 description = "Hook and call into Unity Il2Cpp games from inside the game process"
 license = "MIT"
 repository = "https://github.com/pigeonhands/hao"
+documentation = "https://docs.rs/hao-il2cpp-runtime"
 readme = "README.md"
 keywords = ["unity", "il2cpp", "modding", "hooking"]
 
@@ -24,3 +25,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 reflect = ["dep:facet"]
+
+[package.metadata.docs.rs]
+all-features = true

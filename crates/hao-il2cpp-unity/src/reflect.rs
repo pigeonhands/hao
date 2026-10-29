@@ -1,4 +1,4 @@
-//! Reflection roots for the `reflect` feature. See [`hao::reflect`] for the
+//! Reflection roots for the `reflect` feature. See [`hao::reflect`](https://docs.rs/hao/latest/hao/reflect/index.html) for the
 //! pattern. The overlay and binding handles hold engine pointers and are not
 //! reflected; the plain-data types are.
 

@@ -3,6 +3,7 @@ name = "hao-godot"
 version = "0.0.3"
 edition = "2021"
 description = "Attach to a Godot (CoreCLR / .NET) game's runtime for native mods"
+documentation = "https://docs.rs/hao-godot"
 license = "MIT"
 
 [dependencies]
@@ -35,3 +36,6 @@ crate-type = ["cdylib"]
 
 [features]
 reflect = ["hao-runtime/reflect"]
+
+[package.metadata.docs.rs]
+all-features = true

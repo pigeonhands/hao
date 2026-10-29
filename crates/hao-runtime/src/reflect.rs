@@ -1,4 +1,4 @@
-//! Reflection roots for the `reflect` feature. See [`hao::reflect`] for the
+//! Reflection roots for the `reflect` feature. See [`hao::reflect`](https://docs.rs/hao/latest/hao/reflect/index.html) for the
 //! pattern. The runtime handles (`Runtime`, `ClrHost`, the backends) hold raw
 //! pointers and library handles and are not reflected; the configuration and
 //! descriptor types are.
@@ -6,7 +6,7 @@
 use facet::{Facet, Shape};
 
 /// The reflected entry-point shapes. Which are present depends on the enabled
-/// backend features. When the `hao` feature is on, [`hao::reflect::roots`] gives
+/// backend features. When the `hao` feature is on, [`hao::reflect::roots`](https://docs.rs/hao/latest/hao/reflect/fn.roots.html) gives
 /// the metadata graph as well.
 pub fn roots() -> Vec<&'static Shape> {
     #[allow(unused_mut)]

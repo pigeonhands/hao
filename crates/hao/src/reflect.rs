@@ -17,7 +17,7 @@
 //! Some types are deliberately [opaque](facet::Type::User) — they appear in the
 //! graph as sized black boxes rather than exposing their contents:
 //!
-//! - **bitflags** sets ([`TypeAttributes`](crate::dotnet::entries::TypeAttributes),
+//! - **bitflags** sets ([`TypeAttributes`](crate::dotnet::md::streams::tables_stream::TypeAttributes),
 //!   etc.): their flag names are `const`s, which no derive can surface. Read them
 //!   through [`bitflags::Flags::FLAGS`], which gives each flag's name and value.
 //! - The row-id cell on each [`Entry`](crate::dotnet::entries::Entry), an

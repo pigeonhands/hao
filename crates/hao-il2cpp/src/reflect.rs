@@ -1,4 +1,4 @@
-//! Reflection roots for the `reflect` feature. See [`hao::reflect`] for the
+//! Reflection roots for the `reflect` feature. See [`hao::reflect`](https://docs.rs/hao/latest/hao/reflect/index.html) for the
 //! pattern: a consumer walks these shapes to reach every reflected type.
 
 use facet::{Facet, Shape};

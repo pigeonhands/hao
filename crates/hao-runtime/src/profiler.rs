@@ -3,7 +3,7 @@
 //! Registered as a startup profiler (the host sets `CORECLR_ENABLE_PROFILING=1`,
 //! `CORECLR_PROFILER={`[`CLSID_STRING`]`}` and `CORECLR_PROFILER_PATH` to the
 //! `.so` that re-exports [`dll_get_class_object`] as `DllGetClassObject`), the
-//! runtime loads it and calls [`ICorProfilerCallback::Initialize`], where we grab
+//! runtime loads it and calls `ICorProfilerCallback::Initialize`, where we grab
 //! `ICorProfilerInfo` and ask to monitor JIT compilation and to enable ReJIT.
 //!
 //! This is the registration layer. ReJIT (replacing a method's IL with hao's)

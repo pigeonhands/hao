@@ -6,6 +6,7 @@ edition = "2021"
 description = "Host the .net runtime (CoreCLR or Mono) in a rust process"
 license = "MIT"
 repository = "https://github.com/pigeonhands/hao"
+documentation = "https://docs.rs/hao-runtime"
 readme = "README.md"
 keywords = ["dotnet", "coreclr", "mono", "hosting", "interop"]
 
@@ -44,3 +45,6 @@ coreclr = ["hao"]
 hao = ["dep:hao"]
 mono = []
 reflect = ["dep:facet", "hao?/reflect"]
+
+[package.metadata.docs.rs]
+all-features = true

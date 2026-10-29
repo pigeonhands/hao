@@ -33,3 +33,6 @@ sync = []
 # external consumer such as a scripting runtime. Implies `sync`: the entry graph
 # is `Arc`/`RwLock`, which facet can reflect, where `Rc`/`RefCell` cannot.
 reflect = ["dep:facet", "sync", "pewter/reflect"]
+
+[package.metadata.docs.rs]
+all-features = true
