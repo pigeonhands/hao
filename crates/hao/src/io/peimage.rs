@@ -17,6 +17,11 @@ impl<'a> PEImage<'a> {
         Ok(Self { pe })
     }
 
+    /// Wraps an already-parsed [`PEFile`], avoiding a re-parse.
+    pub fn from_pe(pe: PEFile<'a>) -> Self {
+        Self { pe }
+    }
+
     pub fn optional_header(&self) -> Result<&OptionalHeader> {
         self.pe
             .optional_header

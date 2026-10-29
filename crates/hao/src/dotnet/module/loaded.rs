@@ -73,6 +73,18 @@ impl Module {
         Self::from_metadata(&Metadata::parse(data)?)
     }
 
+    /// Loads a module from a PE parsed with pewter, instead of re-parsing bytes.
+    /// Dependencies are not resolved.
+    pub fn from_pe(pe: crate::io::PEFile) -> Result<Self> {
+        Self::from_pe_image(crate::io::PEImage::from_pe(pe))
+    }
+
+    /// Loads a module from an already-parsed [`PEImage`](crate::io::PEImage).
+    /// Dependencies are not resolved.
+    pub fn from_pe_image(image: crate::io::PEImage) -> Result<Self> {
+        Self::from_metadata(&Metadata::from_image(image)?)
+    }
+
     /// Loads a module from parsed metadata. Dependencies are not resolved.
     pub fn from_metadata(metadata: &Metadata) -> Result<Self> {
         let Tables {

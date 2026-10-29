@@ -16,7 +16,13 @@ pub struct Metadata<'a> {
 
 impl<'a> Metadata<'a> {
     pub fn parse(data: &'a [u8]) -> Result<Self> {
-        let pe_image = PEImage::load_bytes(data)?;
+        Self::from_image(PEImage::load_bytes(data)?)
+    }
+
+    /// Reads .NET metadata from an already-parsed PE image, instead of parsing
+    /// bytes.
+    pub fn from_image(pe_image: PEImage<'a>) -> Result<Self> {
+        let data = pe_image.pe.file_bytes();
         let cor20_header = pe_image.read_clr_rt_header()?;
 
         if cor20_header.metadata.virtual_address == 0 {

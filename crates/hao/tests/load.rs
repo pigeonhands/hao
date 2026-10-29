@@ -14,6 +14,20 @@ fn load(sample: &common::Sample) -> Module {
 }
 
 #[test]
+fn from_pe_matches_from_bytes() {
+    let sample = sample!();
+    let pe = hao::io::PEFile::parse(&sample.bytes).unwrap();
+    let from_pe = Module::from_pe(pe).unwrap();
+    let from_bytes = Module::from_bytes(&sample.bytes).unwrap();
+
+    assert_eq!(from_pe.name(), from_bytes.name());
+    assert_eq!(from_pe.types.len(), from_bytes.types.len());
+    assert!(from_pe.find_type("Sample", "Calc").is_some());
+    // The same bytes round-trip, so a rewrite of either is identical.
+    assert_eq!(from_pe.write().unwrap(), from_bytes.write().unwrap());
+}
+
+#[test]
 fn loads_types() {
     let module = load(sample!());
     assert_eq!(module.name(), "Sample.dll");

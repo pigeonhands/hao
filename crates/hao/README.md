@@ -32,6 +32,10 @@ for ty in module.all_types() {
 `Module::from_path` also resolves referenced assemblies from the module's directory and the
 installed .NET shared framework. Use `Module::from_path_no_resolve` to skip that.
 
+A module can also be loaded from bytes with `Module::from_bytes`, or from a PE already parsed
+with pewter via `Module::from_pe` (or `Module::from_pe_image` for a `hao::io::PEImage`), which
+avoids re-parsing the PE.
+
 ## Patching IL
 
 ```rust
