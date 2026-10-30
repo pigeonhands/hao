@@ -6,6 +6,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use pewter::image::LoadedImage;
+
 use crate::{
     binary::{Binary, Il2CppType},
     error::{Error, Result},
@@ -24,6 +26,7 @@ const METHOD_STATIC: u16 = 0x10;
 pub struct Game {
     metadata: Metadata,
     binary: Binary,
+    image_bytes: Vec<u8>,
     by_name: HashMap<String, TypeDefinitionIndex>,
 }
 
@@ -58,22 +61,27 @@ impl Game {
 
     /// Reads a game from the contents of its `global-metadata.dat` and `GameAssembly`,
     /// e.g. files uploaded to a web page.
-    pub fn from_bytes(metadata: Vec<u8>, binary: &[u8]) -> Result<Self> {
+    pub fn from_bytes(metadata: Vec<u8>, binary_bytes: &[u8]) -> Result<Self> {
         let metadata = Metadata::parse(metadata)?;
         // pewter detects ELF (`GameAssembly.so`) or PE (`GameAssembly.dll`).
-        let image =
-            pewter::image::AnyImage::load(binary).map_err(|e| Error::Binary(format!("{:?}", e)))?;
+        let image = pewter::image::AnyImage::load(binary_bytes)
+            .map_err(|e| Error::Binary(format!("{:?}", e)))?;
         let binary = Binary::read(&image, &metadata)?;
-        Ok(Self::new(metadata, binary))
+        Ok(Self::new_with_image(metadata, binary, binary_bytes.to_vec()))
     }
 
     pub fn new(metadata: Metadata, binary: Binary) -> Self {
+        Self::new_with_image(metadata, binary, Vec::new())
+    }
+
+    pub fn new_with_image(metadata: Metadata, binary: Binary, image_bytes: Vec<u8>) -> Self {
         let by_name = (0..metadata.type_definitions.len() as TypeDefinitionIndex)
             .map(|i| (metadata.type_full_name(i), i))
             .collect();
         Self {
             metadata,
             binary,
+            image_bytes,
             by_name,
         }
     }
@@ -132,6 +140,26 @@ impl Game {
             .type_at(index)
             .map(|t| t.name(&self.metadata))
             .unwrap_or_else(|| format!("<type {}>", index))
+    }
+
+    /// Read raw bytes from the game binary at a virtual address.
+    pub fn bytes_at(&self, vaddr: u64, len: usize) -> Option<Vec<u8>> {
+        if self.image_bytes.is_empty() {
+            return None;
+        }
+        let image = pewter::image::AnyImage::load(&self.image_bytes).ok()?;
+        LoadedImage::bytes(&image, vaddr, len).map(|b| b.to_vec())
+    }
+
+    /// Look up the native code address for a method definition.
+    pub fn method_pointer(&self, method: &MethodDefinition) -> Option<u64> {
+        let image = self.metadata.images.iter().find(|img| {
+            let start = img.type_start as i32;
+            let end = start + img.type_count as i32;
+            method.declaring_type >= start && method.declaring_type < end
+        })?;
+        let name = self.metadata.image_name(image);
+        self.binary.method_pointer(name, method.token)
     }
 }
 
@@ -458,6 +486,11 @@ impl<'g> MethodView<'g> {
     /// The types of the parameters, e.g. `["string", "string"]`.
     pub fn parameter_type_names(&self) -> Vec<String> {
         self.parameters().map(|p| p.type_name()).collect()
+    }
+
+    /// The native code address of this method in the game binary, if known.
+    pub fn code_address(&self) -> Option<u64> {
+        self.game.method_pointer(self.method)
     }
 }
 

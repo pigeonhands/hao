@@ -137,10 +137,118 @@ impl MetadataRegistration {
     }
 }
 
+/// Per-image method pointer table, from `Il2CppCodeGenModule`.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+pub struct CodeGenModule {
+    pub name: String,
+    pub method_pointers: Vec<u64>,
+}
+
+/// `Il2CppCodeRegistration` — the code-side registration that holds method
+/// pointers, invoker pointers, and per-module code generation tables.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "reflect", derive(facet::Facet))]
+pub struct CodeRegistration {
+    pub modules: Vec<CodeGenModule>,
+}
+
+impl CodeRegistration {
+    /// Finds the code registration by locating `codeGenModules` — an array of
+    /// pointers to `Il2CppCodeGenModule` structs whose `moduleName` fields
+    /// match the image names from metadata.
+    pub fn find(image: &impl LoadedImage, metadata: &Metadata) -> Result<Self> {
+        let p = image.pointer_size();
+        let image_count = metadata.images.len() as u64;
+        let image_names: std::collections::HashSet<&str> = metadata
+            .images
+            .iter()
+            .map(|i| metadata.image_name(i))
+            .collect();
+
+        // Scan data segments for the codeGenModules array — a contiguous
+        // run of `image_count` pointers to `Il2CppCodeGenModule` structs.
+        // The array order may differ from metadata order (often alphabetical).
+        for segment in image.data_segments() {
+            let start = segment.0;
+            for vaddr in image.pointer_slots(segment).filter(|v| *v >= start) {
+                let array_ptr = match image.pointer(vaddr) {
+                    Some(a) if image.is_mapped(a) => a,
+                    _ => continue,
+                };
+                let first_module = match image.pointer(array_ptr) {
+                    Some(m) if image.is_mapped(m) => m,
+                    _ => continue,
+                };
+                let name_ptr = match image.pointer(first_module) {
+                    Some(n) if image.is_mapped(n) => n,
+                    _ => continue,
+                };
+                let name = match image.c_str(name_ptr) {
+                    Some(n) => n,
+                    None => continue,
+                };
+                if !image_names.contains(name.as_str()) {
+                    continue;
+                }
+
+                let module_ptrs = match image.pointers(array_ptr, image_count) {
+                    Some(ptrs) => ptrs,
+                    None => continue,
+                };
+
+                // Read all modules and verify every name is a known image.
+                let mut modules = Vec::with_capacity(image_count as usize);
+                let mut ok = true;
+                for module_ptr in &module_ptrs {
+                    let mp = *module_ptr;
+                    if !image.is_mapped(mp) {
+                        ok = false;
+                        break;
+                    }
+                    let mn_ptr = image.pointer(mp).unwrap_or(0);
+                    let mn = match image.c_str(mn_ptr) {
+                        Some(n) if image_names.contains(n.as_str()) => n,
+                        _ => {
+                            ok = false;
+                            break;
+                        }
+                    };
+                    // Il2CppCodeGenModule (v29):
+                    //   0:  const char* moduleName
+                    //   p:  methodPointerCount (ptr-width or i32+pad)
+                    //   2p: Il2CppMethodPointer* methodPointers
+                    let raw_count = image.pointer(mp + p).unwrap_or(0);
+                    let mp_count = if raw_count < 100_000 {
+                        raw_count
+                    } else {
+                        image.u32(mp + p).unwrap_or(0) as u64
+                    };
+                    let mp_array = image.pointer(mp + 2 * p).unwrap_or(0);
+                    let pointers = if mp_count > 0 && image.is_mapped(mp_array) {
+                        image.pointers(mp_array, mp_count).unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
+                    modules.push(CodeGenModule {
+                        name: mn,
+                        method_pointers: pointers,
+                    });
+                }
+                if ok && modules.len() == image_count as usize {
+                    return Ok(Self { modules });
+                }
+            }
+        }
+        Err(Error::Binary("CodeRegistration not found".into()))
+    }
+}
+
 /// The game binary's type table, decoded.
 #[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct Binary {
     pub metadata_registration: MetadataRegistration,
+    pub code_registration: Option<CodeRegistration>,
     pub types: Vec<Il2CppType>,
 }
 
@@ -154,14 +262,29 @@ impl Binary {
             .into_iter()
             .map(|address| read_type(image, address, 0))
             .collect::<Result<Vec<_>>>()?;
+        let code_registration = CodeRegistration::find(image, metadata).ok();
         Ok(Self {
             metadata_registration: registration,
+            code_registration,
             types,
         })
     }
 
     pub fn type_at(&self, index: i32) -> Option<&Il2CppType> {
         usize::try_from(index).ok().and_then(|i| self.types.get(i))
+    }
+
+    /// Look up the native code address for a method by its image name and
+    /// token (RID = token & 0xFFFFFF, 1-based).
+    pub fn method_pointer(&self, image_name: &str, token: u32) -> Option<u64> {
+        let code = self.code_registration.as_ref()?;
+        let module = code.modules.iter().find(|m| m.name == image_name)?;
+        let rid = (token & 0x00FF_FFFF) as usize;
+        if rid == 0 {
+            return None;
+        }
+        let ptr = *module.method_pointers.get(rid - 1)?;
+        if ptr == 0 { None } else { Some(ptr) }
     }
 }
 
