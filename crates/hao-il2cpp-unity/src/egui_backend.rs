@@ -63,6 +63,11 @@ struct EguiState {
     /// Previous held state of each key in [`KEYS`], for the same edge detection
     /// (read from the held state, as GetKeyDown is unreliable off the main thread).
     keys_down: [bool; KEYS.len()],
+    /// Previous held state of typeable keys for the fallback text input path.
+    text_keys_down: [bool; TEXT_KEYS.len()],
+    /// Whether `Input.inputString` has ever returned a non-empty string. Once
+    /// it does, the fallback key-to-char path is disabled.
+    input_string_works: bool,
     /// The top-most render target egui draws into and is composited from.
     surface: OverlaySurface,
 }
@@ -93,6 +98,27 @@ const KEYS: &[(crate::KeyCode, egui::Key)] = {
         (K::V, Key::V),
         (K::X, Key::X),
         (K::Z, Key::Z),
+    ]
+};
+
+/// Typeable keys for the fallback text input path. Each entry is a key code, the
+/// lowercase char, and the shifted char. Used only when `Input.inputString` is
+/// unavailable — it doesn't handle non-US layouts, but covers the common case.
+const TEXT_KEYS: &[(crate::KeyCode, char, char)] = {
+    use crate::KeyCode as K;
+    &[
+        (K::A, 'a', 'A'), (K::B, 'b', 'B'), (K::C, 'c', 'C'), (K::D, 'd', 'D'),
+        (K::E, 'e', 'E'), (K::F, 'f', 'F'), (K::G, 'g', 'G'), (K::H, 'h', 'H'),
+        (K::I, 'i', 'I'), (K::J, 'j', 'J'), (K::K, 'k', 'K'), (K::L, 'l', 'L'),
+        (K::M, 'm', 'M'), (K::N, 'n', 'N'), (K::O, 'o', 'O'), (K::P, 'p', 'P'),
+        (K::Q, 'q', 'Q'), (K::R, 'r', 'R'), (K::S, 's', 'S'), (K::T, 't', 'T'),
+        (K::U, 'u', 'U'), (K::V, 'v', 'V'), (K::W, 'w', 'W'), (K::X, 'x', 'X'),
+        (K::Y, 'y', 'Y'), (K::Z, 'z', 'Z'),
+        (K::ALPHA0, '0', ')'), (K::ALPHA1, '1', '!'), (K::ALPHA2, '2', '@'),
+        (K::ALPHA3, '3', '#'), (K(52), '4', '$'), (K(53), '5', '%'),
+        (K(54), '6', '^'), (K(55), '7', '&'), (K(56), '8', '*'),
+        (K(57), '9', '('),
+        (K::SPACE, ' ', ' '),
     ]
 };
 
@@ -127,6 +153,8 @@ impl EguiState {
             atlas: Vec::new(),
             pointer_down: [false; 2],
             keys_down: [false; KEYS.len()],
+            text_keys_down: [false; TEXT_KEYS.len()],
+            input_string_works: false,
             surface: OverlaySurface::new("hao-egui-overlay"),
         })
     }
@@ -234,13 +262,30 @@ impl EguiState {
             }
         }
 
-        // Typed characters (Unity resolves layout/shift/IME for us). Control
-        // characters are left to the key events above. `Input.inputString` only
-        // exists under the legacy input manager; a game on the new Input System
-        // lacks it, so a failure here is not fatal — just skip text input.
+        // Typed characters. Prefer Unity's `Input.inputString` (handles
+        // layout, shift, IME), falling back to manual key-to-char conversion
+        // when it's unavailable or consistently empty.
         if let Ok(typed) = input::input_string() {
+            if !typed.is_empty() {
+                self.input_string_works = true;
+            }
             for c in typed.chars().filter(|c| !c.is_control()) {
                 events.push(egui::Event::Text(c.to_string()));
+            }
+        }
+
+        // Fallback: generate text events from individual key edges when
+        // inputString isn't delivering characters. Doesn't handle non-US
+        // layouts, but covers the common case.
+        if !self.input_string_works {
+            let shift = held(K::LEFT_SHIFT) || held(K::RIGHT_SHIFT);
+            for (i, &(key_code, lower, upper)) in TEXT_KEYS.iter().enumerate() {
+                let down = held(key_code);
+                if down && !self.text_keys_down[i] {
+                    let ch = if shift { upper } else { lower };
+                    events.push(egui::Event::Text(ch.to_string()));
+                }
+                self.text_keys_down[i] = down;
             }
         }
 

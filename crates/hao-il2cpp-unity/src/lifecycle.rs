@@ -1,7 +1,7 @@
 //! Running mod code every frame.
 
 use std::sync::{
-    atomic::{AtomicI32, Ordering},
+    atomic::{AtomicBool, AtomicI32, Ordering},
     Arc, Mutex,
 };
 
@@ -18,6 +18,20 @@ static LAST_FRAME: AtomicI32 = AtomicI32::new(-1);
 
 static RENDER_CALLBACKS: Mutex<Vec<RenderCallback>> = Mutex::new(Vec::new());
 static RENDER_HOOKED: Mutex<bool> = Mutex::new(false);
+
+static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+
+/// Returns `true` after [`shutdown`] has been called.
+pub fn is_shutting_down() -> bool {
+    SHUTTING_DOWN.load(Ordering::Relaxed)
+}
+
+/// Signals all lifecycle hooks to stop firing. Call from an
+/// `Application.quitting` handler or a `dtor` to prevent crashes
+/// during engine teardown.
+pub fn shutdown() {
+    SHUTTING_DOWN.store(true, Ordering::Relaxed);
+}
 
 /// Runs `callback` once per frame on Unity's main thread, a good place to update
 /// an overlay. Panics are caught and printed.
@@ -37,13 +51,11 @@ pub fn on_update(callback: impl Fn() + Send + Sync + 'static) -> Result<()> {
             .method("get_frameCount", 0)?;
         frame_count.hook(|original: Original<_, i32>| {
             let frame = original.call(());
-            // Fire once per frame. The callback calls the original code, not the
-            // hook, so this never recurses.
+            if SHUTTING_DOWN.load(Ordering::Relaxed) {
+                return frame;
+            }
             if LAST_FRAME.swap(frame, Ordering::Relaxed) != frame {
                 let callbacks = CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                // A managed exception thrown by a Unity call inside a callback must
-                // flow back to Unity (which logs it); catching it here would abort,
-                // as Rust can't catch foreign exceptions.
                 for callback in callbacks {
                     callback();
                 }
@@ -75,11 +87,13 @@ pub fn on_render(callback: impl Fn(Camera) + Send + Sync + 'static) -> Result<()
         CAMERA_FIRE_ON_POST_RENDER.method()?.hook(
             |camera: Camera, original: Original<_, ()>| {
                 original.call((camera,));
+                if SHUTTING_DOWN.load(Ordering::Relaxed) {
+                    return;
+                }
                 let callbacks = RENDER_CALLBACKS
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .clone();
-                // See on_update: managed exceptions must flow back to Unity, not be caught.
                 for callback in callbacks {
                     callback(camera);
                 }

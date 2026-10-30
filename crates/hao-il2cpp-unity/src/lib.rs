@@ -48,7 +48,7 @@ pub use hao_il2cpp_runtime as runtime;
 #[cfg(unix)]
 pub use hao_il2cpp_runtime::on_init;
 use hao_il2cpp_runtime::{Error, Il2Cpp, Result};
-pub use lifecycle::{on_render, on_update};
+pub use lifecycle::{is_shutting_down, on_render, on_update, shutdown};
 pub use objects::{
     find_object_of_type, find_objects_of_type, Camera, Canvas, Component, ComponentType,
     GameObject, Material, RawImage, RectTransform, RenderTexture, Shader, TextMeshPro, Texture2D,
