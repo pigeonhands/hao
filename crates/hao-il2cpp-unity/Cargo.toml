@@ -41,5 +41,10 @@ name = "egui_demo"
 crate-type = ["cdylib"]
 required-features = ["egui"]
 
+[[example]]
+name = "megabonk"
+crate-type = ["cdylib"]
+required-features = ["egui"]
+
 [package.metadata.docs.rs]
 all-features = true
