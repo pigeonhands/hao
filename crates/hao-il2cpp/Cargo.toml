@@ -1,7 +1,7 @@
 [package]
 name = "hao-il2cpp"
 authors = ["Sam M."]
-version = "0.0.4"
+version = "0.0.5"
 edition = "2021"
 description = "Read Unity Il2Cpp metadata and generate .net proxy assemblies with hao"
 license = "MIT"
