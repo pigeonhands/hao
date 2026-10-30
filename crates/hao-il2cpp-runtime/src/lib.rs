@@ -463,9 +463,10 @@ impl Field {
         unsafe { (self.il2cpp.api.il2cpp_field_get_flags)(self.ptr) & FIELD_STATIC != 0 }
     }
 
-    pub fn element_type(&self) -> i32 {
+    pub fn element_type(&self) -> typed::ElementType {
         let ty = unsafe { (self.il2cpp.api.il2cpp_field_get_type)(self.ptr) };
-        unsafe { (self.il2cpp.api.il2cpp_type_get_type)(ty) }
+        let raw = unsafe { (self.il2cpp.api.il2cpp_type_get_type)(ty) };
+        typed::ElementType::from(raw)
     }
 
     /// Reads this instance field's value from `object`.
@@ -572,7 +573,7 @@ impl MethodHook {
     }
 }
 
-pub use typed::VoidBlockHook;
+pub use typed::{ElementType, VoidBlockHook};
 #[cfg(target_arch = "x86_64")]
 pub use typed::{GenericHookMeta, GenericParam, ParamSlot};
 

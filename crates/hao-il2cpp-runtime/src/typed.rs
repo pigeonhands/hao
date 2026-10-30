@@ -33,6 +33,156 @@ pub mod element {
     pub const MVAR: i32 = 0x1E;
 }
 
+/// The managed element type of a field, parameter, or return value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ElementType {
+    Void,
+    Boolean,
+    Char,
+    I1,
+    U1,
+    I2,
+    U2,
+    I4,
+    U4,
+    I8,
+    U8,
+    R4,
+    R8,
+    String,
+    Ptr,
+    ValueType,
+    Class,
+    Var,
+    Array,
+    GenericInst,
+    I,
+    U,
+    Object,
+    SzArray,
+    MVar,
+    Unknown(i32),
+}
+
+impl ElementType {
+    pub fn is_float(self) -> bool {
+        matches!(self, Self::R4 | Self::R8)
+    }
+
+    pub fn is_integer(self) -> bool {
+        matches!(
+            self,
+            Self::Boolean | Self::Char | Self::I1 | Self::U1 | Self::I2 | Self::U2
+                | Self::I4 | Self::U4 | Self::I8 | Self::U8 | Self::I | Self::U
+        )
+    }
+
+    pub fn is_reference(self) -> bool {
+        matches!(
+            self,
+            Self::String | Self::Class | Self::Object | Self::GenericInst
+                | Self::Array | Self::SzArray
+        )
+    }
+
+    pub fn raw(self) -> i32 {
+        match self {
+            Self::Void => element::VOID,
+            Self::Boolean => element::BOOLEAN,
+            Self::Char => element::CHAR,
+            Self::I1 => element::I1,
+            Self::U1 => element::U1,
+            Self::I2 => element::I2,
+            Self::U2 => element::U2,
+            Self::I4 => element::I4,
+            Self::U4 => element::U4,
+            Self::I8 => element::I8,
+            Self::U8 => element::U8,
+            Self::R4 => element::R4,
+            Self::R8 => element::R8,
+            Self::String => element::STRING,
+            Self::Ptr => element::PTR,
+            Self::ValueType => element::VALUETYPE,
+            Self::Class => element::CLASS,
+            Self::Var => element::VAR,
+            Self::Array => element::ARRAY,
+            Self::GenericInst => element::GENERICINST,
+            Self::I => element::I,
+            Self::U => element::U,
+            Self::Object => element::OBJECT,
+            Self::SzArray => element::SZARRAY,
+            Self::MVar => element::MVAR,
+            Self::Unknown(v) => v,
+        }
+    }
+}
+
+impl From<i32> for ElementType {
+    fn from(v: i32) -> Self {
+        match v {
+            element::VOID => Self::Void,
+            element::BOOLEAN => Self::Boolean,
+            element::CHAR => Self::Char,
+            element::I1 => Self::I1,
+            element::U1 => Self::U1,
+            element::I2 => Self::I2,
+            element::U2 => Self::U2,
+            element::I4 => Self::I4,
+            element::U4 => Self::U4,
+            element::I8 => Self::I8,
+            element::U8 => Self::U8,
+            element::R4 => Self::R4,
+            element::R8 => Self::R8,
+            element::STRING => Self::String,
+            element::PTR => Self::Ptr,
+            element::VALUETYPE => Self::ValueType,
+            element::CLASS => Self::Class,
+            element::VAR => Self::Var,
+            element::ARRAY => Self::Array,
+            element::GENERICINST => Self::GenericInst,
+            element::I => Self::I,
+            element::U => Self::U,
+            element::OBJECT => Self::Object,
+            element::SZARRAY => Self::SzArray,
+            element::MVAR => Self::MVar,
+            other => Self::Unknown(other),
+        }
+    }
+}
+
+impl std::fmt::Display for ElementType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Void => f.write_str("void"),
+            Self::Boolean => f.write_str("bool"),
+            Self::Char => f.write_str("char"),
+            Self::I1 => f.write_str("i8"),
+            Self::U1 => f.write_str("u8"),
+            Self::I2 => f.write_str("i16"),
+            Self::U2 => f.write_str("u16"),
+            Self::I4 => f.write_str("i32"),
+            Self::U4 => f.write_str("u32"),
+            Self::I8 => f.write_str("i64"),
+            Self::U8 => f.write_str("u64"),
+            Self::R4 => f.write_str("f32"),
+            Self::R8 => f.write_str("f64"),
+            Self::String => f.write_str("string"),
+            Self::Ptr => f.write_str("ptr"),
+            Self::ValueType => f.write_str("valuetype"),
+            Self::Class => f.write_str("class"),
+            Self::Var => f.write_str("var"),
+            Self::Array => f.write_str("array"),
+            Self::GenericInst => f.write_str("generic"),
+            Self::I => f.write_str("nint"),
+            Self::U => f.write_str("nuint"),
+            Self::Object => f.write_str("object"),
+            Self::SzArray => f.write_str("szarray"),
+            Self::MVar => f.write_str("mvar"),
+            Self::Unknown(v) => write!(f, "unknown(0x{v:02X})"),
+        }
+    }
+}
+
 /// The managed type of a parameter or return value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "reflect", derive(facet::Facet))]
