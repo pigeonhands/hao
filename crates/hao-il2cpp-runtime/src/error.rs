@@ -20,4 +20,6 @@ pub enum Error {
     Nul(String),
     #[error("hooking failed: {0:?}")]
     Hook(hooking::error::HookingError),
+    #[error("{0}")]
+    Exception(String),
 }

@@ -284,6 +284,47 @@ impl Il2Cpp {
             ptr: unsafe { (self.api.il2cpp_object_get_class)(object.0) },
         }
     }
+
+    /// Extracts a human-readable message from a managed exception object by
+    /// calling its `ToString()` method. Falls back to the class name if
+    /// `ToString()` fails.
+    ///
+    /// # Safety
+    /// `exception` must be a non-null, live managed exception object.
+    pub unsafe fn exception_message(&self, exception: Ptr) -> String {
+        let cls = (self.api.il2cpp_object_get_class)(exception);
+        let class_name = if cls.is_null() {
+            "UnknownException"
+        } else {
+            c_str((self.api.il2cpp_class_get_name)(cls))
+        };
+
+        if !cls.is_null() {
+            if let Ok(to_string) = cstring("ToString") {
+                let method = (self.api.il2cpp_class_get_method_from_name)(
+                    cls,
+                    to_string.as_ptr(),
+                    0,
+                );
+                if !method.is_null() {
+                    let mut nested: Ptr = std::ptr::null_mut();
+                    let str_obj = (self.api.il2cpp_runtime_invoke)(
+                        method,
+                        exception,
+                        std::ptr::null_mut(),
+                        &mut nested,
+                    );
+                    if nested.is_null() && !str_obj.is_null() {
+                        if let Some(s) = self.read_string(Object(str_obj)) {
+                            return s;
+                        }
+                    }
+                }
+            }
+        }
+
+        format!("{class_name} (could not read exception message)")
+    }
 }
 
 /// A managed class (`Il2CppClass*`).
@@ -542,6 +583,31 @@ impl Method {
     pub fn code(&self) -> *mut c_void {
         // `methodPointer` is the first field of `MethodInfo`.
         unsafe { *(self.ptr as *const *mut c_void) }
+    }
+
+    /// Calls the method through `il2cpp_runtime_invoke`, which catches managed
+    /// exceptions. Each element of `args` is a pointer to the argument value
+    /// (for value types) or the object pointer itself (for reference types).
+    pub fn runtime_invoke(&self, this: Object, args: &mut [Ptr]) -> Result<Object> {
+        let args_ptr = if args.is_empty() {
+            std::ptr::null_mut()
+        } else {
+            args.as_mut_ptr()
+        };
+        let mut exception: Ptr = std::ptr::null_mut();
+        let result = unsafe {
+            (self.il2cpp.api.il2cpp_runtime_invoke)(
+                self.ptr,
+                this.0,
+                args_ptr as *mut Ptr,
+                &mut exception,
+            )
+        };
+        if !exception.is_null() {
+            let msg = unsafe { self.il2cpp.exception_message(exception) };
+            return Err(Error::Exception(msg));
+        }
+        Ok(Object(result))
     }
 
     /// Redirects every call of the method to `detour`, which has the method's
