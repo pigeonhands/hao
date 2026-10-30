@@ -254,6 +254,26 @@ impl Il2Cpp {
         }
     }
 
+    /// Every assembly loaded in the current domain.
+    pub fn assemblies(&'static self) -> Vec<Image> {
+        let mut count: usize = 0;
+        let domain = unsafe { (self.api.il2cpp_domain_get)() };
+        let array = unsafe { (self.api.il2cpp_domain_get_assemblies)(domain, &mut count) };
+        if array.is_null() || count == 0 {
+            return Vec::new();
+        }
+        let ptrs = unsafe { std::slice::from_raw_parts(array, count) };
+        ptrs.iter()
+            .map(|&asm| {
+                let image = unsafe { (self.api.il2cpp_assembly_get_image)(asm) };
+                Image {
+                    il2cpp: self,
+                    ptr: image,
+                }
+            })
+            .collect()
+    }
+
     /// The class of a managed object.
     ///
     /// # Safety
@@ -374,6 +394,37 @@ impl Class {
     }
 }
 
+/// A loaded assembly image, containing classes.
+#[derive(Clone, Copy)]
+pub struct Image {
+    il2cpp: &'static Il2Cpp,
+    ptr: Ptr,
+}
+
+unsafe impl Send for Image {}
+unsafe impl Sync for Image {}
+
+impl Image {
+    pub fn name(&self) -> &'static str {
+        unsafe { c_str((self.il2cpp.api.il2cpp_image_get_name)(self.ptr)) }
+    }
+
+    pub fn class_count(&self) -> usize {
+        unsafe { (self.il2cpp.api.il2cpp_image_get_class_count)(self.ptr) }
+    }
+
+    pub fn classes(&self) -> impl Iterator<Item = Class> + '_ {
+        let count = self.class_count();
+        (0..count).map(move |i| {
+            let ptr = unsafe { (self.il2cpp.api.il2cpp_image_get_class)(self.ptr, i) };
+            Class {
+                il2cpp: self.il2cpp,
+                ptr,
+            }
+        })
+    }
+}
+
 /// A managed field (`FieldInfo*`).
 #[derive(Clone, Copy)]
 pub struct Field {
@@ -410,6 +461,11 @@ impl Field {
 
     pub fn is_static(&self) -> bool {
         unsafe { (self.il2cpp.api.il2cpp_field_get_flags)(self.ptr) & FIELD_STATIC != 0 }
+    }
+
+    pub fn element_type(&self) -> i32 {
+        let ty = unsafe { (self.il2cpp.api.il2cpp_field_get_type)(self.ptr) };
+        unsafe { (self.il2cpp.api.il2cpp_type_get_type)(ty) }
     }
 
     /// Reads this instance field's value from `object`.
@@ -515,6 +571,10 @@ impl MethodHook {
         Ok(())
     }
 }
+
+pub use typed::VoidBlockHook;
+#[cfg(target_arch = "x86_64")]
+pub use typed::{GenericHookMeta, GenericParam, ParamSlot};
 
 /// Reads a managed object's field at `offset` (from [`Class::field_offset`]).
 ///

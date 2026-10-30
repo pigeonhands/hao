@@ -74,4 +74,9 @@ api! {
     il2cpp_gchandle_free: fn(Ptr);
     il2cpp_array_length: fn(Ptr) -> usize;
     il2cpp_array_new: fn(Ptr, usize) -> Ptr;
+    il2cpp_domain_get_assemblies: fn(Ptr, *mut usize) -> *mut Ptr;
+    il2cpp_image_get_class_count: fn(Ptr) -> usize;
+    il2cpp_image_get_class: fn(Ptr, usize) -> Ptr;
+    il2cpp_image_get_name: fn(Ptr) -> *const c_char;
+    il2cpp_object_unbox: fn(Ptr) -> Ptr;
 }
