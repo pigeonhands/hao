@@ -531,4 +531,345 @@ impl Method {
     pub unsafe fn call_unchecked<Args: MethodArgs, R: Il2CppValue>(&self, args: Args) -> R {
         unsafe { args.invoke(self.code(), self.ptr) }
     }
+
+    /// Hooks a **void** method with a conditional block: when
+    /// [`VoidBlockHook::set_blocked(true)`] is active, calls to the method
+    /// return immediately without running the original code.
+    ///
+    /// Works for any void method regardless of its parameter types — the
+    /// trampoline preserves all argument registers and either tail-calls the
+    /// original or returns.
+    ///
+    /// ```no_run
+    /// # use hao_il2cpp_runtime::Il2Cpp;
+    /// # fn f(il2cpp: &'static Il2Cpp) -> hao_il2cpp_runtime::Result<()> {
+    /// let damage = il2cpp
+    ///     .class("Assembly-CSharp", "Actors", "PlayerHealth")?
+    ///     .method("DamagePlayer", 3)?;
+    /// let hook = damage.hook_void_block()?;
+    /// hook.set_blocked(true); // godmode — DamagePlayer is now a no-op
+    /// # Ok(()) }
+    /// ```
+    #[cfg(target_arch = "x86_64")]
+    pub fn hook_void_block(&self) -> Result<VoidBlockHook> {
+        let ret = self.return_type_name();
+        if ret != "System.Void" {
+            return Err(Error::Signature(format!(
+                "hook_void_block requires a void method, but `{}` returns {}",
+                self.name(),
+                ret,
+            )));
+        }
+
+        let state = Box::leak(Box::new(std::sync::atomic::AtomicBool::new(false)));
+        let state_ptr = state as *const std::sync::atomic::AtomicBool;
+
+        let mut hook =
+            unsafe { hooking::Hook::create(self.code() as *mut u8, void_block_trampoline as *mut u8) }
+                .map_err(Error::Hook)?;
+        let original = hook.data.original_fn_call_stub_data.as_ptr() as usize;
+        register(original, state_ptr as usize);
+        unsafe { hook.apply_hook() }.map_err(Error::Hook)?;
+
+        tracing::debug!(method = %self.signature(), code = ?self.code(), "hooked (void block)");
+
+        Ok(VoidBlockHook {
+            state,
+            _hook: crate::MethodHook(hook),
+        })
+    }
+}
+
+/// A hook that conditionally blocks a void method. Created by
+/// [`Method::hook_void_block`].
+pub struct VoidBlockHook {
+    /// The flag that controls whether the method is blocked.
+    pub state: &'static std::sync::atomic::AtomicBool,
+    _hook: crate::MethodHook,
+}
+
+impl VoidBlockHook {
+    /// When `true`, calls to the hooked method return immediately.
+    pub fn set_blocked(&self, blocked: bool) {
+        self.state.store(blocked, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn is_blocked(&self) -> bool {
+        self.state.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+// ── Generic hooks ───────────────────────────────────────────────────
+
+/// How a method parameter maps to the System V AMD64 ABI.
+#[cfg(target_arch = "x86_64")]
+#[derive(Debug, Clone, Copy)]
+pub enum ParamSlot {
+    /// Integer/pointer in register index 0..5 (rdi, rsi, rdx, rcx, r8, r9).
+    IntReg(u8),
+    /// Float in SSE register index 0..7 (xmm0..xmm7).
+    FloatReg(u8),
+}
+
+/// One parameter of a hooked method, mapped to its ABI slot at install time.
+#[cfg(target_arch = "x86_64")]
+#[derive(Debug, Clone)]
+pub struct GenericParam {
+    pub slot: ParamSlot,
+    pub type_info: TypeInfo,
+    pub name: String,
+}
+
+/// Metadata about a generically-hooked method, built once at install time.
+///
+/// The `params` list includes the instance pointer (if any) as the first
+/// entry, followed by the declared parameters. Each is mapped to its ABI
+/// register slot.
+#[cfg(target_arch = "x86_64")]
+#[derive(Debug, Clone)]
+pub struct GenericHookMeta {
+    pub params: Vec<GenericParam>,
+    pub return_type: TypeInfo,
+    pub is_instance: bool,
+    pub signature: String,
+}
+
+#[cfg(target_arch = "x86_64")]
+struct GenericHookEntry {
+    meta: GenericHookMeta,
+    callback: Box<dyn Fn(usize, &GenericHookMeta, &mut hooking::SavedRegs) -> hooking::HookAction + Send + Sync>,
+}
+
+#[cfg(target_arch = "x86_64")]
+impl Method {
+    /// Hooks this method with a generic callback that receives the saved
+    /// argument registers and metadata about each parameter's type and ABI
+    /// slot. The callback inspects or modifies arguments through
+    /// [`hooking::SavedRegs`] and returns a [`hooking::HookAction`] to pass
+    /// through to the original or override the return value.
+    ///
+    /// Unlike [`Method::hook`], the callback doesn't need to declare the
+    /// method's parameter types at compile time — they are mapped to ABI
+    /// registers at install time using Il2Cpp metadata.
+    ///
+    /// ```no_run
+    /// # use hao_il2cpp_runtime::Il2Cpp;
+    /// # fn f(il2cpp: &'static Il2Cpp) -> hao_il2cpp_runtime::Result<()> {
+    /// let heal = il2cpp
+    ///     .class("Assembly-CSharp", "Game", "PlayerHealth")?
+    ///     .method("Heal", 2)?;
+    /// heal.hook_generic(|original, meta, regs| {
+    ///     // Read the second declared parameter (index 1 if instance method,
+    ///     // since index 0 is `this`).
+    ///     let amount = regs.read_int(1);
+    ///     // Double it and pass through to the original.
+    ///     regs.write_int(1, amount * 2);
+    ///     hooking::HookAction::Passthrough
+    /// })?;
+    /// # Ok(()) }
+    /// ```
+    pub fn hook_generic(
+        &self,
+        callback: impl Fn(usize, &GenericHookMeta, &mut hooking::SavedRegs) -> hooking::HookAction + Send + Sync + 'static,
+    ) -> Result<crate::MethodHook> {
+        let meta = self.build_generic_meta();
+        let entry = GenericHookEntry {
+            meta,
+            callback: Box::new(callback),
+        };
+
+        let mut hook = unsafe {
+            hooking::Hook::create_save_registers(
+                self.code() as *mut u8,
+                generic_hook_dispatch,
+            )
+        }
+        .map_err(Error::Hook)?;
+
+        let stub_addr = hook.data.original_fn_call_stub_data.as_ptr() as usize;
+        register(stub_addr, entry);
+
+        unsafe { hook.apply_hook() }.map_err(Error::Hook)?;
+        tracing::debug!(method = %self.signature(), code = ?self.code(), "hooked (generic)");
+        Ok(crate::MethodHook(hook))
+    }
+
+    fn build_generic_meta(&self) -> GenericHookMeta {
+        let is_instance = self.is_instance();
+        let param_count = self.parameter_count();
+
+        let mut params = Vec::new();
+        let mut int_idx: u8 = 0;
+        let mut float_idx: u8 = 0;
+
+        if is_instance {
+            params.push(GenericParam {
+                slot: ParamSlot::IntReg(int_idx),
+                type_info: TypeInfo {
+                    element: element::OBJECT,
+                    value_type: false,
+                    is_enum: false,
+                    byref: false,
+                    namespace: "",
+                    name: "",
+                },
+                name: "this".to_owned(),
+            });
+            int_idx += 1;
+        }
+
+        for i in 0..param_count {
+            let ty = unsafe { (self.il2cpp.api.il2cpp_method_get_param)(self.ptr, i) };
+            let info = self.type_info(ty);
+            let name = self.parameter_name(i);
+
+            let is_float = matches!(info.element, element::R4 | element::R8) && !info.byref;
+            let slot = if is_float {
+                if float_idx < 8 {
+                    let s = ParamSlot::FloatReg(float_idx);
+                    float_idx += 1;
+                    s
+                } else {
+                    continue;
+                }
+            } else if int_idx < 6 {
+                let s = ParamSlot::IntReg(int_idx);
+                int_idx += 1;
+                s
+            } else {
+                continue;
+            };
+
+            params.push(GenericParam { slot, type_info: info, name });
+        }
+
+        let ret_ty = unsafe { (self.il2cpp.api.il2cpp_method_get_return_type)(self.ptr) };
+
+        GenericHookMeta {
+            params,
+            return_type: self.type_info(ret_ty),
+            is_instance,
+            signature: self.signature(),
+        }
+    }
+}
+
+/// Called from hooking's `save_registers_trampoline` via the dispatch shim.
+#[cfg(target_arch = "x86_64")]
+extern "C" fn generic_hook_dispatch(
+    original: usize,
+    int_regs: *mut u64,
+    sse_regs: *mut [u8; 16],
+    result: *mut hooking::DispatchResult,
+) {
+    let entry = callback::<GenericHookEntry>(original);
+    let mut regs = hooking::SavedRegs { int_regs, sse_regs };
+
+    let action = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        (entry.callback)(original, &entry.meta, &mut regs)
+    }));
+
+    let action = match action {
+        Ok(a) => a,
+        Err(_) => {
+            tracing::error!("generic hook callback panicked, calling original");
+            hooking::HookAction::Passthrough
+        }
+    };
+
+    unsafe { *result = hooking::DispatchResult::from(action) };
+}
+
+/// Looks up the block flag for the hook whose original function stub is at
+/// `original`. Called from the naked trampoline.
+extern "C" fn void_block_check(original: usize) -> bool {
+    let state_ptr = callback::<usize>(original);
+    let state = unsafe { &*(*state_ptr as *const std::sync::atomic::AtomicBool) };
+    state.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Generic trampoline for [`Method::hook_void_block`]. Preserves all
+/// argument registers (integer and SSE) so it works for any void method
+/// regardless of parameter types.
+#[unsafe(naked)]
+#[cfg(target_arch = "x86_64")]
+unsafe extern "C" fn void_block_trampoline() {
+    // The hooking crate's redirect stub puts the original function pointer
+    // in r10 and a checksum in r11 before jumping here.
+    core::arch::naked_asm!(
+        // Save callee-saved register we'll use to hold the original ptr.
+        "push rbx",
+
+        // Verify and capture the original function pointer from r10/r11.
+        "mov rbx, r10",
+        "movabs rax, 0xDEADBEEFCAFEBABE",
+        "xor rax, r10",
+        "cmp rax, r11",
+        "jne 9f",
+
+        // Save all integer argument registers.
+        "push rdi",
+        "push rsi",
+        "push rdx",
+        "push rcx",
+        "push r8",
+        "push r9",
+
+        // Save all SSE argument registers (8 × 16 = 128 bytes).
+        "sub rsp, 0x80",
+        "movdqu [rsp+0x00], xmm0",
+        "movdqu [rsp+0x10], xmm1",
+        "movdqu [rsp+0x20], xmm2",
+        "movdqu [rsp+0x30], xmm3",
+        "movdqu [rsp+0x40], xmm4",
+        "movdqu [rsp+0x50], xmm5",
+        "movdqu [rsp+0x60], xmm6",
+        "movdqu [rsp+0x70], xmm7",
+
+        // Check if this hook is blocked.
+        // void_block_check(original: usize) -> bool
+        "mov rdi, rbx",
+        "call {check}",
+        "test al, al",
+        "jnz 2f",
+
+        // Not blocked — restore registers and tail-call original.
+        "movdqu xmm0, [rsp+0x00]",
+        "movdqu xmm1, [rsp+0x10]",
+        "movdqu xmm2, [rsp+0x20]",
+        "movdqu xmm3, [rsp+0x30]",
+        "movdqu xmm4, [rsp+0x40]",
+        "movdqu xmm5, [rsp+0x50]",
+        "movdqu xmm6, [rsp+0x60]",
+        "movdqu xmm7, [rsp+0x70]",
+        "add rsp, 0x80",
+        "pop r9",
+        "pop r8",
+        "pop rcx",
+        "pop rdx",
+        "pop rsi",
+        "pop rdi",
+        "mov rax, rbx",
+        "pop rbx",
+        "jmp rax",
+
+        "2:",
+        // Blocked — clean up and return (method is void).
+        "add rsp, 0x80",
+        "pop r9",
+        "pop r8",
+        "pop rcx",
+        "pop rdx",
+        "pop rsi",
+        "pop rdi",
+        "pop rbx",
+        "ret",
+
+        "9:",
+        // Checksum mismatch — not in a hook, just return.
+        "pop rbx",
+        "ret",
+
+        check = sym void_block_check,
+    );
 }

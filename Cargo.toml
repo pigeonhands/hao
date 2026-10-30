@@ -1,3 +1,6 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+
+[patch.crates-io]
+hooking = { path = "../hooking-rs/hooking" }
