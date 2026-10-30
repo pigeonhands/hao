@@ -212,10 +212,25 @@ impl<'g> TypeView<'g> {
 
     pub fn fields(&self) -> impl Iterator<Item = FieldView<'g>> + 'g {
         let game = self.game;
+        let start = self.definition().field_start;
         game.metadata
             .type_fields(self.definition())
             .iter()
-            .map(move |field| FieldView { game, field })
+            .enumerate()
+            .map(move |(i, field)| FieldView {
+                game,
+                index: start + i as i32,
+                field,
+            })
+    }
+
+    /// For an enum type, each member's `(name, value)`; empty otherwise. The
+    /// synthetic `value__` field is skipped.
+    pub fn enum_values(&self) -> Vec<(&'g str, i64)> {
+        self.fields()
+            .filter(|f| f.name() != "value__")
+            .filter_map(|f| Some((f.name(), f.constant()?.as_i64()?)))
+            .collect()
     }
 
     pub fn methods(&self) -> impl Iterator<Item = MethodView<'g>> + 'g {
@@ -246,6 +261,8 @@ impl std::fmt::Debug for TypeView<'_> {
 #[cfg_attr(feature = "reflect", derive(facet::Facet))]
 pub struct FieldView<'g> {
     game: &'g Game,
+    /// The field's global index, matched against the constant-value table.
+    index: i32,
     field: &'g FieldDefinition,
 }
 
@@ -266,6 +283,106 @@ impl<'g> FieldView<'g> {
     pub fn is_static(&self) -> bool {
         self.ty().is_some_and(|t| t.attrs & FIELD_STATIC != 0)
     }
+
+    /// The field's compile-time constant, if it has one (enum members and
+    /// `const` fields). The common case is an enum member's integer value.
+    pub fn constant(&self) -> Option<ConstValue> {
+        let value = self
+            .game
+            .metadata
+            .field_default_values
+            .iter()
+            .find(|v| v.field_index == self.index)?;
+        let code = match &self.game.binary.type_at(value.type_index)?.kind {
+            crate::binary::TypeKind::Primitive(code) => *code,
+            _ => return None,
+        };
+        ConstValue::decode(code, self.game.metadata.default_value_data(value.data_index))
+    }
+}
+
+/// A field's compile-time constant value (an enum member or a `const`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConstValue {
+    Bool(bool),
+    Char(u16),
+    I8(i8),
+    U8(u8),
+    I16(i16),
+    U16(u16),
+    I32(i32),
+    U32(u32),
+    I64(i64),
+    U64(u64),
+    F32(f32),
+    F64(f64),
+    String(String),
+}
+
+impl ConstValue {
+    /// Decodes a constant of ECMA element type `code` from the front of `bytes`.
+    fn decode(code: u8, bytes: &[u8]) -> Option<Self> {
+        use crate::binary::element::*;
+        fn le<const N: usize>(bytes: &[u8]) -> Option<[u8; N]> {
+            bytes.get(..N)?.try_into().ok()
+        }
+        Some(match code {
+            BOOLEAN => Self::Bool(*bytes.first()? != 0),
+            CHAR => Self::Char(u16::from_le_bytes(le(bytes)?)),
+            I1 => Self::I8(*bytes.first()? as i8),
+            U1 => Self::U8(*bytes.first()?),
+            I2 => Self::I16(i16::from_le_bytes(le(bytes)?)),
+            U2 => Self::U16(u16::from_le_bytes(le(bytes)?)),
+            I4 => Self::I32(i32::from_le_bytes(le(bytes)?)),
+            U4 => Self::U32(u32::from_le_bytes(le(bytes)?)),
+            I8 => Self::I64(i64::from_le_bytes(le(bytes)?)),
+            U8 => Self::U64(u64::from_le_bytes(le(bytes)?)),
+            R4 => Self::F32(f32::from_le_bytes(le(bytes)?)),
+            R8 => Self::F64(f64::from_le_bytes(le(bytes)?)),
+            STRING => {
+                let len = usize::try_from(i32::from_le_bytes(le(bytes)?)).ok()?;
+                Self::String(String::from_utf8_lossy(bytes.get(4..4 + len)?).into_owned())
+            }
+            _ => return None,
+        })
+    }
+
+    /// The value as a signed integer, for bool/char/integer constants.
+    pub fn as_i64(&self) -> Option<i64> {
+        Some(match self {
+            Self::Bool(b) => *b as i64,
+            Self::Char(c) => *c as i64,
+            Self::I8(v) => *v as i64,
+            Self::U8(v) => *v as i64,
+            Self::I16(v) => *v as i64,
+            Self::U16(v) => *v as i64,
+            Self::I32(v) => *v as i64,
+            Self::U32(v) => *v as i64,
+            Self::I64(v) => *v,
+            Self::U64(v) => *v as i64,
+            _ => return None,
+        })
+    }
+}
+
+impl std::fmt::Display for ConstValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bool(v) => write!(f, "{v}"),
+            Self::Char(v) => write!(f, "{v}"),
+            Self::I8(v) => write!(f, "{v}"),
+            Self::U8(v) => write!(f, "{v}"),
+            Self::I16(v) => write!(f, "{v}"),
+            Self::U16(v) => write!(f, "{v}"),
+            Self::I32(v) => write!(f, "{v}"),
+            Self::U32(v) => write!(f, "{v}"),
+            Self::I64(v) => write!(f, "{v}"),
+            Self::U64(v) => write!(f, "{v}"),
+            Self::F32(v) => write!(f, "{v}"),
+            Self::F64(v) => write!(f, "{v}"),
+            Self::String(v) => write!(f, "{v:?}"),
+        }
+    }
 }
 
 impl std::fmt::Display for FieldView<'_> {
@@ -273,7 +390,11 @@ impl std::fmt::Display for FieldView<'_> {
         if self.is_static() {
             write!(f, "static ")?;
         }
-        write!(f, "{} {}", self.type_name(), self.name())
+        write!(f, "{} {}", self.type_name(), self.name())?;
+        if let Some(constant) = self.constant() {
+            write!(f, " = {constant}")?;
+        }
+        Ok(())
     }
 }
 

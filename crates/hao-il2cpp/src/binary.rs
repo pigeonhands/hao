@@ -14,6 +14,18 @@ use crate::{
 /// `Il2CppTypeEnum`, the same values as ECMA-335 element types.
 pub mod element {
     pub const VOID: u8 = 0x01;
+    pub const BOOLEAN: u8 = 0x02;
+    pub const CHAR: u8 = 0x03;
+    pub const I1: u8 = 0x04;
+    pub const U1: u8 = 0x05;
+    pub const I2: u8 = 0x06;
+    pub const U2: u8 = 0x07;
+    pub const I4: u8 = 0x08;
+    pub const U4: u8 = 0x09;
+    pub const I8: u8 = 0x0A;
+    pub const U8: u8 = 0x0B;
+    pub const R4: u8 = 0x0C;
+    pub const R8: u8 = 0x0D;
     pub const STRING: u8 = 0x0E;
     pub const PTR: u8 = 0x0F;
     pub const BYREF: u8 = 0x10;
