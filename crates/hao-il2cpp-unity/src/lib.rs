@@ -27,6 +27,7 @@
 
 mod binding;
 mod bindings;
+pub mod dispatch;
 #[cfg(feature = "egui")]
 pub mod egui {
     //! egui integration (requires the `egui` feature). See [`on_egui`].
