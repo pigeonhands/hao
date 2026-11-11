@@ -69,8 +69,14 @@ pub fn find_game_assembly(dir: impl AsRef<Path>) -> Option<PathBuf> {
 #[cfg(unix)]
 pub fn loaded_game_assembly() -> Option<PathBuf> {
     let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    game_assembly_in_maps(&maps)
+}
+
+#[cfg(unix)]
+fn game_assembly_in_maps(maps: &str) -> Option<PathBuf> {
     maps.lines()
-        .filter_map(|line| line.split_whitespace().nth(5))
+        // /proc maps preserves whitespace inside absolute paths.
+        .filter_map(|line| line.find('/').map(|start| &line[start..]))
         .map(PathBuf::from)
         .find(|p| is_game_assembly(p))
 }
@@ -676,6 +682,31 @@ pub use hooking::original_function_ptr as __original_function_ptr;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn mapped_game_assembly_paths() {
+        for path in [
+            "/games/Example/GameAssembly.so",
+            "/games/Idle Slayer/GameAssembly.so",
+        ] {
+            let maps = format!(
+                "1000-2000 r-xp 00000000 08:01 1 /games/Idle Slayer/UnityPlayer.so\n\
+                 2000-3000 r-xp 00000000 08:01 2 {path}\n"
+            );
+            assert_eq!(game_assembly_in_maps(&maps), Some(PathBuf::from(path)));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn maps_without_game_assembly() {
+        let maps = "1000-2000 r-xp 00000000 08:01 1 /games/Example/UnityPlayer.so\n\
+                    2000-3000 rw-p 00000000 00:00 0 [heap]\n\
+                    3000-4000 rw-p 00000000 00:00 0\n";
+        assert_eq!(game_assembly_in_maps(maps), None);
+        assert_eq!(game_assembly_in_maps(""), None);
+    }
 
     #[test]
     fn game_assembly_names() {
