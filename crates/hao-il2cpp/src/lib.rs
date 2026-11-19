@@ -27,6 +27,7 @@ mod error;
 pub mod game;
 pub mod generate;
 pub mod metadata;
+pub mod proxy;
 #[cfg(feature = "reflect")]
 pub mod reflect;
 
@@ -35,4 +36,5 @@ pub use error::{Error, Result};
 pub use game::{FieldView, Game, MethodView, ParameterView, TypeView};
 pub use generate::{generate, GeneratedAssembly};
 pub use metadata::Metadata;
+pub use proxy::generate_proxies;
 pub use pewter::image::{AnyImage, ElfImage, PeImage};

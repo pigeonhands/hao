@@ -40,14 +40,14 @@ pub struct GeneratedAssembly {
     pub module: Module,
 }
 
-struct Generator<'a> {
-    metadata: &'a Metadata,
-    binary: &'a Binary,
-    modules: Vec<Module>,
-    types: Vec<Entry<TypeDef>>,
-    type_image: Vec<usize>,
+pub(crate) struct Generator<'a> {
+    pub(crate) metadata: &'a Metadata,
+    pub(crate) binary: &'a Binary,
+    pub(crate) modules: Vec<Module>,
+    pub(crate) types: Vec<Entry<TypeDef>>,
+    pub(crate) type_image: Vec<usize>,
     type_refs: Vec<HashMap<TypeDefinitionIndex, Entry<TypeRef>>>,
-    primitive_types: HashMap<u8, TypeDefinitionIndex>,
+    pub(crate) primitive_types: HashMap<u8, TypeDefinitionIndex>,
     default_member: Option<TypeDefinitionIndex>,
     /// `attribute_data_range` entries `(token, start_offset)`, in global order.
     attribute_ranges: Vec<(u32, u32)>,
@@ -282,7 +282,7 @@ impl<'a> Generator<'a> {
     }
 
     /// A reference from `module` to type definition `index`.
-    fn type_ref(&mut self, module: usize, index: TypeDefinitionIndex) -> TypeDefOrRef {
+    pub(crate) fn type_ref(&mut self, module: usize, index: TypeDefinitionIndex) -> TypeDefOrRef {
         if self.type_image[index as usize] == module {
             return TypeDefOrRef::TypeDef(self.types[index as usize].clone());
         }
@@ -1065,8 +1065,20 @@ fn version(v: [i32; 4]) -> Version {
     }
 }
 
-/// Builds a declaration assembly for every image in the game.
+/// Builds a declaration assembly for every image in the game. Method bodies are
+/// stubs that throw.
 pub fn generate(metadata: &Metadata, binary: &Binary) -> Result<Vec<GeneratedAssembly>> {
+    generate_inner(metadata, binary, false)
+}
+
+/// Shared build for both declaration and proxy assemblies. With `proxy`, eligible
+/// method bodies are rewritten by [`crate::proxy`] to call into the game's native
+/// code through a runtime invoke seam instead of throwing.
+pub(crate) fn generate_inner(
+    metadata: &Metadata,
+    binary: &Binary,
+    proxy: bool,
+) -> Result<Vec<GeneratedAssembly>> {
     let mut generator = Generator::new(metadata, binary);
     generator.create_types();
     for i in 0..metadata.type_definitions.len() {
@@ -1143,6 +1155,10 @@ pub fn generate(metadata: &Metadata, binary: &Binary) -> Result<Vec<GeneratedAss
                 entry.get_mut().custom_attributes.push(attribute);
             }
         }
+    }
+    // Rewrite eligible method bodies to call into the game's native code.
+    if proxy {
+        crate::proxy::fill_proxy_bodies(&mut generator);
     }
     Ok(metadata
         .images
