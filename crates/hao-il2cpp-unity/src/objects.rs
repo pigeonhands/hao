@@ -302,6 +302,11 @@ impl RenderTexture {
     pub fn set_active(target: Option<RenderTexture>) -> Result<()> {
         RENDER_TEXTURE_SET_ACTIVE.call((target.unwrap_or(RenderTexture(Object::NULL)),))
     }
+
+    /// How the texture is sampled (inherited from `Texture`).
+    pub fn set_filter_mode(&self, mode: crate::FilterMode) -> Result<()> {
+        TEXTURE_SET_FILTER_MODE.call((Texture2D(self.0), mode))
+    }
 }
 
 component_type!(

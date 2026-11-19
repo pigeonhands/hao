@@ -163,6 +163,9 @@ fn make_material() -> Result<Material> {
 impl EguiState {
     fn new() -> Result<Self> {
         let ctx = egui::Context::default();
+        if let Ok((w, h)) = screen::size() {
+            tracing::info!(w, h, scale = ui_scale(), "egui overlay: screen size");
+        }
         let material = make_material()?;
         Ok(Self {
             ctx,
