@@ -7,11 +7,31 @@
 //! colours converted from gamma to linear) into an [`OverlaySurface`], which draws
 //! it on top of the game's own UI. See [`on_egui`].
 
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use hao_il2cpp_runtime::{GcHandle, Result};
 
 use crate::{gl, input, screen, Color, Material, OverlaySurface, Shader, Texture2D, TextureFormat};
+
+static PIXELS_PER_POINT: AtomicU32 = AtomicU32::new(0);
+
+/// Sets the egui pixels-per-point, controlling both layout and font rasterization.
+/// A value of 1.0 means 1 logical pixel = 1 physical pixel. Higher values make
+/// the UI smaller and sharper on high-DPI displays. Pass 0.0 to reset to the
+/// default (1.0).
+pub fn set_pixels_per_point(ppp: f32) {
+    if ppp <= 0.0 {
+        PIXELS_PER_POINT.store(0, Ordering::Relaxed);
+    } else {
+        PIXELS_PER_POINT.store(ppp.to_bits(), Ordering::Relaxed);
+    }
+}
+
+fn pixels_per_point() -> f32 {
+    let bits = PIXELS_PER_POINT.load(Ordering::Relaxed);
+    if bits == 0 { 1.0 } else { f32::from_bits(bits) }
+}
 
 /// Runs `ui` every frame to build and draw an egui interface over the game.
 ///
@@ -144,7 +164,7 @@ fn make_material() -> Result<Material> {
 impl EguiState {
     fn new() -> Result<Self> {
         let ctx = egui::Context::default();
-        ctx.set_pixels_per_point(1.0);
+        ctx.set_pixels_per_point(pixels_per_point());
         let material = make_material()?;
         Ok(Self {
             ctx,
@@ -195,7 +215,9 @@ impl EguiState {
                 self.update_texture(&delta)?;
             }
         }
-        let primitives = self.ctx.tessellate(output.shapes, 1.0);
+        let ppp = pixels_per_point();
+        self.ctx.set_pixels_per_point(ppp);
+        let primitives = self.ctx.tessellate(output.shapes, ppp);
         self.render(w, h, (iw, ih), &primitives)
     }
 
