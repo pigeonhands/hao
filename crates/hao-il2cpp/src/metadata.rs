@@ -3,8 +3,13 @@
 //! Types of fields, parameters and return values are indices into the
 //! `Il2CppType` table, which lives in the game binary, not in this file.
 //!
-//! Two metadata versions are supported:
+//! Three metadata versions are supported:
 //! - **v29** (Unity 2021.2 – 2023.x): header entries are `(offset, size)` pairs.
+//! - **v31** (later Unity 2022.3 LTS / 2023.x): identical to v29 except the
+//!   method record gained a `returnParameterToken` field (so each record is 4
+//!   bytes larger). The section list, header-entry size and all other record
+//!   layouts match v29. Implemented from the Il2CppDumper/Il2CppInspector
+//!   reference layouts; **unverified against a real v31 game** (none available).
 //! - **v39** (Unity 6): each header entry also carries a record count, so the
 //!   entries are 12 bytes. Several records shrank: `type_definitions` dropped
 //!   `element_type_index` and narrowed `generic_container_index`; `methods`
@@ -54,10 +59,11 @@ fn section_names(version: u32) -> Option<&'static [&'static str]> {
         "windows_runtime_strings",
         "exported_type_definitions",
     ];
-    // v39 (Unity 6) keeps the same sections in the same order as v29; only the
-    // per-entry header size and some record layouts differ (see `read_tables`).
+    // v31 and v39 keep the same sections in the same order as v29. v31 only
+    // widens the method record (see `read_tables`); v39 additionally changes the
+    // per-entry header size and several record layouts.
     match version {
-        29 | 39 => Some(V29),
+        29 | 31 | 39 => Some(V29),
         _ => None,
     }
 }
@@ -515,6 +521,29 @@ impl Metadata {
                     parameter_count: c.u16(),
                 }
             })?
+        } else if self.version >= 31 {
+            // v31 inserted a `returnParameterToken` (u32) right after `return_type`,
+            // growing the aligned record to 36 bytes; the field is unused here and
+            // discarded. This layout is taken from the Il2CppDumper/Il2CppInspector
+            // reference and is unverified against a real v31 game.
+            self.table("methods", 36, |c| {
+                let name_index = c.u32();
+                let declaring_type = c.i32();
+                let return_type = c.i32();
+                let _return_parameter_token = c.u32();
+                MethodDefinition {
+                    name_index,
+                    declaring_type,
+                    return_type,
+                    parameter_start: c.i32(),
+                    generic_container_index: c.i32(),
+                    token: c.u32(),
+                    flags: c.u16(),
+                    iflags: c.u16(),
+                    slot: c.u16(),
+                    parameter_count: c.u16(),
+                }
+            })?
         } else {
             self.table("methods", 32, |c| MethodDefinition {
                 name_index: c.u32(),
@@ -698,5 +727,94 @@ impl Metadata {
         self.parameters
             .get(start..start + m.parameter_count as usize)
             .unwrap_or(&[])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a minimal valid `global-metadata.dat` for `version` whose only
+    /// non-empty section is `methods`, carrying the raw bytes `method`.
+    fn metadata_with_method(version: u32, method: &[u8]) -> Vec<u8> {
+        let names = section_names(version).unwrap();
+        let header_end = 8 + names.len() * header_entry_size(version);
+        let methods_index = names.iter().position(|n| *n == "methods").unwrap();
+
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&SANITY.to_le_bytes());
+        buf.extend_from_slice(&version.to_le_bytes());
+        for (i, _) in names.iter().enumerate() {
+            if i == methods_index {
+                buf.extend_from_slice(&(header_end as u32).to_le_bytes());
+                buf.extend_from_slice(&(method.len() as u32).to_le_bytes());
+            } else {
+                buf.extend_from_slice(&0u32.to_le_bytes());
+                buf.extend_from_slice(&0u32.to_le_bytes());
+            }
+        }
+        assert_eq!(buf.len(), header_end);
+        buf.extend_from_slice(method);
+        buf
+    }
+
+    /// v31 dispatch: the method record is 36 bytes with a `returnParameterToken`
+    /// inserted after `return_type` that must be skipped, not surfaced as any
+    /// later field. (Reference layout; no real v31 game to validate against.)
+    #[test]
+    fn v31_method_record_skips_return_parameter_token() {
+        let mut m = Vec::new();
+        for v in [11u32, 22, 33, 0xDEAD_BEEF, 44, 55, 66] {
+            m.extend_from_slice(&v.to_le_bytes());
+        }
+        for v in [7u16, 8, 9, 10] {
+            m.extend_from_slice(&v.to_le_bytes());
+        }
+        assert_eq!(m.len(), 36);
+
+        let md = Metadata::parse(metadata_with_method(31, &m)).unwrap();
+        assert_eq!(md.version, 31);
+        assert_eq!(md.methods.len(), 1);
+        let method = &md.methods[0];
+        assert_eq!(method.name_index, 11);
+        assert_eq!(method.declaring_type, 22);
+        assert_eq!(method.return_type, 33);
+        // 0xDEADBEEF was the returnParameterToken and must be discarded.
+        assert_eq!(method.parameter_start, 44);
+        assert_eq!(method.generic_container_index, 55);
+        assert_eq!(method.token, 66);
+        assert_eq!(method.flags, 7);
+        assert_eq!(method.parameter_count, 10);
+    }
+
+    /// v29 stays a 32-byte record with no `returnParameterToken`.
+    #[test]
+    fn v29_method_record_is_unchanged() {
+        let mut m = Vec::new();
+        for v in [11u32, 22, 33, 44, 55, 66] {
+            m.extend_from_slice(&v.to_le_bytes());
+        }
+        for v in [7u16, 8, 9, 10] {
+            m.extend_from_slice(&v.to_le_bytes());
+        }
+        assert_eq!(m.len(), 32);
+
+        let md = Metadata::parse(metadata_with_method(29, &m)).unwrap();
+        assert_eq!(md.methods.len(), 1);
+        let method = &md.methods[0];
+        assert_eq!(method.return_type, 33);
+        assert_eq!(method.parameter_start, 44);
+        assert_eq!(method.generic_container_index, 55);
+    }
+
+    #[test]
+    fn unknown_version_is_rejected() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&SANITY.to_le_bytes());
+        buf.extend_from_slice(&30u32.to_le_bytes());
+        assert!(matches!(
+            Metadata::parse(buf),
+            Err(Error::UnsupportedVersion(30))
+        ));
     }
 }
