@@ -229,4 +229,23 @@ impl Runtime {
             Inner::Mono(mono) => mono.method_pointer(assembly, type_name, method),
         }
     }
+
+    /// Like [`method_pointer`](Self::method_pointer), but resolves the type
+    /// from whichever `AssemblyLoadContext` actually loaded the assembly.
+    /// CoreCLR only.
+    pub fn method_pointer_from_loaded(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+    ) -> Result<*const c_void> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.method_pointer_from_loaded(assembly, type_name, method),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Err(Error::Other(
+                "method_pointer_from_loaded is CoreCLR-only".into(),
+            )),
+        }
+    }
 }
