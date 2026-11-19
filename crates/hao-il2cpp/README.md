@@ -32,8 +32,7 @@ Il2CppInterop-style managed proxies.
       and hooks run through [`hao-il2cpp-runtime`](../hao-il2cpp-runtime)'s typed `call`/`hook`,
       and the `(image, token)` identity each method carries resolves to a live `MethodInfo` with
       `Il2Cpp::method(image, token)` — the online mirror of `Binary::method_pointer`. A managed
-      C#-consumer stack à la Il2CppInterop is intentionally out of scope. (`proxy.rs` can still
-      emit seam-routed "proxy" assemblies, but their seam is a throwing stub by design.)
+      C#-consumer stack à la Il2CppInterop is intentionally out of scope.
 
 ```rust
 use hao_il2cpp::Game;
