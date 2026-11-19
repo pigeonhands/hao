@@ -18,9 +18,17 @@ Read Unity Il2Cpp games, with the goal of generating .NET proxy assemblies for t
       bodies. Other code compiles against them.
 - [x] `CodeRegistration`: resolves each method's native code address in `GameAssembly`
       (`MethodView::code_address`, `Game::method_pointer`)
-- [ ] custom attributes (only `[DefaultMember]` for indexers is generated so far)
-- [ ] more metadata versions (v31)
-- [ ] runtime proxy assemblies that call into the game, like Il2CppInterop
+- [x] custom attributes: recovers each member's attributes and their fixed/named argument
+      values from v29+ metadata (primitives, strings, enums, simple `System.Type`, arrays);
+      attributes whose blob can't be re-encoded exactly (`object` params, generic/array `Type`)
+      are dropped, never guessed
+- [x] metadata **v31** (later Unity 2022.3 LTS / 2023.x): implemented from the
+      Il2CppDumper/Il2CppInspector reference layout — **unverified against a real v31 game**
+- [ ] runtime proxy assemblies that call into the game, like Il2CppInterop — *generation is
+      done*: one assembly per image with method bodies calling a per-module invoke seam that
+      carries each method's `(image, token)`, producing valid round-trippable IL; the runtime
+      dispatch behind the seam (resolve `MethodInfo*` and il2cpp-invoke it) is still TODO, so
+      proxies are not yet callable in-game
 
 ```rust
 use hao_il2cpp::Game;
