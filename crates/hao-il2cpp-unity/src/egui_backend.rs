@@ -14,22 +14,21 @@ use hao_il2cpp_runtime::{GcHandle, Result};
 
 use crate::{gl, input, screen, Color, Material, OverlaySurface, Shader, Texture2D, TextureFormat};
 
-static PIXELS_PER_POINT: AtomicU32 = AtomicU32::new(0);
+static UI_SCALE: AtomicU32 = AtomicU32::new(0);
 
-/// Sets the egui pixels-per-point, controlling both layout and font rasterization.
-/// A value of 1.0 means 1 logical pixel = 1 physical pixel. Higher values make
-/// the UI smaller and sharper on high-DPI displays. Pass 0.0 to reset to the
-/// default (1.0).
-pub fn set_pixels_per_point(ppp: f32) {
-    if ppp <= 0.0 {
-        PIXELS_PER_POINT.store(0, Ordering::Relaxed);
+/// Scales the egui overlay UI. A value of 0.5 makes the UI half-size; 2.0 makes
+/// it double-size. Font rasterization quality is preserved — only the coordinate
+/// space is scaled. Pass 0.0 to reset to the default (1.0).
+pub fn set_ui_scale(scale: f32) {
+    if scale <= 0.0 {
+        UI_SCALE.store(0, Ordering::Relaxed);
     } else {
-        PIXELS_PER_POINT.store(ppp.to_bits(), Ordering::Relaxed);
+        UI_SCALE.store(scale.to_bits(), Ordering::Relaxed);
     }
 }
 
-fn pixels_per_point() -> f32 {
-    let bits = PIXELS_PER_POINT.load(Ordering::Relaxed);
+fn ui_scale() -> f32 {
+    let bits = UI_SCALE.load(Ordering::Relaxed);
     if bits == 0 { 1.0 } else { f32::from_bits(bits) }
 }
 
@@ -164,7 +163,6 @@ fn make_material() -> Result<Material> {
 impl EguiState {
     fn new() -> Result<Self> {
         let ctx = egui::Context::default();
-        ctx.set_pixels_per_point(pixels_per_point());
         let material = make_material()?;
         Ok(Self {
             ctx,
@@ -205,22 +203,23 @@ impl EguiState {
         self.ensure_alive()?;
         let (sw, sh) = screen::size()?;
         let (iw, ih) = (sw.max(1), sh.max(1));
-        let (w, h) = (iw as f32, ih as f32);
+        let (pixel_w, pixel_h) = (iw as f32, ih as f32);
+        // Scale the point space: scale < 1 → larger point space → smaller UI.
+        let inv = 1.0 / ui_scale();
+        let (pw, ph) = (pixel_w * inv, pixel_h * inv);
 
-        let input = self.raw_input(w, h)?;
+        let input = self.raw_input(pw, ph, inv)?;
         let output = self.ctx.run(input, |ctx| ui(ctx));
         for (id, delta) in output.textures_delta.set {
-            // Only the egui font atlas (managed texture 0) is handled here.
             if matches!(id, egui::TextureId::Managed(_)) {
                 self.update_texture(&delta)?;
             }
         }
-        let ppp = self.ctx.pixels_per_point();
-        let primitives = self.ctx.tessellate(output.shapes, ppp);
-        self.render(w, h, (iw, ih), &primitives)
+        let primitives = self.ctx.tessellate(output.shapes, 1.0);
+        self.render(pw, ph, (iw, ih), &primitives)
     }
 
-    fn raw_input(&mut self, w: f32, h: f32) -> Result<egui::RawInput> {
+    fn raw_input(&mut self, pw: f32, ph: f32, inv: f32) -> Result<egui::RawInput> {
         use crate::KeyCode as K;
         let held = |k| input::key(k).unwrap_or(false);
         let ctrl = held(K::LEFT_CONTROL) || held(K::RIGHT_CONTROL);
@@ -229,13 +228,13 @@ impl EguiState {
             ctrl,
             shift: held(K::LEFT_SHIFT) || held(K::RIGHT_SHIFT),
             mac_cmd: false,
-            // On non-mac this is ctrl; egui's shortcuts check `command`.
             command: ctrl,
         };
 
         let mouse = input::mouse_position()?;
-        // Unity's origin is bottom-left; egui's is top-left.
-        let pos = egui::pos2(mouse.x, h - mouse.y);
+        // Unity mouse is in pixel coords (bottom-left origin). Scale to point
+        // space (top-left origin): x_pt = x_px * inv, y_pt = ph - y_px * inv.
+        let pos = egui::pos2(mouse.x * inv, ph - mouse.y * inv);
         let mut events = vec![egui::Event::PointerMoved(pos)];
         for (i, (button, egui_button)) in [
             (0, egui::PointerButton::Primary),
@@ -313,7 +312,7 @@ impl EguiState {
         Ok(egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::pos2(0.0, 0.0),
-                egui::vec2(w, h),
+                egui::vec2(pw, ph),
             )),
             modifiers,
             events,

@@ -31,7 +31,7 @@ pub mod dispatch;
 #[cfg(feature = "egui")]
 pub mod egui {
     //! egui integration (requires the `egui` feature). See [`on_egui`].
-    pub use crate::egui_backend::{on_egui, set_pixels_per_point};
+    pub use crate::egui_backend::{on_egui, set_ui_scale};
     pub use ::egui::*;
 }
 #[cfg(feature = "egui")]
