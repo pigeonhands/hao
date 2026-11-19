@@ -220,6 +220,39 @@ impl Il2Cpp {
         })
     }
 
+    /// Finds a live method by the metadata `token` that `hao-il2cpp` emits as a
+    /// proxy's identity (and that `hao_il2cpp::Binary::method_pointer` maps to a
+    /// static code address offline). This is the online mirror: `(image, token)`
+    /// to a live `MethodInfo` you can [`Method::call`](crate::Method::call) or
+    /// [`Method::hook`](crate::Method::hook).
+    ///
+    /// `image_name` is matched with or without a `.dll` suffix (il2cpp reports
+    /// image names like `Assembly-CSharp.dll`). The image is opened on demand,
+    /// then its methods are scanned for a matching [`Method::token`].
+    pub fn method(&'static self, image_name: &str, token: u32) -> Result<Method> {
+        let assembly = cstring(image_name.strip_suffix(".dll").unwrap_or(image_name))?;
+        let image = unsafe {
+            let domain = (self.api.il2cpp_domain_get)();
+            let opened = (self.api.il2cpp_domain_assembly_open)(domain, assembly.as_ptr());
+            if opened.is_null() {
+                return Err(Error::NotFound(format!("assembly {image_name}")));
+            }
+            Image {
+                il2cpp: self,
+                ptr: (self.api.il2cpp_assembly_get_image)(opened),
+            }
+        };
+        for class in image.classes() {
+            if let Some(method) = class.methods().find(|m| m.token() == token) {
+                tracing::trace!(image = image_name, token, class = class.name(), "found method by token");
+                return Ok(method);
+            }
+        }
+        Err(Error::NotFound(format!(
+            "method with token {token:#x} in {image_name}"
+        )))
+    }
+
     /// A new managed string.
     pub fn string(&self, value: &str) -> Result<Il2CppString> {
         let value = cstring(value)?;
@@ -582,6 +615,14 @@ impl Method {
 
     pub fn name(&self) -> &'static str {
         unsafe { c_str((self.il2cpp.api.il2cpp_method_get_name)(self.ptr)) }
+    }
+
+    /// This method's metadata token: the `MethodDef` token (`0x06`-prefixed) that
+    /// `hao-il2cpp` emits as a proxy's identity and `Binary::method_pointer` maps
+    /// to a static code address. Resolve a token back to a live method with
+    /// [`Il2Cpp::method`].
+    pub fn token(&self) -> u32 {
+        unsafe { (self.il2cpp.api.il2cpp_method_get_token)(self.ptr) }
     }
 
     /// The method's compiled code. Call it with the instance first (for instance

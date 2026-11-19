@@ -119,6 +119,30 @@ fn hooks_il2cpp_code() {
     };
     assert_eq!(call("Kia ", "ora"), "Kia ora");
 
+    // Resolve the same method by its metadata token, closing the loop with the
+    // (image, token) identity hao-il2cpp emits for proxies: Il2Cpp::method is the
+    // online mirror of hao_il2cpp's offline Binary::method_pointer.
+    let token = method.token();
+    assert_eq!(token >> 24, 0x06, "a MethodDef token, got {token:#x}");
+    let by_token = il2cpp.method("mscorlib", token).unwrap();
+    assert_eq!(
+        by_token.as_ptr(),
+        method.as_ptr(),
+        "token resolved to the same MethodInfo"
+    );
+    // The `.dll` suffix is accepted, and the token-resolved handle calls like any other.
+    let also: Il2CppString = il2cpp
+        .method("mscorlib.dll", token)
+        .unwrap()
+        .call((il2cpp.string("Kia ").unwrap(), il2cpp.string("ora").unwrap()))
+        .unwrap();
+    assert_eq!(also.to_rust().unwrap(), "Kia ora");
+    // A token not present in the image is a clean error, not a crash.
+    assert!(matches!(
+        il2cpp.method("mscorlib", 0x0600_0000),
+        Err(Error::NotFound(_))
+    ));
+
     let hook = unsafe { method.hook_raw(swapped_concat as *mut u8) }.unwrap();
     assert_eq!(call("Kia ", "ora"), "oraKia ");
 
