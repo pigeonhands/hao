@@ -728,6 +728,31 @@ impl Metadata {
             .get(start..start + m.parameter_count as usize)
             .unwrap_or(&[])
     }
+
+    /// The `(token, start_offset)` entries of the `attribute_data_range` section
+    /// (v29+). Each `start_offset` indexes into [`Metadata::attribute_data`]; a
+    /// range ends where the next entry begins, as the section is laid out in global
+    /// offset order (`Il2CppCustomAttributeDataRange`).
+    pub fn attribute_data_ranges(&self) -> Vec<(u32, u32)> {
+        let (offset, size) = self.sections["attribute_data_range"];
+        self.data[offset..offset + size]
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| {
+                (
+                    u32::from_le_bytes(c[0..4].try_into().unwrap()),
+                    u32::from_le_bytes(c[4..8].try_into().unwrap()),
+                )
+            })
+            .collect()
+    }
+
+    /// The raw `attribute_data` blob holding v29+ custom attribute values.
+    pub fn attribute_data(&self) -> &[u8] {
+        let (offset, size) = self.sections["attribute_data"];
+        &self.data[offset..offset + size]
+    }
 }
 
 #[cfg(test)]
