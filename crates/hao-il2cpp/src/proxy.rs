@@ -1,10 +1,16 @@
 //! Generates "runtime proxy" assemblies from Il2Cpp metadata.
 //!
-//! A declaration assembly (see [`crate::generate`]) rebuilds every type and
+//! A declaration assembly (see [`crate::generate`](mod@crate::generate)) rebuilds every type and
 //! method *signature* of an Il2Cpp game, but its method bodies just `throw`. A
 //! *proxy* assembly is the same declaration assembly with eligible method bodies
-//! rewritten to call into the game's real native code, so the generated assembly
-//! can be loaded into the running game and used like Il2CppInterop's proxies.
+//! rewritten to route through a per-module invoke seam keyed by each method's
+//! `(image, token)` identity.
+//!
+//! These are **reference artifacts** (browse in ILSpy, compile against), not run
+//! in a managed host. Calling the game at runtime is done from Rust:
+//! `hao-il2cpp-runtime` resolves the same `(image, token)` to a live `MethodInfo`
+//! with `Il2Cpp::method` and calls or hooks it. A managed C#-consumer stack à la
+//! Il2CppInterop is intentionally out of scope.
 //!
 //! # The il2cpp method ABI (research notes)
 //!
@@ -39,8 +45,8 @@
 //! ```text
 //! namespace Hao {
 //!     public static class <Il2CppProxyRuntime> {
-//!         // Replaced at runtime by hao-il2cpp-runtime with the real native
-//!         // dispatch (resolve MethodInfo* from (image, token), then invoke).
+//!         // A throwing stub by design: these are reference artifacts, not run
+//!         // in a managed host. Execution is the Rust runtime's job (see below).
 //!         public static object Invoke(string image, uint token,
 //!                                     object instance, object[] args);
 //!     }
@@ -53,18 +59,19 @@
 //! `(image, token)` pair is carried as plain IL data — exactly the identity the
 //! runtime needs to find the `MethodInfo*`.
 //!
-//! # Status: PARTIAL first increment
+//! # Status and scope
 //!
-//! What works and is tested: generation of **structurally valid IL** that
-//! round-trips (generate -> write PE -> reload with hao). In scope are static and
-//! instance methods whose parameters and return type are primitives, `string`, or
-//! reference objects. Out of scope (left as throwing stubs): generics, by-value
-//! structs/enums, `ref`/`out`, pointers.
+//! Generation produces **structurally valid IL** that round-trips (generate ->
+//! write PE -> reload with hao), tested below. In scope are static and instance
+//! methods whose parameters and return type are primitives, `string`, or
+//! reference objects; left as throwing stubs: generics, by-value structs/enums,
+//! `ref`/`out`, pointers.
 //!
-//! What does **not** work yet: actual in-game execution. The seam's `Invoke` body
-//! is still a throwing stub. Making proxies callable needs the runtime helper
-//! (resolving the `MethodInfo*` for `(image, token)` and performing the il2cpp
-//! invoke) which belongs in `hao-il2cpp-runtime`/`hao-runtime` and is a follow-up.
+//! The seam's `Invoke` body is a throwing stub **by design** — these assemblies
+//! are reference artifacts, not executed in a managed host. To call the game,
+//! take a method's `(image, token)` and resolve it to a live `MethodInfo` with
+//! `hao-il2cpp-runtime`'s `Il2Cpp::method(image, token)`, then `.call(..)` or
+//! `.hook(..)`. A managed host à la Il2CppInterop is intentionally out of scope.
 
 use hao::dotnet::{
     entries::{Entry, Method, TypeDef, TypeDefOrRef, TypeSpec},

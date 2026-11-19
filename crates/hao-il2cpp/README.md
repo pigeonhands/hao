@@ -2,8 +2,11 @@
 
 [![crates.io](https://img.shields.io/crates/v/hao-il2cpp.svg)](https://crates.io/crates/hao-il2cpp) [![docs.rs](https://img.shields.io/docsrs/hao-il2cpp)](https://docs.rs/hao-il2cpp) [![license](https://img.shields.io/crates/l/hao-il2cpp.svg)](https://github.com/pigeonhands/hao)
 
-Read Unity Il2Cpp games, with the goal of generating .NET proxy assemblies for them with
-[`hao`](../hao), the way Il2CppInterop does for MelonLoader.
+Read Unity Il2Cpp games and regenerate their .NET assemblies with [`hao`](../hao): typed
+declaration ("dummy") DLLs to browse in ILSpy and compile against. Calling the game at runtime is
+done from Rust with [`hao-il2cpp-runtime`](../hao-il2cpp-runtime), not a managed C# host — so
+these assemblies are reference artifacts, and the execution path is Rust rather than
+Il2CppInterop-style managed proxies.
 
 **Work in progress.** What's here so far:
 
@@ -24,11 +27,13 @@ Read Unity Il2Cpp games, with the goal of generating .NET proxy assemblies for t
       are dropped, never guessed
 - [x] metadata **v31** (later Unity 2022.3 LTS / 2023.x): implemented from the
       Il2CppDumper/Il2CppInspector reference layout — **unverified against a real v31 game**
-- [ ] runtime proxy assemblies that call into the game, like Il2CppInterop — *generation is
-      done*: one assembly per image with method bodies calling a per-module invoke seam that
-      carries each method's `(image, token)`, producing valid round-trippable IL; the runtime
-      dispatch behind the seam (resolve `MethodInfo*` and il2cpp-invoke it) is still TODO, so
-      proxies are not yet callable in-game
+- [x] call the game's methods at runtime — done from **Rust**, not a managed C# host. The
+      generated assemblies are reference artifacts (browse in ILSpy, compile against); live calls
+      and hooks run through [`hao-il2cpp-runtime`](../hao-il2cpp-runtime)'s typed `call`/`hook`,
+      and the `(image, token)` identity each method carries resolves to a live `MethodInfo` with
+      `Il2Cpp::method(image, token)` — the online mirror of `Binary::method_pointer`. A managed
+      C#-consumer stack à la Il2CppInterop is intentionally out of scope. (`proxy.rs` can still
+      emit seam-routed "proxy" assemblies, but their seam is a throwing stub by design.)
 
 ```rust
 use hao_il2cpp::Game;

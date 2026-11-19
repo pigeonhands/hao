@@ -39,6 +39,17 @@ A method's signature is also available in parts, not only as the string: `Method
 `is_instance`, `return_type_name`, and `parameters` (each a `Parameter` with its `name` and
 `type_name`, or `parameter_type_name(i)` / `parameter_name(i)`). `signature` is built from these.
 
+Methods are usually found by name, but `Il2Cpp::method(image, token)` resolves one by the
+metadata token [`hao-il2cpp`](../hao-il2cpp) emits — the identity carried by its generated
+assemblies, and what `Binary::method_pointer` maps to a static address offline. It's the online
+mirror, so a token read from those assemblies (or shown in ILSpy) calls live:
+
+```rust
+// `token` is the MethodDef token hao-il2cpp emits for the method.
+let heal = il2cpp.method("Assembly-CSharp", token)?;
+let healed: i32 = heal.call((player, 10.0f32, true))?; // instance first, typed + checked
+```
+
 This crate is the engine-agnostic layer. [`hao-il2cpp-unity`](../hao-il2cpp-unity) builds typed
 wrappers for Unity on top of it (game objects, UI, scenes, logging) and has the example mods.
 
