@@ -215,8 +215,7 @@ impl EguiState {
                 self.update_texture(&delta)?;
             }
         }
-        let ppp = pixels_per_point();
-        self.ctx.set_pixels_per_point(ppp);
+        let ppp = self.ctx.pixels_per_point();
         let primitives = self.ctx.tessellate(output.shapes, ppp);
         self.render(w, h, (iw, ih), &primitives)
     }
