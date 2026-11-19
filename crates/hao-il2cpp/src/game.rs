@@ -154,7 +154,7 @@ impl Game {
     /// Look up the native code address for a method definition.
     pub fn method_pointer(&self, method: &MethodDefinition) -> Option<u64> {
         let image = self.metadata.images.iter().find(|img| {
-            let start = img.type_start as i32;
+            let start = img.type_start;
             let end = start + img.type_count as i32;
             method.declaring_type >= start && method.declaring_type < end
         })?;
