@@ -133,7 +133,6 @@ impl OverlaySurface {
         if !target_ok {
             let target = RenderTexture::new(w, h, 0)?;
             target.set_hide_flags(HideFlags::HIDE_AND_DONT_SAVE)?;
-            target.set_filter_mode(crate::FilterMode::POINT)?;
             self.target = Some((GcHandle::new(il2cpp()?, target.object()), [w, h]));
             if let Some(image) = &self.image {
                 RawImage(image.target()).set_texture(target.object())?;

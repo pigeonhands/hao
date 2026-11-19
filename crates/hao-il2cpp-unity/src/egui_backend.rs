@@ -206,10 +206,14 @@ impl EguiState {
         self.ensure_alive()?;
         let (sw, sh) = screen::size()?;
         let (iw, ih) = (sw.max(1), sh.max(1));
-        let (pixel_w, pixel_h) = (iw as f32, ih as f32);
-        // Scale the point space: scale < 1 → larger point space → smaller UI.
-        let inv = 1.0 / ui_scale();
-        let (pw, ph) = (pixel_w * inv, pixel_h * inv);
+        let scale = ui_scale();
+        let inv = 1.0 / scale;
+        // Point space is larger than screen when scale < 1 → smaller UI.
+        let (pw, ph) = (iw as f32 * inv, ih as f32 * inv);
+        // Render texture matches point space so 1 point = 1 pixel → crisp text.
+        // The Canvas bilinearly downscales the larger texture to screen size.
+        let tex_w = (iw as f32 * inv) as i32;
+        let tex_h = (ih as f32 * inv) as i32;
 
         let input = self.raw_input(pw, ph, inv)?;
         let output = self.ctx.run(input, |ctx| ui(ctx));
@@ -219,7 +223,7 @@ impl EguiState {
             }
         }
         let primitives = self.ctx.tessellate(output.shapes, 1.0);
-        self.render(pw, ph, (iw, ih), &primitives)
+        self.render(pw, ph, (tex_w, tex_h), &primitives)
     }
 
     fn raw_input(&mut self, pw: f32, ph: f32, inv: f32) -> Result<egui::RawInput> {
