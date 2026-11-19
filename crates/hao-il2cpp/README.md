@@ -16,9 +16,10 @@ Read Unity Il2Cpp games, with the goal of generating .NET proxy assemblies for t
 - [x] declaration assemblies ("dummy DLLs"): one assembly per image with every type, field,
       constant, method signature, property, event, generic parameter and interface, with stub
       bodies. Other code compiles against them.
+- [x] `CodeRegistration`: resolves each method's native code address in `GameAssembly`
+      (`MethodView::code_address`, `Game::method_pointer`)
 - [ ] custom attributes (only `[DefaultMember]` for indexers is generated so far)
 - [ ] more metadata versions (v31)
-- [ ] `CodeRegistration` and method addresses
 - [ ] runtime proxy assemblies that call into the game, like Il2CppInterop
 
 ```rust

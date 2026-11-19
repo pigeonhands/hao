@@ -69,9 +69,9 @@ Unity's API may only be used from its main thread, which hooks of methods the ga
 
 ## Examples
 
-Both are mods for Megabonk's Linux build. Build one, then add
+These are mods for Megabonk's Linux build. Build one, then add
 `LD_PRELOAD=/path/to/target/release/examples/lib<name>.so %command%` to the game's Steam launch
-options.
+options. The `egui_demo` and `megabonk` mods need the `egui` feature.
 
 - [`scene_overlay`](examples/scene_overlay.rs): draws a live overlay over the game with the
   current scene, scenes loaded and a smoothed FPS, refreshed every frame via `on_update`. Works
@@ -79,11 +79,18 @@ options.
 - [`render_overlay`](examples/render_overlay.rs): draws a crosshair and a panel over the game with
   `GL` immediate mode from the `on_render` hook (using a `Hidden/Internal-Colored` material),
   toggled with F1.
+- [`egui_demo`](examples/egui_demo.rs): an [egui](https://github.com/emilk/egui) window over the
+  game (a time-scale slider driven by the live `Time.timeScale`, a text field and a scroll area),
+  toggled with F1 — the `egui` feature.
 - [`heal_mod`](examples/heal_mod.rs): doubles healing by hooking the game's own
   `PlayerHealth.Heal`, reads the player's `hp` field and logs to `Player.log`.
+- [`megabonk`](examples/megabonk.rs): an egui mod menu with godmode (skips `PlayerHealth.Damage`)
+  and item spawning (calls `ItemInventory.AddItem`), capturing the live inventory from its
+  per-frame `Tick` — the `egui` feature.
 
 ```sh
 cargo build --release -p hao-il2cpp-unity --example scene_overlay
+cargo build --release -p hao-il2cpp-unity --features egui --example megabonk
 ```
 
 ## Logging
