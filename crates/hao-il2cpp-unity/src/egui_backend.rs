@@ -7,14 +7,18 @@
 //! colours converted from gamma to linear) into an [`OverlaySurface`], which draws
 //! it on top of the game's own UI. See [`on_egui`].
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use hao_il2cpp_runtime::{GcHandle, Result};
+use hao_il2cpp_runtime::{GcHandle, Object, Result};
 
 use crate::{gl, input, screen, Color, Material, OverlaySurface, Shader, Texture2D, TextureFormat};
 
 static UI_SCALE: AtomicU32 = AtomicU32::new(0);
+static NEXT_USER_TEX: AtomicU64 = AtomicU64::new(1);
+static USER_TEXTURES: std::sync::LazyLock<Mutex<HashMap<u64, GcHandle>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Scales the egui overlay UI. A value of 0.5 makes the UI half-size; 2.0 makes
 /// it double-size. Font rasterization quality is preserved — only the coordinate
@@ -30,6 +34,25 @@ pub fn set_ui_scale(scale: f32) {
 fn ui_scale() -> f32 {
     let bits = UI_SCALE.load(Ordering::Relaxed);
     if bits == 0 { 1.0 } else { f32::from_bits(bits) }
+}
+
+/// Registers a Unity texture object for use in egui as a user texture.
+///
+/// Returns a [`egui::TextureId::User`] id that can be passed to egui's
+/// `Image` widget via `SizedTexture`. The texture object is GC-pinned so it
+/// won't be collected while registered.
+pub fn register_user_texture(object: Object) -> Result<egui::TextureId> {
+    let id = NEXT_USER_TEX.fetch_add(1, Ordering::Relaxed);
+    let handle = GcHandle::new(crate::il2cpp()?, object);
+    USER_TEXTURES.lock().unwrap().insert(id, handle);
+    Ok(egui::TextureId::User(id))
+}
+
+/// Removes a previously registered user texture.
+pub fn unregister_user_texture(id: egui::TextureId) {
+    if let egui::TextureId::User(n) = id {
+        USER_TEXTURES.lock().unwrap().remove(&n);
+    }
 }
 
 /// Runs `ui` every frame to build and draw an egui interface over the game.
@@ -380,11 +403,14 @@ impl EguiState {
         size: (i32, i32),
         primitives: &[egui::ClippedPrimitive],
     ) -> Result<()> {
-        let Some((texture, _)) = &self.texture else {
+        let Some((atlas_handle, _)) = &self.texture else {
             return Ok(());
         };
+        let atlas_obj = atlas_handle.target();
         let material = self.material();
-        material.set_main_texture(Texture2D(texture.target()))?;
+        material.set_main_texture(Texture2D(atlas_obj))?;
+
+        let user_textures = USER_TEXTURES.lock().unwrap();
 
         // Draw the tessellated UI into the overlay surface (cleared transparent so
         // last frame's UI doesn't linger), which composites it on top of the game.
@@ -392,10 +418,24 @@ impl EguiState {
             gl::push_matrix()?;
             // Flip Y so egui's top-left origin maps to Unity's bottom-left.
             gl::load_pixel_matrix(0.0, w, h, 0.0)?;
+            let mut active_texture = atlas_obj;
             for primitive in primitives {
                 let egui::epaint::Primitive::Mesh(mesh) = &primitive.primitive else {
                     continue;
                 };
+                let wanted = match mesh.texture_id {
+                    egui::TextureId::Managed(_) => atlas_obj,
+                    egui::TextureId::User(id) => {
+                        match user_textures.get(&id) {
+                            Some(handle) => handle.target(),
+                            None => atlas_obj,
+                        }
+                    }
+                };
+                if wanted != active_texture {
+                    material.set_main_texture(Texture2D(wanted))?;
+                    active_texture = wanted;
+                }
                 material.set_pass(0)?;
                 gl::begin(gl::Mode::Triangles)?;
                 for &index in &mesh.indices {
