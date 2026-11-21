@@ -5,6 +5,8 @@
 `bind!` generates Rust bindings to a .NET assembly, for use with
 [`hao-runtime`](../hao-runtime).
 
+Bind an assembly you built — `assembly = "path"` is relative to the crate's `Cargo.toml`:
+
 ```rust
 mod my_lib {
     hao_runtime_macros::bind! {
@@ -15,6 +17,27 @@ mod my_lib {
 let runtime = hao_runtime::Runtime::coreclr()?;
 let calculator = my_lib::my_lib::Calculator::new(&runtime, 10)?;
 assert_eq!(calculator.add(5)?, 15);
+```
+
+Or bind an assembly of the installed .NET with `framework = "..."`, which finds it in the
+newest .NET at compile time (needs .NET 8+, no SDK) — here, the class library's `StringBuilder`:
+
+```rust
+mod corelib {
+    hao_runtime_macros::bind! {
+        framework = "System.Private.CoreLib",
+        types = ["System.Text.StringBuilder"],
+    }
+}
+
+use corelib::system::text::StringBuilder;
+
+let runtime = hao_runtime::Runtime::coreclr()?;
+// `StringBuilder(string)` → `new_str` (overloads are named after their params).
+let builder = StringBuilder::new_str(&runtime, "Kia ora")?;
+builder.append_str(" from .NET")?;
+builder.append_char('!' as u16)?; // `char` crosses the boundary as a `u16`
+assert_eq!(builder.object().to_managed_string()?, "Kia ora from .NET!");
 ```
 
 ## Options
