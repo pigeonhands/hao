@@ -2,7 +2,7 @@
 
 use hao::{
     dotnet::{
-        entries::{Method, TypeDef},
+        entries::{well_known::SystemType, Method, TypeDef},
         il::{Instruction, MethodBody, OpCode},
         md::streams::tables_stream::{MethodFlags, TypeAttributes},
         module::{ModuleKind, TargetRuntime},
@@ -15,7 +15,7 @@ use std::ffi::c_void;
 
 fn exports_assembly() -> Vec<u8> {
     let mut module = Module::new("MonoExports", ModuleKind::Dll, TargetRuntime::NetFramework);
-    let object = module.corlib_type("System.Object").unwrap();
+    let object = module.corlib_type(SystemType::Object).unwrap();
     let exports = module.add_type(TypeDef::new(
         TypeAttributes::Public | TypeAttributes::Abstract | TypeAttributes::Sealed,
         "Native",

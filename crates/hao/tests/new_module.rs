@@ -4,7 +4,10 @@ use std::process::Command;
 
 use hao::{
     dotnet::{
-        entries::{Field, Method, Param, TypeDef, Version},
+        entries::{
+            well_known::{SystemRuntimeInteropServicesType, SystemType},
+            Field, Method, Param, TypeDef, Version,
+        },
         il::{Instruction, MethodBody, OpCode, Operand},
         md::streams::tables_stream::{FieldFlags, MethodFlags, TypeAttributes},
         module::{ModuleKind, TargetRuntime},
@@ -31,7 +34,7 @@ fn hello_world() -> Module {
         &TargetRuntime::NetCore(9).framework_token(),
     );
 
-    let object = module.corlib_type("System.Object").unwrap();
+    let object = module.corlib_type(SystemType::Object).unwrap();
     let object_ctor = module
         .import_method_on(
             &object,
@@ -40,7 +43,7 @@ fn hello_world() -> Module {
         )
         .unwrap();
     let console = module
-        .import_type_from("System.Console", "System.Console")
+        .import_type_from("System.Console", SystemType::Console)
         .unwrap();
     let write_line = module
         .import_method_on(
@@ -49,7 +52,7 @@ fn hello_world() -> Module {
             MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]),
         )
         .unwrap();
-    let string = module.corlib_type("System.String").unwrap();
+    let string = module.corlib_type(SystemType::String).unwrap();
     let concat = module
         .import_method_on(
             &string,
@@ -201,7 +204,7 @@ fn call_into_another_module() {
     );
     let add = module.import_foreign_method(&add, &library).unwrap();
     let console = module
-        .import_type_from("System.Console", "System.Console")
+        .import_type_from("System.Console", SystemType::Console)
         .unwrap();
     let write_line = module
         .import_method_on(
@@ -210,7 +213,7 @@ fn call_into_another_module() {
             MethodSig::new_static(TypeSig::VOID, vec![TypeSig::INT32]),
         )
         .unwrap();
-    let object = module.corlib_type("System.Object").unwrap();
+    let object = module.corlib_type(SystemType::Object).unwrap();
 
     let program = module.add_type(TypeDef::new(
         TypeAttributes::Public | TypeAttributes::Abstract | TypeAttributes::Sealed,
@@ -271,12 +274,12 @@ fn builder_helpers() {
     );
     let exports = module.add_static_class("Native", "Exports").unwrap();
     let uco = module
-        .corlib_attribute("System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute")
+        .corlib_attribute(SystemRuntimeInteropServicesType::UnmanagedCallersOnlyAttribute)
         .unwrap();
-    let exception = module.corlib_type("System.Exception").unwrap();
+    let exception = module.corlib_type(SystemType::Exception).unwrap();
     let max = module
         .import_corlib_method(
-            "System.Math",
+            SystemType::Math,
             "Max",
             MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32; 2]),
         )

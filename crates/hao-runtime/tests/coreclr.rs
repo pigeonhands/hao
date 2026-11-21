@@ -2,7 +2,10 @@
 
 use hao::{
     dotnet::{
-        entries::{CustomAttribute, CustomAttributeCtor, CustomAttributeValue, Method, TypeDef},
+        entries::{
+            well_known::SystemType, CustomAttribute, CustomAttributeCtor, CustomAttributeValue,
+            Method, TypeDef,
+        },
         il::{Instruction, MemberToken, MethodBody, OpCode},
         md::streams::tables_stream::{MethodFlags, TypeAttributes},
         module::{ModuleKind, TargetRuntime},
@@ -15,7 +18,7 @@ use hao_runtime::Runtime;
 /// `static class Native.Exports { [UnmanagedCallersOnly] static int Add(int a, int b) => a + b; }`
 fn exports_assembly(name: &str, runtime: TargetRuntime) -> Vec<u8> {
     let mut module = Module::new(name, ModuleKind::Dll, runtime);
-    let object = module.corlib_type("System.Object").unwrap();
+    let object = module.corlib_type(SystemType::Object).unwrap();
     let attribute_name = "System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute";
     let attribute = if let TargetRuntime::NetCore(major) = runtime {
         let version = hao::dotnet::entries::Version {
