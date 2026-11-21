@@ -11,3 +11,5 @@ out.txt
 crates/hao/tests/fixtures/out/
 crates/hao/tests/fixtures/Sample/bin/
 crates/hao/tests/fixtures/Sample/obj/
+crates/hao-runtime-tests/dotnet/TestLib/bin/
+crates/hao-runtime-tests/dotnet/TestLib/obj/
