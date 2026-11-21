@@ -12,3 +12,4 @@ pub use attributes::*;
 pub use handle::*;
 pub use refs::*;
 pub use type_def::*;
+pub use well_known::TypeName;

@@ -2,7 +2,7 @@ use pewter::pe::sections::cor20::{Cor20Flags, ImageCor20Header};
 
 use super::Module;
 use crate::dotnet::{
-    entries::*,
+    entries::{well_known::SystemType, *},
     md::streams::tables_stream::{AssemblyFlags, TypeAttributes},
 };
 
@@ -144,39 +144,58 @@ impl Module {
             .cloned()
     }
 
-    /// A type from the core library, e.g. `System.Object`.
-    pub fn corlib_type(&mut self, full_name: &str) -> crate::error::Result<TypeDefOrRef> {
+    /// A type from the core library, e.g. `SystemType::Object` or `"System.Object"`.
+    pub fn corlib_type(&mut self, ty: impl TypeName) -> crate::error::Result<TypeDefOrRef> {
+        let (namespace, name) = ty.type_name();
+        self.corlib_type_named(&namespace, &name)
+    }
+
+    /// Non-generic core of [`Module::corlib_type`], shared by the corlib helpers.
+    fn corlib_type_named(
+        &mut self,
+        namespace: &str,
+        name: &str,
+    ) -> crate::error::Result<TypeDefOrRef> {
         let corlib = self.corlib().ok_or(crate::error::HaoError::BadImageFormat(
             "module has no core library reference",
         ))?;
-        let name = corlib.get().name.clone();
-        self.import_type_from(&name, full_name)
+        let asm_name = corlib.get().name.clone();
+        self.import_type_from_named(&asm_name, namespace, name)
     }
 
-    /// A method of a core library type, e.g. `System.Math::Max`.
+    /// A method of a core library type, e.g. `SystemType::Math` / `"System.Math"` `::Max`.
     pub fn import_corlib_method(
         &mut self,
-        type_full_name: &str,
+        ty: impl TypeName,
         name: &str,
         signature: crate::dotnet::signature::MethodSig,
     ) -> crate::error::Result<crate::dotnet::il::MemberToken> {
-        let ty = self.corlib_type(type_full_name)?;
+        let (namespace, type_name) = ty.type_name();
+        let ty = self.corlib_type_named(&namespace, &type_name)?;
         self.import_method_on(&ty, name, signature)
     }
 
     /// The parameterless constructor of a core library attribute, for
     /// [`Method::with_attribute`](crate::dotnet::entries::Method::with_attribute), e.g.
-    /// `System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute`.
+    /// `SystemRuntimeInteropServicesType::UnmanagedCallersOnlyAttribute`.
     pub fn corlib_attribute(
         &mut self,
-        full_name: &str,
+        ty: impl TypeName,
+    ) -> crate::error::Result<crate::dotnet::entries::CustomAttributeCtor> {
+        let (namespace, name) = ty.type_name();
+        self.corlib_attribute_named(&namespace, &name)
+    }
+
+    /// Non-generic core of [`Module::corlib_attribute`].
+    fn corlib_attribute_named(
+        &mut self,
+        namespace: &str,
+        name: &str,
     ) -> crate::error::Result<crate::dotnet::entries::CustomAttributeCtor> {
         use crate::dotnet::signature::{MethodSig, TypeSig};
-        let ctor = self.import_corlib_method(
-            full_name,
-            ".ctor",
-            MethodSig::new_instance(TypeSig::VOID, vec![]),
-        )?;
+        let ty = self.corlib_type_named(namespace, name)?;
+        let ctor =
+            self.import_method_on(&ty, ".ctor", MethodSig::new_instance(TypeSig::VOID, vec![]))?;
         ctor.try_into().map_err(|_| {
             crate::error::HaoError::BadImageFormat("attribute constructor is not a method")
         })
@@ -195,7 +214,7 @@ impl Module {
         namespace: &str,
         name: &str,
     ) -> crate::error::Result<Entry<TypeDef>> {
-        let object = self.corlib_type("System.Object")?;
+        let object = self.corlib_type(SystemType::Object)?;
         Ok(self.add_type(TypeDef::new_static_class(namespace, name, object)))
     }
 

@@ -9,8 +9,13 @@ use crate::{
     error::{HaoError, Result},
 };
 
-fn split_full_name(full_name: &str) -> (&str, &str) {
-    full_name.rsplit_once('.').unwrap_or(("", full_name))
+/// Rejoins a `(namespace, name)` pair for lookups and error messages. Cold path.
+fn display_name(namespace: &str, name: &str) -> String {
+    if namespace.is_empty() {
+        name.to_string()
+    } else {
+        format!("{namespace}.{name}")
+    }
 }
 
 fn not_found(what: String) -> HaoError {
@@ -94,11 +99,18 @@ impl Module {
     ///
     /// Uses the type definition if it is in this module, then an existing type
     /// reference, then any loaded dependency that defines the type.
-    pub fn import_type(&mut self, full_name: &str) -> Result<TypeDefOrRef> {
-        if let Some(def) = self.find_type_by_full_name(full_name) {
+    pub fn import_type(&mut self, ty: impl TypeName) -> Result<TypeDefOrRef> {
+        let (namespace, name) = ty.type_name();
+        self.import_type_named(&namespace, &name)
+    }
+
+    /// Non-generic core of [`Module::import_type`]: compiled once, regardless of
+    /// how many `TypeName` types call it.
+    fn import_type_named(&mut self, namespace: &str, name: &str) -> Result<TypeDefOrRef> {
+        let full_name = display_name(namespace, name);
+        if let Some(def) = self.find_type_by_full_name(&full_name) {
             return Ok(TypeDefOrRef::TypeDef(def));
         }
-        let (namespace, name) = split_full_name(full_name);
         if let Some(existing) = self
             .type_refs
             .iter()
@@ -125,9 +137,24 @@ impl Module {
         Ok(self.add_type_ref(assembly, namespace, name))
     }
 
-    /// Gets a reference to `full_name` in the referenced assembly `assembly`.
-    pub fn import_type_from(&mut self, assembly: &str, full_name: &str) -> Result<TypeDefOrRef> {
-        let (namespace, name) = split_full_name(full_name);
+    /// Gets a reference to a type in the referenced assembly `assembly`.
+    pub fn import_type_from(
+        &mut self,
+        assembly: &str,
+        ty: impl TypeName,
+    ) -> Result<TypeDefOrRef> {
+        let (namespace, name) = ty.type_name();
+        self.import_type_from_named(assembly, &namespace, &name)
+    }
+
+    /// Non-generic core of [`Module::import_type_from`]. `pub(super)` so the
+    /// corlib helpers in `new.rs` can share it.
+    pub(super) fn import_type_from_named(
+        &mut self,
+        assembly: &str,
+        namespace: &str,
+        name: &str,
+    ) -> Result<TypeDefOrRef> {
         if let Some(existing) = self.type_refs.iter().find(|t| {
             let t = t.get();
             t.full_name_is(namespace, name)
@@ -170,11 +197,12 @@ impl Module {
     /// ```
     pub fn import_method(
         &mut self,
-        type_full_name: &str,
+        ty: impl TypeName,
         name: &str,
         signature: MethodSig,
     ) -> Result<MemberToken> {
-        let ty = self.import_type(type_full_name)?;
+        let (namespace, type_name) = ty.type_name();
+        let ty = self.import_type_named(&namespace, &type_name)?;
         self.import_method_on(&ty, name, signature)
     }
 
@@ -208,16 +236,28 @@ impl Module {
     /// Gets a token for a field, ready to use as a `ldfld`/`stsfld` operand.
     pub fn import_field(
         &mut self,
-        type_full_name: &str,
+        ty: impl TypeName,
         name: &str,
         signature: FieldSig,
     ) -> Result<MemberToken> {
-        match self.import_type(type_full_name)? {
+        let (namespace, type_name) = ty.type_name();
+        self.import_field_named(&namespace, &type_name, name, signature)
+    }
+
+    /// Non-generic core of [`Module::import_field`].
+    fn import_field_named(
+        &mut self,
+        namespace: &str,
+        type_name: &str,
+        name: &str,
+        signature: FieldSig,
+    ) -> Result<MemberToken> {
+        match self.import_type_named(namespace, type_name)? {
             TypeDefOrRef::TypeDef(def) => def
                 .get()
                 .find_field(name)
                 .map(MemberToken::Field)
-                .ok_or_else(|| not_found(format!("{}::{}", type_full_name, name))),
+                .ok_or_else(|| not_found(format!("{}::{}", display_name(namespace, type_name), name))),
             parent => Ok(MemberToken::MemberRef(self.import_member_ref(
                 parent,
                 name,

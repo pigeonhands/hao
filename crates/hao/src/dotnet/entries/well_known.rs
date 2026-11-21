@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use strum::{EnumString, IntoStaticStr};
 
 /// Check if a name is a well known one.
@@ -1013,4 +1014,92 @@ impl SystemThreadingTasksSourcesType {
     pub fn name(&self) -> &'static str {
         strip_arity(self.into())
     }
+}
+
+/// A type named either by a full-name string (`"System.Text.StringBuilder"`) or
+/// by a compile-checked [`WellKnown`] value or one of its namespace sub-enums
+/// ([`SystemType`], [`SystemRuntimeInteropServicesType`], ...).
+///
+/// This is what the by-name importers on [`Module`](crate::Module) accept —
+/// [`import_type`](crate::Module::import_type),
+/// [`import_type_from`](crate::Module::import_type_from),
+/// [`corlib_type`](crate::Module::corlib_type),
+/// [`import_corlib_method`](crate::Module::import_corlib_method) and friends — so
+/// a magic string and a checked `SystemType::String` are interchangeable.
+///
+/// ```
+/// # use hao::dotnet::entries::well_known::{TypeName, SystemType};
+/// assert_eq!(SystemType::String.type_name(), ("System".into(), "String".into()));
+/// assert_eq!("System.Text.StringBuilder".type_name(), ("System.Text".into(), "StringBuilder".into()));
+/// ```
+pub trait TypeName {
+    /// The `(namespace, type name)` pair, with any generic arity suffix stripped.
+    fn type_name(&self) -> (Cow<'_, str>, Cow<'_, str>);
+}
+
+impl TypeName for &str {
+    fn type_name(&self) -> (Cow<'_, str>, Cow<'_, str>) {
+        let (namespace, name) = self.rsplit_once('.').unwrap_or(("", self));
+        (Cow::Borrowed(namespace), Cow::Borrowed(name))
+    }
+}
+
+impl TypeName for String {
+    fn type_name(&self) -> (Cow<'_, str>, Cow<'_, str>) {
+        let (namespace, name) = self.rsplit_once('.').unwrap_or(("", self.as_str()));
+        (Cow::Borrowed(namespace), Cow::Borrowed(name))
+    }
+}
+
+impl TypeName for WellKnown {
+    fn type_name(&self) -> (Cow<'_, str>, Cow<'_, str>) {
+        let (namespace, name) = self.full_name();
+        (Cow::Borrowed(namespace), Cow::Borrowed(name))
+    }
+}
+
+/// Every namespace sub-enum is a `TypeName` too, so `GCHandle` can be named as
+/// `SystemRuntimeInteropServicesType::GCHandle` without the `WellKnown` wrapper.
+/// Each goes through its `WellKnown` variant's [`full_name`](WellKnown::full_name),
+/// which yields `'static` names (so no borrow of the temporary escapes).
+macro_rules! impl_type_name_for_subenums {
+    ($($sub:ty => $variant:ident),+ $(,)?) => {$(
+        impl TypeName for $sub {
+            fn type_name(&self) -> (Cow<'_, str>, Cow<'_, str>) {
+                let (namespace, name) = WellKnown::$variant(*self).full_name();
+                (Cow::Borrowed(namespace), Cow::Borrowed(name))
+            }
+        }
+    )+};
+}
+
+impl_type_name_for_subenums! {
+    SystemType => System,
+    SystemRuntimeCompilerServicesType => SystemRuntimeCompilerServices,
+    SystemCollectionsGenericType => SystemCollectionsGeneric,
+    SystemCollectionsType => SystemCollections,
+    SystemCollectionsObjectModelType => SystemCollectionsObjectModel,
+    SystemCollectionsSpecializedType => SystemCollectionsSpecialized,
+    SystemReflectionType => SystemReflection,
+    SystemDiagnosticsType => SystemDiagnostics,
+    SystemRuntimeExceptionServicesType => SystemRuntimeExceptionServices,
+    SystemRuntimeInteropServicesType => SystemRuntimeInteropServices,
+    SystemThreadingTasksType => SystemThreadingTasks,
+    SystemThreadingType => SystemThreading,
+    MicrosoftCSharpRuntimeBinderType => MicrosoftCSharpRuntimeBinder,
+    MicrosoftVisualBasicType => MicrosoftVisualBasic,
+    MicrosoftVisualBasicCompilerServicesType => MicrosoftVisualBasicCompilerServices,
+    MicrosoftVisualBasicApplicationServicesType => MicrosoftVisualBasicApplicationServices,
+    SystemRuntimeInteropServicesWindowsRuntimeType => SystemRuntimeInteropServicesWindowsRuntime,
+    WindowsFoundationType => WindowsFoundation,
+    SystemComponentModelType => SystemComponentModel,
+    SystemLinqType => SystemLinq,
+    SystemLinqExpressionsType => SystemLinqExpressions,
+    SystemXmlLinqType => SystemXmlLinq,
+    SystemSecurityType => SystemSecurity,
+    SystemSecurityPermissionsType => SystemSecurityPermissions,
+    SystemWindowsFormsType => SystemWindowsForms,
+    SystemRuntimeType => SystemRuntime,
+    SystemTextType => SystemText,
+    SystemThreadingTasksSourcesType => SystemThreadingTasksSources,
 }
