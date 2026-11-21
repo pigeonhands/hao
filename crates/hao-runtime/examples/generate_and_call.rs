@@ -6,7 +6,11 @@
 
 use hao::{
     dotnet::{
-        entries::{Method, TypeDef},
+        entries::{
+            well_known::SystemRuntimeInteropServicesType,
+            well_known_method::{MathMethod, WellKnownMethod},
+            Method, TypeDef,
+        },
         il::{Emitter, OpCode},
         module::{ModuleKind, TargetRuntime},
         signature::{MethodSig, TypeSig},
@@ -36,7 +40,7 @@ fn calc_module() -> Result<Module> {
     let calc = module.add_static_class("Generated", "Calc")?;
     // CoreCLR can only call methods marked [UnmanagedCallersOnly] from native code.
     let uco =
-        module.corlib_attribute("System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute")?;
+        module.corlib_attribute(SystemRuntimeInteropServicesType::UnmanagedCallersOnlyAttribute)?;
     let int_method = |name: &str, params: usize| {
         Method::public_static(
             name,
@@ -50,11 +54,7 @@ fn calc_module() -> Result<Module> {
     TypeDef::add_method(&calc, int_method("Add", 2).with_body(add.finish()));
 
     // Calls into the .NET class library.
-    let math_max = module.import_corlib_method(
-        "System.Math",
-        "Max",
-        MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32; 2]),
-    )?;
+    let math_max = module.import_well_known_method(WellKnownMethod::Math(MathMethod::MaxI32))?;
     let mut max = Emitter::new();
     max.ldarg(0).ldarg(1).call(math_max).ret();
     TypeDef::add_method(&calc, int_method("Max", 2).with_body(max.finish()));

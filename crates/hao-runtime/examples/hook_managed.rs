@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use hao::{
     dotnet::{
-        entries::{Method, TypeDef},
+        entries::{well_known::SystemRuntimeInteropServicesType, Method, TypeDef},
         il::{Emitter, Instruction, OpCode},
         module::{ModuleKind, TargetRuntime},
         signature::{MethodSig, TypeSig},
@@ -61,7 +61,7 @@ fn game_assembly() -> hao::error::Result<Vec<u8>> {
     );
     let player = module.add_static_class("Game", "Player")?;
     let uco =
-        module.corlib_attribute("System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute")?;
+        module.corlib_attribute(SystemRuntimeInteropServicesType::UnmanagedCallersOnlyAttribute)?;
     let signature =
         |params: u16| MethodSig::new_static(TypeSig::INT32, vec![TypeSig::INT32; params as usize]);
 

@@ -10,8 +10,8 @@
 use hao::{
     dotnet::{
         csharp::WriteCSharp,
+        entries::well_known_method::{ConsoleMethod, WellKnownMethod},
         il::{Instruction, OpCode},
-        signature::{MethodSig, TypeSig},
     },
     Module,
 };
@@ -24,11 +24,9 @@ fn main() -> hao::error::Result<()> {
     };
     let mut module = Module::from_path_no_resolve(&input)?;
 
-    let write_line = module.import_method(
-        "System.Console",
-        "WriteLine",
-        MethodSig::new_static(TypeSig::VOID, vec![TypeSig::STRING]),
-    )?;
+    // A common BCL member whose signature is known: one call, no hand-written sig.
+    let write_line =
+        module.import_well_known_method(WellKnownMethod::Console(ConsoleMethod::WriteLineStr))?;
 
     let add = module.find_method("Sample.Calc", "Add").expect("Calc.Add");
     println!("before:\n{}", add.get().body.as_ref().unwrap().csharp());
