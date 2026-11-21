@@ -3,7 +3,10 @@
 
 use hao::{
     dotnet::{
-        entries::{CustomAttributeCtor, Entry, Method, TypeDef, TypeDefOrRef},
+        entries::{
+            well_known::{SystemRuntimeInteropServicesType, SystemType},
+            CustomAttributeCtor, Entry, Method, TypeDef, TypeDefOrRef,
+        },
         il::{Emitter, MemberToken, OpCode},
         module::{ModuleKind, TargetRuntime},
         signature::{MethodSig, TypeSig},
@@ -45,57 +48,65 @@ struct Corlib {
 
 impl Corlib {
     fn import(module: &mut Module) -> Result<Self> {
-        const GC_HANDLE: &str = "System.Runtime.InteropServices.GCHandle";
-        let gchandle = TypeSig::ValueType(module.corlib_type(GC_HANDLE)?);
+        // `Copy`, so it's reused across the GCHandle method imports below.
+        let gc = SystemRuntimeInteropServicesType::GCHandle;
+        let gchandle = TypeSig::ValueType(module.corlib_type(gc)?);
         let chars = TypeSig::sz_array(TypeSig::CHAR);
         let (int, nint) = (TypeSig::INT32, TypeSig::NATIVE_INT);
         let r#static = MethodSig::new_static;
         let instance = MethodSig::new_instance;
-        let mut import = |ty: &str, name: &str, sig| module.import_corlib_method(ty, name, sig);
         Ok(Self {
-            alloc: import(
-                GC_HANDLE,
+            alloc: module.import_corlib_method(
+                gc,
                 "Alloc",
                 r#static(gchandle.clone(), vec![TypeSig::OBJECT]),
             )?,
-            to_int_ptr: import(
-                GC_HANDLE,
+            to_int_ptr: module.import_corlib_method(
+                gc,
                 "ToIntPtr",
                 r#static(nint.clone(), vec![gchandle.clone()]),
             )?,
-            from_int_ptr: import(
-                GC_HANDLE,
+            from_int_ptr: module.import_corlib_method(
+                gc,
                 "FromIntPtr",
                 r#static(gchandle.clone(), vec![nint.clone()]),
             )?,
-            get_target: import(GC_HANDLE, "get_Target", instance(TypeSig::OBJECT, vec![]))?,
-            free: import(GC_HANDLE, "Free", instance(TypeSig::VOID, vec![]))?,
-            string_ctor: import(
-                "System.String",
+            get_target: module.import_corlib_method(
+                gc,
+                "get_Target",
+                instance(TypeSig::OBJECT, vec![]),
+            )?,
+            free: module.import_corlib_method(gc, "Free", instance(TypeSig::VOID, vec![]))?,
+            string_ctor: module.import_corlib_method(
+                SystemType::String,
                 ".ctor",
                 instance(
                     TypeSig::VOID,
                     vec![TypeSig::ptr(TypeSig::CHAR), int.clone(), int.clone()],
                 ),
             )?,
-            string_length: import("System.String", "get_Length", instance(int.clone(), vec![]))?,
-            to_char_array: import(
-                "System.String",
+            string_length: module.import_corlib_method(
+                SystemType::String,
+                "get_Length",
+                instance(int.clone(), vec![]),
+            )?,
+            to_char_array: module.import_corlib_method(
+                SystemType::String,
                 "ToCharArray",
                 instance(chars.clone(), vec![]),
             )?,
-            marshal_copy: import(
-                "System.Runtime.InteropServices.Marshal",
+            marshal_copy: module.import_corlib_method(
+                SystemRuntimeInteropServicesType::Marshal,
                 "Copy",
                 r#static(TypeSig::VOID, vec![chars, int.clone(), nint, int]),
             )?,
-            to_string: import(
-                "System.Object",
+            to_string: module.import_corlib_method(
+                SystemType::Object,
                 "ToString",
                 instance(TypeSig::STRING, vec![]),
             )?,
-            exception: module.corlib_type("System.Exception")?,
-            string: module.corlib_type("System.String")?,
+            exception: module.corlib_type(SystemType::Exception)?,
+            string: module.corlib_type(SystemType::String)?,
             gchandle,
         })
     }
@@ -195,7 +206,7 @@ impl Builder {
         let mut module = Module::new(name, ModuleKind::Dll, runtime);
         let attribute = match target {
             Target::CoreClr => Some(module.corlib_attribute(
-                "System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute",
+                SystemRuntimeInteropServicesType::UnmanagedCallersOnlyAttribute,
             )?),
             Target::Mono => None,
         };
@@ -294,7 +305,7 @@ impl Builder {
         let mut casts = Vec::new();
         for (_, ty) in &method.params {
             casts.push(match ty {
-                Ty::Object { ty: Some(t), .. } if !t.full_name_is("System", "Object") => {
+                Ty::Object { ty: Some(t), .. } if !t.is_system_type(SystemType::Object) => {
                     Some(self.module.import_foreign_type(t, library)?)
                 }
                 _ => None,
