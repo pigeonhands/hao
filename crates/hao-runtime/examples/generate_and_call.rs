@@ -8,7 +8,9 @@ use hao::{
     dotnet::{
         entries::{
             well_known::SystemRuntimeInteropServicesType,
-            well_known_method::{MathMethod, ObjectMethod, StringMethod, WellKnownMethod},
+            well_known_method::{
+                MathMethod, ObjectMethod, StringBuilderMethod, StringMethod, WellKnownMethod,
+            },
             Method, TypeDef,
         },
         il::{Emitter, OpCode},
@@ -94,6 +96,26 @@ fn calc_module() -> Result<Module> {
         .callvirt(equals)
         .ret();
     TypeDef::add_method(&calc, int_method("IsString", 0).with_body(is_string.finish()));
+
+    // newobj + a fluent class-typed chain, built entirely from well-known
+    // members: new StringBuilder("ab").Append("cd").ToString().Length == 4.
+    let sb_new =
+        module.import_well_known_method(WellKnownMethod::StringBuilder(StringBuilderMethod::NewStr))?;
+    let sb_append = module
+        .import_well_known_method(WellKnownMethod::StringBuilder(StringBuilderMethod::AppendStr))?;
+    let sb_to_string = module
+        .import_well_known_method(WellKnownMethod::StringBuilder(StringBuilderMethod::ToString))?;
+    let str_len = module.import_well_known_method(WellKnownMethod::String(StringMethod::GetLength))?;
+    let mut build_len = Emitter::new();
+    build_len
+        .ldstr("ab")
+        .newobj(sb_new)
+        .ldstr("cd")
+        .callvirt(sb_append)
+        .callvirt(sb_to_string)
+        .callvirt(str_len)
+        .ret();
+    TypeDef::add_method(&calc, int_method("BuildLen", 0).with_body(build_len.finish()));
     Ok(module)
 }
 
@@ -113,6 +135,10 @@ fn main() -> hao_runtime::Result<()> {
     println!("Calc.Add(40, 2)    = {}", add(40, 2));
     println!("Calc.Max(-3, 7)    = {}", max(-3, 7));
     println!("Calc.Factorial(10) = {}", factorial(10));
+    let build_len: extern "C" fn() -> i32 =
+        unsafe { std::mem::transmute(function("BuildLen")?) };
+
     println!("Calc.IsString()    = {}", is_string());
+    println!("Calc.BuildLen()    = {}", build_len());
     Ok(())
 }
