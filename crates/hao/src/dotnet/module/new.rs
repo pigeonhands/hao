@@ -201,6 +201,17 @@ impl Module {
         })
     }
 
+    /// Imports a [`WellKnownMethod`] — a common BCL member whose signature is
+    /// baked in — in one call, e.g.
+    /// `WellKnownMethod::Console(ConsoleMethod::WriteLineStr)`.
+    pub fn import_well_known_method(
+        &mut self,
+        method: WellKnownMethod,
+    ) -> crate::error::Result<crate::dotnet::il::MemberToken> {
+        let (ty, name, signature) = method.resolve(self)?;
+        self.import_method_on(&ty, name, signature)
+    }
+
     /// Adds a new top level type.
     pub fn add_type(&mut self, ty: TypeDef) -> Entry<TypeDef> {
         let ty = Entry::new(ty);
