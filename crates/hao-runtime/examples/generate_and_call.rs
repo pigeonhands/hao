@@ -8,7 +8,7 @@ use hao::{
     dotnet::{
         entries::{
             well_known::SystemRuntimeInteropServicesType,
-            well_known_method::{MathMethod, WellKnownMethod},
+            well_known_method::{MathMethod, ObjectMethod, StringMethod, WellKnownMethod},
             Method, TypeDef,
         },
         il::{Emitter, OpCode},
@@ -77,6 +77,23 @@ fn calc_module() -> Result<Module> {
         &calc,
         int_method("Factorial", 1).with_body(factorial.finish()),
     );
+
+    // A class-typed well-known member: Object.GetType() returns System.Type,
+    // whose ToString() is the type's full name. Returns 1 iff it equals
+    // "System.String" — proving the class-typed return resolves and loads.
+    let get_type = module.import_well_known_method(WellKnownMethod::Object(ObjectMethod::GetType))?;
+    let to_string =
+        module.import_well_known_method(WellKnownMethod::Object(ObjectMethod::ToString))?;
+    let equals = module.import_well_known_method(WellKnownMethod::String(StringMethod::EqualsStr))?;
+    let mut is_string = Emitter::new();
+    is_string
+        .ldstr("x")
+        .callvirt(get_type)
+        .callvirt(to_string)
+        .ldstr("System.String")
+        .callvirt(equals)
+        .ret();
+    TypeDef::add_method(&calc, int_method("IsString", 0).with_body(is_string.finish()));
     Ok(module)
 }
 
@@ -90,8 +107,12 @@ fn main() -> hao_runtime::Result<()> {
     let factorial: extern "C" fn(i32) -> i32 =
         unsafe { std::mem::transmute(function("Factorial")?) };
 
+    let is_string: extern "C" fn() -> i32 =
+        unsafe { std::mem::transmute(function("IsString")?) };
+
     println!("Calc.Add(40, 2)    = {}", add(40, 2));
     println!("Calc.Max(-3, 7)    = {}", max(-3, 7));
     println!("Calc.Factorial(10) = {}", factorial(10));
+    println!("Calc.IsString()    = {}", is_string());
     Ok(())
 }
