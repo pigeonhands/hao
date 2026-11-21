@@ -88,7 +88,16 @@ impl WellKnownMethod {
         self,
         module: &mut Module,
     ) -> Result<(TypeDefOrRef, &'static str, MethodSig)> {
-        let ty = module.corlib_type(self.declaring())?;
+        let declaring = self.declaring();
+        // Prefer an existing reference or loaded dependency, so a type that
+        // lives outside corlib (e.g. `System.Console`, in the `System.Console`
+        // assembly) resolves to the right assembly rather than being forced into
+        // the corlib reference. Fall back to corlib for freshly-generated modules
+        // whose dependencies aren't resolved (where the only reference is corlib).
+        let ty = match module.import_type(declaring) {
+            Ok(ty) => ty,
+            Err(_) => module.corlib_type(declaring)?,
+        };
         Ok((ty, self.method_name(), self.signature()))
     }
 }
