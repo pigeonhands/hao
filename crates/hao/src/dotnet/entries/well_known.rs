@@ -43,6 +43,8 @@ pub enum WellKnown {
     SystemRuntime(SystemRuntimeType),
     SystemText(SystemTextType),
     SystemThreadingTasksSources(SystemThreadingTasksSourcesType),
+    SystemIo(SystemIoType),
+    SystemGlobalization(SystemGlobalizationType),
 }
 
 impl WellKnown {
@@ -122,6 +124,10 @@ impl WellKnown {
             "System.Threading.Tasks.Sources" => Self::SystemThreadingTasksSources(
                 SystemThreadingTasksSourcesType::from_type_name(name)?,
             ),
+            "System.IO" => Self::SystemIo(SystemIoType::from_type_name(name)?),
+            "System.Globalization" => {
+                Self::SystemGlobalization(SystemGlobalizationType::from_type_name(name)?)
+            }
 
             _ => return None,
         };
@@ -168,6 +174,8 @@ impl WellKnown {
             Self::SystemRuntime(ty) => ("System.Runtime", ty.name()),
             Self::SystemText(ty) => ("System.Text", ty.name()),
             Self::SystemThreadingTasksSources(ty) => ("System.Threading.Tasks.Sources", ty.name()),
+            Self::SystemIo(ty) => ("System.IO", ty.name()),
+            Self::SystemGlobalization(ty) => ("System.Globalization", ty.name()),
         }
     }
     pub fn namespace(&self) -> &'static str {
@@ -339,6 +347,64 @@ pub enum SystemType {
     Index,
     Range,
     IAsyncDisposable,
+
+    // Common additions (absent from Roslyn's well-known list).
+    Console,
+    GC,
+    GCCollectionMode,
+    TimeSpan,
+    DateTimeOffset,
+    Random,
+    Version,
+    Uri,
+    BitConverter,
+    Buffer,
+    MathF,
+    HashCode,
+    EventArgs,
+    EventHandler,
+    #[strum(serialize = "EventHandler`1")]
+    EventHandler_1,
+    IComparable,
+    #[strum(serialize = "IComparable`1")]
+    IComparable_1,
+    ICloneable,
+    WeakReference,
+    #[strum(serialize = "WeakReference`1")]
+    WeakReference_1,
+    #[strum(serialize = "Lazy`1")]
+    Lazy_1,
+    #[strum(serialize = "Progress`1")]
+    Progress_1,
+    #[strum(serialize = "IProgress`1")]
+    IProgress_1,
+    #[strum(serialize = "Comparison`1")]
+    Comparison_1,
+    #[strum(serialize = "Predicate`1")]
+    Predicate_1,
+    #[strum(serialize = "Converter`2")]
+    Converter_2,
+    StringComparison,
+    StringSplitOptions,
+    AttributeTargets,
+    DateTimeKind,
+    MidpointRounding,
+    ArgumentException,
+    ArgumentNullException,
+    ArgumentOutOfRangeException,
+    InvalidOperationException,
+    NullReferenceException,
+    IndexOutOfRangeException,
+    NotImplementedException,
+    FormatException,
+    OverflowException,
+    InvalidCastException,
+    SystemException,
+    AggregateException,
+    ObjectDisposedException,
+    TimeoutException,
+    DivideByZeroException,
+    ArithmeticException,
 }
 
 impl SystemType {
@@ -362,6 +428,19 @@ impl SystemType {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemRuntimeCompilerServicesType {
+    MethodImplAttribute,
+    MethodImplOptions,
+    Unsafe,
+    CallerMemberNameAttribute,
+    CallerLineNumberAttribute,
+    CallerFilePathAttribute,
+    CallerArgumentExpressionAttribute,
+    ModuleInitializerAttribute,
+    SkipLocalsInitAttribute,
+    #[strum(serialize = "StrongBox`1")]
+    StrongBox_1,
+    #[strum(serialize = "ConditionalWeakTable`2")]
+    ConditionalWeakTable_2,
     IsVolatile,
     FormattableStringFactory,
     RuntimeHelpers,
@@ -416,6 +495,30 @@ impl SystemRuntimeCompilerServicesType {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemCollectionsGenericType {
+    #[strum(serialize = "HashSet`1")]
+    HashSet_1,
+    #[strum(serialize = "Queue`1")]
+    Queue_1,
+    #[strum(serialize = "Stack`1")]
+    Stack_1,
+    #[strum(serialize = "LinkedList`1")]
+    LinkedList_1,
+    #[strum(serialize = "SortedDictionary`2")]
+    SortedDictionary_2,
+    #[strum(serialize = "SortedList`2")]
+    SortedList_2,
+    #[strum(serialize = "SortedSet`1")]
+    SortedSet_1,
+    #[strum(serialize = "ISet`1")]
+    ISet_1,
+    #[strum(serialize = "IReadOnlySet`1")]
+    IReadOnlySet_1,
+    #[strum(serialize = "IComparer`1")]
+    IComparer_1,
+    #[strum(serialize = "IEqualityComparer`1")]
+    IEqualityComparer_1,
+    #[strum(serialize = "Comparer`1")]
+    Comparer_1,
     #[strum(serialize = "IEnumerable`1")]
     IEnumerable_1,
     #[strum(serialize = "IList`1")]
@@ -460,6 +563,14 @@ impl SystemCollectionsGenericType {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemCollectionsType {
+    Hashtable,
+    ArrayList,
+    IDictionary,
+    IComparer,
+    IEqualityComparer,
+    Queue,
+    Stack,
+    BitArray,
     DictionaryEntry,
     IEnumerator,
     IEnumerable,
@@ -518,6 +629,22 @@ impl SystemCollectionsSpecializedType {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemReflectionType {
+    PropertyInfo,
+    EventInfo,
+    ParameterInfo,
+    Module,
+    AssemblyName,
+    TypeInfo,
+    CustomAttributeData,
+    Pointer,
+    BindingFlags,
+    MethodAttributes,
+    FieldAttributes,
+    TypeAttributes,
+    PropertyAttributes,
+    ParameterAttributes,
+    MethodImplAttributes,
+    CallingConventions,
     MethodInfo,
     ConstructorInfo,
     MethodBase,
@@ -544,6 +671,14 @@ impl SystemReflectionType {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemDiagnosticsType {
+    Stopwatch,
+    Debug,
+    Trace,
+    ConditionalAttribute,
+    StackTrace,
+    StackFrame,
+    Process,
+    ProcessStartInfo,
     DebuggerTypeProxyAttribute,
     Debugger,
     DebuggerDisplayAttribute,
@@ -619,6 +754,19 @@ pub enum SystemRuntimeInteropServicesType {
     UnmanagedType,
     VarEnum,
     GCHandle,
+    GCHandleType,
+    UnmanagedCallersOnlyAttribute,
+    LayoutKind,
+    SafeHandle,
+    HandleRef,
+    NativeLibrary,
+    MemoryMarshal,
+    CollectionsMarshal,
+    NativeMemory,
+    RuntimeInformation,
+    OSPlatform,
+    Architecture,
+    ComWrappers,
 }
 
 impl SystemRuntimeInteropServicesType {
@@ -635,6 +783,15 @@ impl SystemRuntimeInteropServicesType {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemThreadingTasksType {
+    TaskCompletionSource,
+    #[strum(serialize = "TaskCompletionSource`1")]
+    TaskCompletionSource_1,
+    TaskScheduler,
+    Parallel,
+    TaskFactory,
+    TaskStatus,
+    TaskCreationOptions,
+    TaskContinuationOptions,
     Task,
     #[strum(serialize = "Task`1")]
     Task_1,
@@ -661,6 +818,20 @@ pub enum SystemThreadingType {
     Monitor,
     Thread,
     CancellationToken,
+    CancellationTokenSource,
+    SemaphoreSlim,
+    ManualResetEventSlim,
+    ManualResetEvent,
+    AutoResetEvent,
+    Mutex,
+    Volatile,
+    WaitHandle,
+    ThreadPool,
+    SynchronizationContext,
+    ThreadStart,
+    ParameterizedThreadStart,
+    ReaderWriterLockSlim,
+    EventWaitHandle,
 }
 
 impl SystemThreadingType {
@@ -980,6 +1151,12 @@ impl SystemRuntimeType {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 pub enum SystemTextType {
     Encoding,
+    StringBuilder,
+    Rune,
+    UTF8Encoding,
+    UnicodeEncoding,
+    ASCIIEncoding,
+    NormalizationForm,
 }
 
 impl SystemTextType {
@@ -1006,6 +1183,68 @@ pub enum SystemThreadingTasksSourcesType {
 }
 
 impl SystemThreadingTasksSourcesType {
+    pub fn from_type_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    /// The type name without the generic arity suffix.
+    pub fn name(&self) -> &'static str {
+        strip_arity(self.into())
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+pub enum SystemIoType {
+    Path,
+    File,
+    Directory,
+    FileInfo,
+    DirectoryInfo,
+    Stream,
+    MemoryStream,
+    FileStream,
+    StreamReader,
+    StreamWriter,
+    BinaryReader,
+    BinaryWriter,
+    TextReader,
+    TextWriter,
+    FileMode,
+    FileAccess,
+    FileShare,
+    SeekOrigin,
+    IOException,
+    FileNotFoundException,
+    DirectoryNotFoundException,
+}
+
+impl SystemIoType {
+    pub fn from_type_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    /// The type name without the generic arity suffix.
+    pub fn name(&self) -> &'static str {
+        strip_arity(self.into())
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+pub enum SystemGlobalizationType {
+    CultureInfo,
+    NumberStyles,
+    DateTimeStyles,
+    NumberFormatInfo,
+    DateTimeFormatInfo,
+    CompareInfo,
+    RegionInfo,
+    TextInfo,
+    Calendar,
+}
+
+impl SystemGlobalizationType {
     pub fn from_type_name(name: &str) -> Option<Self> {
         name.parse().ok()
     }
@@ -1102,4 +1341,58 @@ impl_type_name_for_subenums! {
     SystemRuntimeType => SystemRuntime,
     SystemTextType => SystemText,
     SystemThreadingTasksSourcesType => SystemThreadingTasksSources,
+    SystemIoType => SystemIo,
+    SystemGlobalizationType => SystemGlobalization,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn well_known_round_trips() {
+        // Including the new namespaces and additions to existing sub-enums.
+        for (namespace, name) in [
+            ("System", "Console"),
+            ("System", "ArgumentNullException"),
+            ("System.Text", "StringBuilder"),
+            ("System.Runtime.InteropServices", "UnmanagedCallersOnlyAttribute"),
+            ("System.Reflection", "BindingFlags"),
+            ("System.Diagnostics", "Stopwatch"),
+            ("System.IO", "Path"),
+            ("System.Globalization", "CultureInfo"),
+            ("System.Collections.Generic", "HashSet`1"),
+        ] {
+            let wk = WellKnown::from_full_name(namespace, name)
+                .unwrap_or_else(|| panic!("{namespace}.{name} should be well known"));
+            let stripped = name.split('`').next().unwrap();
+            assert_eq!(wk.full_name(), (namespace, stripped));
+        }
+    }
+
+    #[test]
+    fn type_name_impls() {
+        assert_eq!(
+            SystemType::String.type_name(),
+            ("System".into(), "String".into())
+        );
+        assert_eq!(
+            SystemIoType::Path.type_name(),
+            ("System.IO".into(), "Path".into())
+        );
+        assert_eq!(
+            SystemRuntimeInteropServicesType::GCHandle.type_name(),
+            ("System.Runtime.InteropServices".into(), "GCHandle".into())
+        );
+        // Generic arity is stripped by `name()`.
+        assert_eq!(
+            SystemCollectionsGenericType::HashSet_1.type_name(),
+            ("System.Collections.Generic".into(), "HashSet".into())
+        );
+        // A free-form string splits on the last dot.
+        assert_eq!(
+            "System.Text.StringBuilder".type_name(),
+            ("System.Text".into(), "StringBuilder".into())
+        );
+    }
 }
