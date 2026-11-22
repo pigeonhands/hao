@@ -12,6 +12,9 @@ hao-runtime = { version = "0.0.6", path = "../hao-runtime" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+hooking = "0.6"
+
 [dev-dependencies]
 hao-runtime-macros = { version = "0.0.5", path = "../hao-runtime-macros" }
 
