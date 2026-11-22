@@ -1,4 +1,42 @@
 //! GodotSharp method bindings resolved at runtime by name + param count.
+//!
+//! # Declaring bindings
+//!
+//! Use the [`bindings!`](crate::bindings) macro to declare static bindings.
+//! Each entry specifies a fully-qualified C# type, the method name, and the
+//! number of parameters (used to disambiguate overloads):
+//!
+//! ```ignore
+//! mod player {
+//!     use hao_runtime::{Result, Runtime};
+//!     use std::ffi::c_void;
+//!
+//!     crate::bindings! {
+//!         GET_POSITION: "Godot.Node2D" "get_Position" 0;
+//!         SET_POSITION: "Godot.Node2D" "set_Position" 1;
+//!         GET_HEALTH:   "Game.Player"  "get_Health"   0;
+//!     }
+//!
+//!     pub fn get_position(rt: &Runtime, node: usize) -> Result<u64> {
+//!         GET_POSITION.call1(rt, node as u64)
+//!     }
+//!
+//!     pub fn set_position(rt: &Runtime, node: usize, pos: u64) -> Result<()> {
+//!         SET_POSITION.call2(rt, node as u64, pos)?;
+//!         Ok(())
+//!     }
+//!
+//!     pub fn get_health(rt: &Runtime, instance: usize) -> Result<f32> {
+//!         Ok(f32::from_bits(GET_HEALTH.call1(rt, instance as u64)? as u32))
+//!     }
+//! }
+//! ```
+//!
+//! Bindings resolve lazily on first use — no build-time dependency on
+//! GodotSharp or any game assembly. The resolved pointer is cached in a
+//! thread-safe [`OnceLock`] for the process lifetime.
+//!
+//! Pre-built bindings for common Godot types live in [`engine`](crate::engine).
 
 use std::ffi::c_void;
 use std::sync::OnceLock;
