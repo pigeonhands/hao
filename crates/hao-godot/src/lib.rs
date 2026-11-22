@@ -40,6 +40,7 @@
 pub mod dispatch;
 pub mod engine;
 pub mod lifecycle;
+pub mod scene;
 
 #[cfg(feature = "reflect")]
 pub mod reflect;
@@ -47,6 +48,24 @@ pub mod reflect;
 pub use hao_runtime::attach::{on_clr_init, ClrHost};
 pub use hao_runtime::Runtime;
 pub use lifecycle::{is_shutting_down, on_process, shutdown};
+
+use std::sync::OnceLock;
+
+static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+
+/// Stores the runtime for use by [`scene`] and [`engine`] modules.
+/// Call once after `host.attach()` succeeds.
+pub fn set_runtime(rt: Runtime) {
+    let _ = RUNTIME.set(rt);
+}
+
+/// Returns the stored runtime, or an error if [`set_runtime`] hasn't
+/// been called yet.
+pub fn runtime() -> hao_runtime::Result<&'static Runtime> {
+    RUNTIME
+        .get()
+        .ok_or_else(|| hao_runtime::Error::NotFound("runtime not set — call set_runtime first".into()))
+}
 
 /// Allocates a console (on platforms that need one) and installs a `tracing`
 /// subscriber writing to stderr, so a mod's logs are visible. The level comes
