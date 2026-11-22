@@ -92,6 +92,7 @@ unsafe fn frame_gl() {
     let inv = 1.0 / scale;
     let (pw, ph) = (w as f32 * inv, h as f32 * inv);
 
+    state.ctx.set_pixels_per_point(scale);
     let raw_input =
         input::gather(pw, ph, inv, &mut state.pointer_down, &mut state.keys_down);
     let mut output = state.ctx.run_pass(raw_input, |ctx| draw(ctx));

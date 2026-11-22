@@ -720,6 +720,7 @@ impl VkOverlay {
         let inv = 1.0 / scale;
         let (pw, ph) = (self.extent.width as f32 * inv, self.extent.height as f32 * inv);
 
+        self.ctx.set_pixels_per_point(scale);
         let raw_input = input::gather(pw, ph, inv, &mut self.pointer_down, &mut self.keys_down);
         let output = self.ctx.run_pass(raw_input, |ctx| draw(ctx));
 
