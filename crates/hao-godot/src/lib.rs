@@ -7,8 +7,9 @@
 //!
 //! # Architecture
 //!
-//! - **[`lifecycle`]** — per-frame callbacks on the game's main thread, via IL
-//!   rewrite or JIT hooking.
+//! - **[`lifecycle`]** — per-frame callbacks on the game's main thread.
+//!   [`hook_scene_tree`](lifecycle::hook_scene_tree) is the simplest path
+//!   (hooks `SceneTree._Process` from GodotSharp — works for any game).
 //! - **[`dispatch`]** — main-thread dispatch queue, drained each frame by the
 //!   lifecycle pump.
 //! - **[`engine`]** — lazy-resolved bindings to `GodotSharp` engine types
@@ -26,12 +27,11 @@
 //!
 //! extern "C" fn load() {
 //!     hao_godot::init_logging();
-//!     // Set up the lifecycle pump before the game assembly loads.
-//!     hao_godot::lifecycle::intercept_process(
-//!         "game.dll", "Game.MainNode", "_Process", "libmymod.so",
-//!     );
 //!     hao_godot::on_clr_init(|host| {
 //!         let runtime = host.attach(9).unwrap();
+//!         hao_godot::set_runtime(runtime.clone());
+//!         // Hook SceneTree._Process — works for any Godot game.
+//!         hao_godot::lifecycle::hook_scene_tree(&runtime).unwrap();
 //!         // Now dispatch::queue/call will run on the game thread.
 //!     });
 //! }

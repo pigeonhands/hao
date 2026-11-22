@@ -1,16 +1,20 @@
 //! Per-frame lifecycle callbacks on Godot's main thread.
 //!
-//! Two setup paths:
+//! Three setup paths, in order of preference:
 //!
-//! **Path A — IL rewrite** ([`intercept_process`]): splices a P/Invoke
+//! **Path A — SceneTree hook** ([`hook_scene_tree`]): hooks
+//! `SceneTree._Process` from GodotSharp — works for any Godot game with
+//! no game-specific knowledge. Call after `host.attach()`.
+//!
+//! **Path B — IL rewrite** ([`intercept_process`]): splices a P/Invoke
 //! into a game type's `_Process` before the assembly loads. Must be called
 //! during [`on_clr_init`](crate::on_clr_init), before `host.attach()`.
 //!
-//! **Path B — JIT hook** ([`start_pump`]): hooks an already-JIT'd native
+//! **Path C — JIT hook** ([`start_pump`]): hooks an already-JIT'd native
 //! function pointer. Use when you have a resolved method pointer that runs
 //! on the game thread each frame.
 //!
-//! Once either path is set up, [`on_process`] registers per-frame
+//! Once any path is set up, [`on_process`] registers per-frame
 //! callbacks, and [`crate::dispatch`] auto-drains its queue each frame.
 
 use std::sync::{
@@ -64,7 +68,39 @@ fn tick() {
     crate::dispatch::drain_pending();
 }
 
-// ── Path A: IL rewrite ─────────────────────────────────────────────────
+// ── Path A: SceneTree hook ─────────────────────────────────────────────
+
+/// Hooks `SceneTree._Process` from the engine's GodotSharp assembly.
+///
+/// This is the simplest lifecycle setup — it works for any Godot game
+/// without needing to know any game-specific types or methods. The
+/// engine calls `SceneTree._Process` every frame on the main thread.
+///
+/// Call after `host.attach()` with the [`Runtime`](hao_runtime::Runtime)
+/// returned by attach.
+///
+/// # Example
+///
+/// ```no_run
+/// hao_godot::on_clr_init(|host| {
+///     let runtime = host.attach(9).unwrap();
+///     hao_godot::lifecycle::hook_scene_tree(&runtime).unwrap();
+///     // lifecycle pump is now active
+/// });
+/// ```
+#[cfg(target_arch = "x86_64")]
+pub fn hook_scene_tree(runtime: &hao_runtime::Runtime) -> hao_runtime::Result<()> {
+    let ptr = runtime.find_method_from_loaded(
+        "GodotSharp",
+        "Godot.SceneTree",
+        "_Process",
+        1, // (double delta)
+    )?;
+    tracing::info!("lifecycle: resolved SceneTree._Process at {:#x}", ptr as usize);
+    start_pump(ptr as usize)
+}
+
+// ── Path B: IL rewrite (game-specific) ────────────────────────────────
 
 /// Intercepts the game assembly's load and rewrites the given method to
 /// call [`hao_godot_tick`] via P/Invoke at the start of every invocation.
@@ -108,11 +144,12 @@ pub extern "C" fn hao_godot_tick() {
     tick();
 }
 
-// ── Path B: JIT hook ───────────────────────────────────────────────────
+// ── Path C: raw JIT hook ──────────────────────────────────────────────
 
 /// Hooks a JIT'd native function at `addr` and uses it as the per-frame
 /// pump. The function must run on the game's main thread every frame.
 ///
+/// Prefer [`hook_scene_tree`] unless you need to hook a specific method.
 /// Call after the CLR is attached and you have resolved a suitable method
 /// via [`Runtime::method_pointer_from_loaded`](hao_runtime::Runtime::method_pointer_from_loaded).
 #[cfg(target_arch = "x86_64")]
