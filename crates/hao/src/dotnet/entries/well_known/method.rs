@@ -2,7 +2,7 @@
 //! caller imports e.g. `Console.WriteLine(string)` in one line without writing
 //! the [`MethodSig`] by hand.
 //!
-//! Mirrors [`WellKnown`](super::well_known::WellKnown): a top-level
+//! Mirrors [`WellKnown`](super::WellKnown): a top-level
 //! [`WellKnownMethod`] keyed by declaring type, each wrapping a per-type method
 //! sub-enum. Resolve a member against a [`Module`] with
 //! [`Module::import_well_known_method`](crate::Module::import_well_known_method).
@@ -13,8 +13,8 @@
 //! brace-wrapped `{ <WellKnown> }` class type. The macro generates the enums and
 //! all the `method_name`/`is_instance`/`signature` impls.
 
-use super::well_known::{SystemReflectionType, SystemTextType, SystemType, WellKnown};
-use super::TypeDefOrRef;
+use super::{SystemReflectionType, SystemTextType, SystemType, WellKnown};
+use crate::dotnet::entries::TypeDefOrRef;
 use crate::dotnet::module::Module;
 use crate::dotnet::signature::{MethodSig, TypeSig};
 use crate::error::Result;
@@ -34,9 +34,6 @@ fn resolve_type(module: &mut Module, ty: WellKnown) -> Result<TypeDefOrRef> {
 fn class(module: &mut Module, ty: WellKnown) -> Result<TypeSig> {
     Ok(TypeSig::Class(resolve_type(module, ty)?))
 }
-
-#[macro_use]
-mod macros;
 
 well_known_methods! {
     Console(ConsoleMethod) = WellKnown::System(SystemType::Console) => {

@@ -10,7 +10,7 @@
 use hao::{
     dotnet::{
         csharp::WriteCSharp,
-        entries::well_known_method::{ConsoleMethod, WellKnownMethod},
+        entries::well_known::{ConsoleMethod, WellKnownMethod},
         il::{Instruction, OpCode},
     },
     Module,

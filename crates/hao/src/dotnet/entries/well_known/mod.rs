@@ -4,6 +4,9 @@ use strum::{EnumString, IntoStaticStr};
 #[macro_use]
 mod macros;
 
+mod method;
+pub use method::*;
+
 well_known_namespaces! {
     "System" => System(SystemType),
     "System.Runtime.CompilerServices" => SystemRuntimeCompilerServices(SystemRuntimeCompilerServicesType),

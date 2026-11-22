@@ -7,9 +7,9 @@
 use hao::{
     dotnet::{
         entries::{
-            well_known::SystemRuntimeInteropServicesType,
-            well_known_method::{
-                MathMethod, ObjectMethod, StringBuilderMethod, StringMethod, WellKnownMethod,
+            well_known::{
+                MathMethod, ObjectMethod, StringBuilderMethod, StringMethod,
+                SystemRuntimeInteropServicesType, WellKnownMethod,
             },
             Method, TypeDef,
         },
