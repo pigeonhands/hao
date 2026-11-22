@@ -12,7 +12,10 @@
 //! - **[`dispatch`]** — main-thread dispatch queue, drained each frame by the
 //!   lifecycle pump.
 //! - **[`engine`]** — lazy-resolved bindings to `GodotSharp` engine types
-//!   (`Engine`, `Time`, `OS`, `SceneTree`, `Node`).
+//!   (`Engine`, `Time`, `OS`, `SceneTree`, `Node`, `Node2D`, `Node3D`,
+//!   `Control`, `CanvasItem`, `Camera2D`, `Camera3D`, `Viewport`, `Input`,
+//!   `GD`, `DisplayServer`, `Performance`, `ResourceLoader`, `Window`,
+//!   `Timer`, `AnimationPlayer`, `GodotObject`).
 //!
 //! # Quick start
 //!
