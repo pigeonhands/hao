@@ -1,190 +1,43 @@
 use std::borrow::Cow;
 use strum::{EnumString, IntoStaticStr};
 
-/// Check if a name is a well known one.
-/// the `full_name` and `name` methods will return the name
-/// without the generic tags.
-///
-/// e.g
-/// ```
-/// # use hao::dotnet::entries::well_known::{WellKnown, SystemType};
-///
-/// let nullable = WellKnown::from_full_name("System", "Nullable`1");
-/// assert_eq!(nullable, Some(WellKnown::System(SystemType::Nullable_1)));
-/// assert_eq!(nullable.unwrap().full_name(), ("System", "Nullable"));
-/// ```
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum WellKnown {
-    System(SystemType),
-    SystemRuntimeCompilerServices(SystemRuntimeCompilerServicesType),
-    SystemCollectionsGeneric(SystemCollectionsGenericType),
-    SystemCollections(SystemCollectionsType),
-    SystemCollectionsObjectModel(SystemCollectionsObjectModelType),
-    SystemCollectionsSpecialized(SystemCollectionsSpecializedType),
-    SystemReflection(SystemReflectionType),
-    SystemDiagnostics(SystemDiagnosticsType),
-    SystemRuntimeExceptionServices(SystemRuntimeExceptionServicesType),
-    SystemRuntimeInteropServices(SystemRuntimeInteropServicesType),
-    SystemThreadingTasks(SystemThreadingTasksType),
-    SystemThreading(SystemThreadingType),
-    MicrosoftCSharpRuntimeBinder(MicrosoftCSharpRuntimeBinderType),
-    MicrosoftVisualBasic(MicrosoftVisualBasicType),
-    MicrosoftVisualBasicCompilerServices(MicrosoftVisualBasicCompilerServicesType),
-    MicrosoftVisualBasicApplicationServices(MicrosoftVisualBasicApplicationServicesType),
-    SystemRuntimeInteropServicesWindowsRuntime(SystemRuntimeInteropServicesWindowsRuntimeType),
-    WindowsFoundation(WindowsFoundationType),
-    SystemComponentModel(SystemComponentModelType),
-    SystemLinq(SystemLinqType),
-    SystemLinqExpressions(SystemLinqExpressionsType),
-    SystemXmlLinq(SystemXmlLinqType),
-    SystemSecurity(SystemSecurityType),
-    SystemSecurityPermissions(SystemSecurityPermissionsType),
-    SystemWindowsForms(SystemWindowsFormsType),
-    SystemRuntime(SystemRuntimeType),
-    SystemText(SystemTextType),
-    SystemThreadingTasksSources(SystemThreadingTasksSourcesType),
-    SystemIo(SystemIoType),
-    SystemGlobalization(SystemGlobalizationType),
+#[macro_use]
+mod macros;
+
+well_known_namespaces! {
+    "System" => System(SystemType),
+    "System.Runtime.CompilerServices" => SystemRuntimeCompilerServices(SystemRuntimeCompilerServicesType),
+    "System.Collections.Generic" => SystemCollectionsGeneric(SystemCollectionsGenericType),
+    "System.Collections" => SystemCollections(SystemCollectionsType),
+    "System.Collections.ObjectModel" => SystemCollectionsObjectModel(SystemCollectionsObjectModelType),
+    "System.Collections.Specialized" => SystemCollectionsSpecialized(SystemCollectionsSpecializedType),
+    "System.Reflection" => SystemReflection(SystemReflectionType),
+    "System.Diagnostics" => SystemDiagnostics(SystemDiagnosticsType),
+    "System.Runtime.ExceptionServices" => SystemRuntimeExceptionServices(SystemRuntimeExceptionServicesType),
+    "System.Runtime.InteropServices" => SystemRuntimeInteropServices(SystemRuntimeInteropServicesType),
+    "System.Threading.Tasks" => SystemThreadingTasks(SystemThreadingTasksType),
+    "System.Threading" => SystemThreading(SystemThreadingType),
+    "Microsoft.CSharp.RuntimeBinder" => MicrosoftCSharpRuntimeBinder(MicrosoftCSharpRuntimeBinderType),
+    "Microsoft.VisualBasic" => MicrosoftVisualBasic(MicrosoftVisualBasicType),
+    "Microsoft.VisualBasic.CompilerServices" => MicrosoftVisualBasicCompilerServices(MicrosoftVisualBasicCompilerServicesType),
+    "Microsoft.VisualBasic.ApplicationServices" => MicrosoftVisualBasicApplicationServices(MicrosoftVisualBasicApplicationServicesType),
+    "System.Runtime.InteropServices.WindowsRuntime" => SystemRuntimeInteropServicesWindowsRuntime(SystemRuntimeInteropServicesWindowsRuntimeType),
+    "Windows.Foundation" => WindowsFoundation(WindowsFoundationType),
+    "System.ComponentModel" => SystemComponentModel(SystemComponentModelType),
+    "System.Linq" => SystemLinq(SystemLinqType),
+    "System.Linq.Expressions" => SystemLinqExpressions(SystemLinqExpressionsType),
+    "System.Xml.Linq" => SystemXmlLinq(SystemXmlLinqType),
+    "System.Security" => SystemSecurity(SystemSecurityType),
+    "System.Security.Permissions" => SystemSecurityPermissions(SystemSecurityPermissionsType),
+    "System.Windows.Forms" => SystemWindowsForms(SystemWindowsFormsType),
+    "System.Runtime" => SystemRuntime(SystemRuntimeType),
+    "System.Text" => SystemText(SystemTextType),
+    "System.Threading.Tasks.Sources" => SystemThreadingTasksSources(SystemThreadingTasksSourcesType),
+    "System.IO" => SystemIo(SystemIoType),
+    "System.Globalization" => SystemGlobalization(SystemGlobalizationType),
 }
 
-impl WellKnown {
-    pub fn from_full_name(namespace: &str, name: &str) -> Option<Self> {
-        let ty = match namespace {
-            "System" => Self::System(SystemType::from_type_name(name)?),
-            "System.Runtime.CompilerServices" => Self::SystemRuntimeCompilerServices(
-                SystemRuntimeCompilerServicesType::from_type_name(name)?,
-            ),
-            "System.Collections.Generic" => {
-                Self::SystemCollectionsGeneric(SystemCollectionsGenericType::from_type_name(name)?)
-            }
-            "System.Collections" => {
-                Self::SystemCollections(SystemCollectionsType::from_type_name(name)?)
-            }
-            "System.Collections.ObjectModel" => Self::SystemCollectionsObjectModel(
-                SystemCollectionsObjectModelType::from_type_name(name)?,
-            ),
-            "System.Collections.Specialized" => Self::SystemCollectionsSpecialized(
-                SystemCollectionsSpecializedType::from_type_name(name)?,
-            ),
-            "System.Reflection" => {
-                Self::SystemReflection(SystemReflectionType::from_type_name(name)?)
-            }
-            "System.Diagnostics" => {
-                Self::SystemDiagnostics(SystemDiagnosticsType::from_type_name(name)?)
-            }
-            "System.Runtime.ExceptionServices" => Self::SystemRuntimeExceptionServices(
-                SystemRuntimeExceptionServicesType::from_type_name(name)?,
-            ),
-            "System.Runtime.InteropServices" => Self::SystemRuntimeInteropServices(
-                SystemRuntimeInteropServicesType::from_type_name(name)?,
-            ),
-            "System.Threading.Tasks" => {
-                Self::SystemThreadingTasks(SystemThreadingTasksType::from_type_name(name)?)
-            }
-            "System.Threading" => Self::SystemThreading(SystemThreadingType::from_type_name(name)?),
-            "Microsoft.CSharp.RuntimeBinder" => Self::MicrosoftCSharpRuntimeBinder(
-                MicrosoftCSharpRuntimeBinderType::from_type_name(name)?,
-            ),
-            "Microsoft.VisualBasic" => {
-                Self::MicrosoftVisualBasic(MicrosoftVisualBasicType::from_type_name(name)?)
-            }
-            "Microsoft.VisualBasic.CompilerServices" => Self::MicrosoftVisualBasicCompilerServices(
-                MicrosoftVisualBasicCompilerServicesType::from_type_name(name)?,
-            ),
-            "Microsoft.VisualBasic.ApplicationServices" => {
-                Self::MicrosoftVisualBasicApplicationServices(
-                    MicrosoftVisualBasicApplicationServicesType::from_type_name(name)?,
-                )
-            }
-            "System.Runtime.InteropServices.WindowsRuntime" => {
-                Self::SystemRuntimeInteropServicesWindowsRuntime(
-                    SystemRuntimeInteropServicesWindowsRuntimeType::from_type_name(name)?,
-                )
-            }
-            "Windows.Foundation" => {
-                Self::WindowsFoundation(WindowsFoundationType::from_type_name(name)?)
-            }
-            "System.ComponentModel" => {
-                Self::SystemComponentModel(SystemComponentModelType::from_type_name(name)?)
-            }
-            "System.Linq" => Self::SystemLinq(SystemLinqType::from_type_name(name)?),
-            "System.Linq.Expressions" => {
-                Self::SystemLinqExpressions(SystemLinqExpressionsType::from_type_name(name)?)
-            }
-            "System.Xml.Linq" => Self::SystemXmlLinq(SystemXmlLinqType::from_type_name(name)?),
-            "System.Security" => Self::SystemSecurity(SystemSecurityType::from_type_name(name)?),
-            "System.Security.Permissions" => Self::SystemSecurityPermissions(
-                SystemSecurityPermissionsType::from_type_name(name)?,
-            ),
-            "System.Windows.Forms" => {
-                Self::SystemWindowsForms(SystemWindowsFormsType::from_type_name(name)?)
-            }
-            "System.Runtime" => Self::SystemRuntime(SystemRuntimeType::from_type_name(name)?),
-            "System.Text" => Self::SystemText(SystemTextType::from_type_name(name)?),
-            "System.Threading.Tasks.Sources" => Self::SystemThreadingTasksSources(
-                SystemThreadingTasksSourcesType::from_type_name(name)?,
-            ),
-            "System.IO" => Self::SystemIo(SystemIoType::from_type_name(name)?),
-            "System.Globalization" => {
-                Self::SystemGlobalization(SystemGlobalizationType::from_type_name(name)?)
-            }
 
-            _ => return None,
-        };
-        Some(ty)
-    }
-
-    pub fn full_name(&self) -> (&'static str, &'static str) {
-        match self {
-            Self::System(ty) => ("System", ty.name()),
-            Self::SystemRuntimeCompilerServices(ty) => {
-                ("System.Runtime.CompilerServices", ty.name())
-            }
-            Self::SystemCollectionsGeneric(ty) => ("System.Collections.Generic", ty.name()),
-            Self::SystemCollections(ty) => ("System.Collections", ty.name()),
-            Self::SystemCollectionsObjectModel(ty) => ("System.Collections.ObjectModel", ty.name()),
-            Self::SystemCollectionsSpecialized(ty) => ("System.Collections.Specialized", ty.name()),
-            Self::SystemReflection(ty) => ("System.Reflection", ty.name()),
-            Self::SystemDiagnostics(ty) => ("System.Diagnostics", ty.name()),
-            Self::SystemRuntimeExceptionServices(ty) => {
-                ("System.Runtime.ExceptionServices", ty.name())
-            }
-            Self::SystemRuntimeInteropServices(ty) => ("System.Runtime.InteropServices", ty.name()),
-            Self::SystemThreadingTasks(ty) => ("System.Threading.Tasks", ty.name()),
-            Self::SystemThreading(ty) => ("System.Threading", ty.name()),
-            Self::MicrosoftCSharpRuntimeBinder(ty) => ("Microsoft.CSharp.RuntimeBinder", ty.name()),
-            Self::MicrosoftVisualBasic(ty) => ("Microsoft.VisualBasic", ty.name()),
-            Self::MicrosoftVisualBasicCompilerServices(ty) => {
-                ("Microsoft.VisualBasic.CompilerServices", ty.name())
-            }
-            Self::MicrosoftVisualBasicApplicationServices(ty) => {
-                ("Microsoft.VisualBasic.ApplicationServices", ty.name())
-            }
-            Self::SystemRuntimeInteropServicesWindowsRuntime(ty) => {
-                ("System.Runtime.InteropServices.WindowsRuntime", ty.name())
-            }
-            Self::WindowsFoundation(ty) => ("Windows.Foundation", ty.name()),
-            Self::SystemComponentModel(ty) => ("System.ComponentModel", ty.name()),
-            Self::SystemLinq(ty) => ("System.Linq", ty.name()),
-            Self::SystemLinqExpressions(ty) => ("System.Linq.Expressions", ty.name()),
-            Self::SystemXmlLinq(ty) => ("System.Xml.Linq", ty.name()),
-            Self::SystemSecurity(ty) => ("System.Security", ty.name()),
-            Self::SystemSecurityPermissions(ty) => ("System.Security.Permissions", ty.name()),
-            Self::SystemWindowsForms(ty) => ("System.Windows.Forms", ty.name()),
-            Self::SystemRuntime(ty) => ("System.Runtime", ty.name()),
-            Self::SystemText(ty) => ("System.Text", ty.name()),
-            Self::SystemThreadingTasksSources(ty) => ("System.Threading.Tasks.Sources", ty.name()),
-            Self::SystemIo(ty) => ("System.IO", ty.name()),
-            Self::SystemGlobalization(ty) => ("System.Globalization", ty.name()),
-        }
-    }
-    pub fn namespace(&self) -> &'static str {
-        self.full_name().0
-    }
-    pub fn type_name(&self) -> &'static str {
-        self.full_name().1
-    }
-}
 
 fn strip_arity(name: &'static str) -> &'static str {
     name.split('`').next().unwrap_or(name)
@@ -407,23 +260,6 @@ pub enum SystemType {
     ArithmeticException,
 }
 
-impl SystemType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    pub fn from_full_name(namespace: &str, name: &str) -> Option<Self> {
-        if namespace != "System" {
-            return None;
-        }
-        Self::from_type_name(name)
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -481,16 +317,6 @@ pub enum SystemRuntimeCompilerServicesType {
     IsUnmanagedAttribute,
 }
 
-impl SystemRuntimeCompilerServicesType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -549,16 +375,6 @@ pub enum SystemCollectionsGenericType {
     IAsyncEnumerator_1,
 }
 
-impl SystemCollectionsGenericType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -578,16 +394,6 @@ pub enum SystemCollectionsType {
     ICollection,
 }
 
-impl SystemCollectionsType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -598,16 +404,6 @@ pub enum SystemCollectionsObjectModelType {
     ReadOnlyCollection_1,
 }
 
-impl SystemCollectionsObjectModelType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -615,16 +411,6 @@ pub enum SystemCollectionsSpecializedType {
     INotifyCollectionChanged,
 }
 
-impl SystemCollectionsSpecializedType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -657,16 +443,6 @@ pub enum SystemReflectionType {
     Assembly,
 }
 
-impl SystemReflectionType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -690,16 +466,6 @@ pub enum SystemDiagnosticsType {
     DebuggableAttribute,
 }
 
-impl SystemDiagnosticsType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -707,16 +473,6 @@ pub enum SystemRuntimeExceptionServicesType {
     ExceptionDispatchInfo,
 }
 
-impl SystemRuntimeExceptionServicesType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -769,16 +525,6 @@ pub enum SystemRuntimeInteropServicesType {
     ComWrappers,
 }
 
-impl SystemRuntimeInteropServicesType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -800,16 +546,6 @@ pub enum SystemThreadingTasksType {
     ValueTask,
 }
 
-impl SystemThreadingTasksType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -834,16 +570,6 @@ pub enum SystemThreadingType {
     EventWaitHandle,
 }
 
-impl SystemThreadingType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -854,16 +580,6 @@ pub enum MicrosoftCSharpRuntimeBinderType {
     CSharpBinderFlags,
 }
 
-impl MicrosoftCSharpRuntimeBinderType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -879,16 +595,6 @@ pub enum MicrosoftVisualBasicType {
     Conversion,
 }
 
-impl MicrosoftVisualBasicType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -908,16 +614,6 @@ pub enum MicrosoftVisualBasicCompilerServicesType {
     Versioned,
 }
 
-impl MicrosoftVisualBasicCompilerServicesType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -926,16 +622,6 @@ pub enum MicrosoftVisualBasicApplicationServicesType {
     WindowsFormsApplicationBase,
 }
 
-impl MicrosoftVisualBasicApplicationServicesType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -947,16 +633,6 @@ pub enum SystemRuntimeInteropServicesWindowsRuntimeType {
     RuntimeClass,
 }
 
-impl SystemRuntimeInteropServicesWindowsRuntimeType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -970,16 +646,6 @@ pub enum WindowsFoundationType {
     IAsyncOperationWithProgress_2,
 }
 
-impl WindowsFoundationType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -990,16 +656,6 @@ pub enum SystemComponentModelType {
     EditorBrowsableState,
 }
 
-impl SystemComponentModelType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1013,16 +669,6 @@ pub enum SystemLinqType {
     SystemCore_EnumerableDebugView_1,
 }
 
-impl SystemLinqType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1036,16 +682,6 @@ pub enum SystemLinqExpressionsType {
     ExpressionType,
 }
 
-impl SystemLinqExpressionsType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1064,16 +700,6 @@ pub enum SystemXmlLinqType {
     XProcessingInstruction,
 }
 
-impl SystemXmlLinqType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1081,16 +707,6 @@ pub enum SystemSecurityType {
     UnverifiableCodeAttribute,
 }
 
-impl SystemSecurityType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1101,16 +717,6 @@ pub enum SystemSecurityPermissionsType {
     PermissionSetAttribute,
 }
 
-impl SystemSecurityPermissionsType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1119,16 +725,6 @@ pub enum SystemWindowsFormsType {
     Application,
 }
 
-impl SystemWindowsFormsType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1136,16 +732,6 @@ pub enum SystemRuntimeType {
     GCLatencyMode,
 }
 
-impl SystemRuntimeType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1159,16 +745,6 @@ pub enum SystemTextType {
     NormalizationForm,
 }
 
-impl SystemTextType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1182,16 +758,6 @@ pub enum SystemThreadingTasksSourcesType {
     IValueTaskSource,
 }
 
-impl SystemThreadingTasksSourcesType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1219,16 +785,6 @@ pub enum SystemIoType {
     DirectoryNotFoundException,
 }
 
-impl SystemIoType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
@@ -1244,16 +800,6 @@ pub enum SystemGlobalizationType {
     Calendar,
 }
 
-impl SystemGlobalizationType {
-    pub fn from_type_name(name: &str) -> Option<Self> {
-        name.parse().ok()
-    }
-
-    /// The type name without the generic arity suffix.
-    pub fn name(&self) -> &'static str {
-        strip_arity(self.into())
-    }
-}
 
 /// A type named either by a full-name string (`"System.Text.StringBuilder"`) or
 /// by a compile-checked [`WellKnown`] value or one of its namespace sub-enums
@@ -1295,54 +841,6 @@ impl TypeName for WellKnown {
         let (namespace, name) = self.full_name();
         (Cow::Borrowed(namespace), Cow::Borrowed(name))
     }
-}
-
-/// Every namespace sub-enum is a `TypeName` too, so `GCHandle` can be named as
-/// `SystemRuntimeInteropServicesType::GCHandle` without the `WellKnown` wrapper.
-/// Each goes through its `WellKnown` variant's [`full_name`](WellKnown::full_name),
-/// which yields `'static` names (so no borrow of the temporary escapes).
-macro_rules! impl_type_name_for_subenums {
-    ($($sub:ty => $variant:ident),+ $(,)?) => {$(
-        impl TypeName for $sub {
-            fn type_name(&self) -> (Cow<'_, str>, Cow<'_, str>) {
-                let (namespace, name) = WellKnown::$variant(*self).full_name();
-                (Cow::Borrowed(namespace), Cow::Borrowed(name))
-            }
-        }
-    )+};
-}
-
-impl_type_name_for_subenums! {
-    SystemType => System,
-    SystemRuntimeCompilerServicesType => SystemRuntimeCompilerServices,
-    SystemCollectionsGenericType => SystemCollectionsGeneric,
-    SystemCollectionsType => SystemCollections,
-    SystemCollectionsObjectModelType => SystemCollectionsObjectModel,
-    SystemCollectionsSpecializedType => SystemCollectionsSpecialized,
-    SystemReflectionType => SystemReflection,
-    SystemDiagnosticsType => SystemDiagnostics,
-    SystemRuntimeExceptionServicesType => SystemRuntimeExceptionServices,
-    SystemRuntimeInteropServicesType => SystemRuntimeInteropServices,
-    SystemThreadingTasksType => SystemThreadingTasks,
-    SystemThreadingType => SystemThreading,
-    MicrosoftCSharpRuntimeBinderType => MicrosoftCSharpRuntimeBinder,
-    MicrosoftVisualBasicType => MicrosoftVisualBasic,
-    MicrosoftVisualBasicCompilerServicesType => MicrosoftVisualBasicCompilerServices,
-    MicrosoftVisualBasicApplicationServicesType => MicrosoftVisualBasicApplicationServices,
-    SystemRuntimeInteropServicesWindowsRuntimeType => SystemRuntimeInteropServicesWindowsRuntime,
-    WindowsFoundationType => WindowsFoundation,
-    SystemComponentModelType => SystemComponentModel,
-    SystemLinqType => SystemLinq,
-    SystemLinqExpressionsType => SystemLinqExpressions,
-    SystemXmlLinqType => SystemXmlLinq,
-    SystemSecurityType => SystemSecurity,
-    SystemSecurityPermissionsType => SystemSecurityPermissions,
-    SystemWindowsFormsType => SystemWindowsForms,
-    SystemRuntimeType => SystemRuntime,
-    SystemTextType => SystemText,
-    SystemThreadingTasksSourcesType => SystemThreadingTasksSources,
-    SystemIoType => SystemIo,
-    SystemGlobalizationType => SystemGlobalization,
 }
 
 #[cfg(test)]
