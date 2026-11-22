@@ -13,6 +13,7 @@ pub mod bindings;
 #[cfg(all(feature = "coreclr", target_arch = "x86_64"))]
 pub mod attach;
 pub mod console;
+pub mod jit;
 #[cfg(feature = "coreclr")]
 mod coreclr;
 mod error;

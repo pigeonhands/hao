@@ -1,0 +1,38 @@
+[package]
+name = "hao-egui-overlay"
+authors = ["Sam M."]
+version = "0.1.0"
+edition = "2021"
+description = "Engine-agnostic egui overlay via OpenGL/Vulkan swapchain hooks"
+license = "MIT"
+repository = "https://github.com/pigeonhands/hao"
+keywords = ["egui", "overlay", "modding", "vulkan", "opengl"]
+
+[dependencies]
+egui = "0.37"
+tracing = "0.1"
+libc = "0.2"
+hooking = { version = "0.6", optional = true }
+
+[features]
+default = ["opengl", "vulkan"]
+opengl = ["dep:egui_glow", "dep:glow"]
+vulkan = ["dep:ash"]
+hooking = ["dep:hooking"]
+
+[dependencies.egui_glow]
+version = "0.37"
+optional = true
+default-features = false
+
+[dependencies.glow]
+version = "0.17"
+optional = true
+
+[dependencies.ash]
+version = "0.38"
+optional = true
+
+[[example]]
+name = "overlay_demo"
+crate-type = ["cdylib"]

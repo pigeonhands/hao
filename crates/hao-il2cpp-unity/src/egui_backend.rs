@@ -239,10 +239,12 @@ impl EguiState {
         let tex_h = (ih as f32 * inv) as i32;
 
         let input = self.raw_input(pw, ph, inv)?;
-        let output = self.ctx.run(input, |ctx| ui(ctx));
-        for (id, delta) in output.textures_delta.set {
+        let output = self.ctx.run_pass(input, |ctx| ui(ctx));
+        for (id, deltas) in &output.textures_delta.set {
             if matches!(id, egui::TextureId::Managed(_)) {
-                self.update_texture(&delta)?;
+                for delta in deltas {
+                    self.update_texture(delta)?;
+                }
             }
         }
         let primitives = self.ctx.tessellate(output.shapes, 1.0);
@@ -293,6 +295,8 @@ impl EguiState {
             events.push(egui::Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Line,
                 delta: egui::vec2(scroll.x, scroll.y),
+                phase: egui::TouchPhase::Move,
+                source: egui::MouseWheelSource::Unknown,
                 modifiers,
             });
         }
@@ -344,7 +348,6 @@ impl EguiState {
                 egui::pos2(0.0, 0.0),
                 egui::vec2(pw, ph),
             )),
-            modifiers,
             events,
             ..Default::default()
         })
@@ -354,9 +357,6 @@ impl EguiState {
     fn update_texture(&mut self, delta: &egui::epaint::ImageDelta) -> Result<()> {
         let [dw, dh] = delta.image.size();
         let pixels: Vec<u8> = match &delta.image {
-            egui::epaint::ImageData::Font(font) => {
-                font.srgba_pixels(None).flat_map(|p| p.to_array()).collect()
-            }
             egui::epaint::ImageData::Color(image) => {
                 image.pixels.iter().flat_map(|p| p.to_array()).collect()
             }
