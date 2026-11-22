@@ -249,4 +249,26 @@ impl Runtime {
             )),
         }
     }
+
+    /// Like [`method_pointer_from_loaded`](Self::method_pointer_from_loaded)
+    /// but matches by parameter count, so it works with overloaded methods.
+    /// CoreCLR only.
+    pub fn find_method_from_loaded(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+        param_count: i32,
+    ) -> Result<*const c_void> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => {
+                clr.find_method_from_loaded(assembly, type_name, method, param_count)
+            }
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Err(Error::Other(
+                "find_method_from_loaded is CoreCLR-only".into(),
+            )),
+        }
+    }
 }

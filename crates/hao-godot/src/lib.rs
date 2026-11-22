@@ -37,6 +37,7 @@
 //! See the crate's examples for capturing the host, calling managed code, the
 //! CoreCLR profiler, and rewriting the game assembly's IL.
 
+pub mod binding;
 pub mod dispatch;
 pub mod engine;
 pub mod lifecycle;

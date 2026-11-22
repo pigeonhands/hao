@@ -67,6 +67,8 @@ type LoadFrom = unsafe extern "system" fn(*const CharT) -> i32;
 type GetMethod = unsafe extern "system" fn(*const CharT, *const CharT) -> *mut c_void;
 type GetMethodFromLoaded =
     unsafe extern "system" fn(*const CharT, *const CharT, *const CharT) -> *mut c_void;
+type FindMethodFromLoaded =
+    unsafe extern "system" fn(*const CharT, *const CharT, *const CharT, i32) -> *mut c_void;
 
 /// `GetFunctionPointer`'s sentinel for a `[UnmanagedCallersOnly]` method.
 const UNMANAGED_CALLERS_ONLY: *const CharT = usize::MAX as *const CharT;
@@ -274,6 +276,7 @@ struct Loader {
     load_from: LoadFrom,
     get_method: GetMethod,
     get_method_from_loaded: GetMethodFromLoaded,
+    find_method_from_loaded: FindMethodFromLoaded,
 }
 
 pub(crate) struct CoreClr {
@@ -342,12 +345,17 @@ impl CoreClr {
         let get_method = self.function_pointer(LOADER, "Hao.Loader", "GetMethod")?;
         let get_method_from_loaded =
             self.function_pointer(LOADER, "Hao.Loader", "GetMethodFromLoaded")?;
+        let find_method_from_loaded =
+            self.function_pointer(LOADER, "Hao.Loader", "FindMethodFromLoaded")?;
         Ok(self.loader.get_or_init(|| unsafe {
             Loader {
                 load_from: std::mem::transmute::<*const c_void, LoadFrom>(load_from),
                 get_method: std::mem::transmute::<*const c_void, GetMethod>(get_method),
                 get_method_from_loaded: std::mem::transmute::<*const c_void, GetMethodFromLoaded>(
                     get_method_from_loaded,
+                ),
+                find_method_from_loaded: std::mem::transmute::<*const c_void, FindMethodFromLoaded>(
+                    find_method_from_loaded,
                 ),
             }
         }))
@@ -410,6 +418,35 @@ impl CoreClr {
             return Err(Error::NotFound(format!(
                 "method {}::{} in loaded assembly \"{}\"",
                 type_name, method, assembly
+            )));
+        }
+        Ok(pointer)
+    }
+
+    /// Like [`method_pointer_from_loaded`](Self::method_pointer_from_loaded)
+    /// but matches by parameter count, so it works with overloaded methods.
+    pub fn find_method_from_loaded(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+        param_count: i32,
+    ) -> Result<*const c_void> {
+        let type_name_w = wide(type_name);
+        let method_w = wide(method);
+        let asm_w = wide(assembly);
+        let pointer = unsafe {
+            (self.loader()?.find_method_from_loaded)(
+                type_name_w.as_ptr(),
+                method_w.as_ptr(),
+                asm_w.as_ptr(),
+                param_count,
+            )
+        };
+        if pointer.is_null() {
+            return Err(Error::NotFound(format!(
+                "method {}::{}({} params) in loaded assembly \"{}\"",
+                type_name, method, param_count, assembly
             )));
         }
         Ok(pointer)
@@ -541,7 +578,7 @@ fn loader_assembly(major: u16) -> Result<Vec<u8>> {
             "GetMethod",
             MethodSig::new_instance(
                 TypeSig::class(method_info.clone()),
-                vec![TypeSig::STRING, TypeSig::value_type(binding_flags)],
+                vec![TypeSig::STRING, TypeSig::value_type(binding_flags.clone())],
             ),
         )?;
         let method_handle = module.import_method_on(
@@ -641,6 +678,24 @@ fn loader_assembly(major: u16) -> Result<Vec<u8>> {
             MethodSig::new_static(TypeSig::BOOL, vec![TypeSig::STRING, TypeSig::STRING]),
         )?;
 
+        // Clones for the FindMethodFromLoaded body (created before the
+        // get_method_from_loaded closure moves the _2 versions).
+        let to_string3 = to_string2.clone();
+        let method_handle3 = method_handle2.clone();
+        let prepare3 = prepare2.clone();
+        let function_pointer3 = function_pointer2.clone();
+        let type_ty3 = type_ty2.clone();
+        let method_info3 = method_info2.clone();
+        let handle_ty3 = handle_ty2.clone();
+        let assembly3 = assembly2.clone();
+        let get_current_domain3 = get_current_domain.clone();
+        let get_assemblies3 = get_assemblies.clone();
+        let get_asm_name3 = get_asm_name.clone();
+        let get_name_prop3 = get_name_prop.clone();
+        let asm_get_type3 = asm_get_type.clone();
+        let string_equals3 = string_equals.clone();
+        let exception3 = exception.clone();
+
         let get_method_from_loaded_body = Emitter::build(|e| {
             let type_name_local = e.declare_local(TypeSig::STRING);
             let method_name_local = e.declare_local(TypeSig::STRING);
@@ -736,6 +791,129 @@ fn loader_assembly(major: u16) -> Result<Vec<u8>> {
             e.ldloc(result_local).ret();
         });
 
+        // ── FindMethodFromLoaded ───────────────────────────────────────────
+        // Like GetMethodFromLoaded but uses GetMethods() + name/param-count
+        // filter to handle overloaded methods.
+        //
+        // IntPtr FindMethodFromLoaded(IntPtr typeName, IntPtr methodName,
+        //                             IntPtr asmName, int paramCount)
+        let get_methods = module.import_method_on(
+            &type_ty,
+            "GetMethods",
+            MethodSig::new_instance(
+                TypeSig::sz_array(TypeSig::class(method_info.clone())),
+                vec![TypeSig::value_type(binding_flags.clone())],
+            ),
+        )?;
+        let member_info = module.corlib_type("System.Reflection.MemberInfo")?;
+        let get_member_name = module.import_method_on(
+            &member_info,
+            "get_Name",
+            MethodSig::new_instance(TypeSig::STRING, vec![]),
+        )?;
+        let param_info = module.corlib_type("System.Reflection.ParameterInfo")?;
+        let get_parameters = module.import_method_on(
+            &method_base,
+            "GetParameters",
+            MethodSig::new_instance(
+                TypeSig::sz_array(TypeSig::class(param_info)),
+                vec![],
+            ),
+        )?;
+
+        let find_method_from_loaded_body = Emitter::build(|e| {
+            let type_name_local = e.declare_local(TypeSig::STRING);
+            let method_name_local = e.declare_local(TypeSig::STRING);
+            let asm_name_local = e.declare_local(TypeSig::STRING);
+            let assemblies = e.declare_local(TypeSig::sz_array(TypeSig::class(assembly3.clone())));
+            let asm_idx = e.declare_local(TypeSig::INT32);
+            let current_asm = e.declare_local(TypeSig::class(assembly3.clone()));
+            let found_type_local = e.declare_local(TypeSig::class(type_ty3.clone()));
+            let methods_arr = e.declare_local(TypeSig::sz_array(TypeSig::class(method_info3.clone())));
+            let m_idx = e.declare_local(TypeSig::INT32);
+            let candidate = e.declare_local(TypeSig::class(method_info3.clone()));
+            let handle_local = e.declare_local(TypeSig::value_type(handle_ty3.clone()));
+            let result_local = e.declare_local(TypeSig::NATIVE_INT);
+
+            // Marshal string args
+            e.ldarg(0).call(&to_string3).stloc(type_name_local);
+            e.ldarg(1).call(&to_string3).stloc(method_name_local);
+            e.ldarg(2).call(&to_string3).stloc(asm_name_local);
+            // arg3 is paramCount (int32), no marshaling needed
+
+            e.ldc_i4(0).op(OpCode::Conv_I).stloc(result_local);
+
+            let asm_loop_check = e.label();
+            let asm_loop_body = e.label();
+            let done = e.label();
+
+            e.try_catch(
+                exception3,
+                |e| {
+                    e.call(get_current_domain3).callvirt(get_assemblies3).stloc(assemblies);
+                    e.ldc_i4(0).stloc(asm_idx);
+                    e.branch(OpCode::Br, asm_loop_check);
+
+                    e.mark(asm_loop_body);
+                    e.ldloc(assemblies).ldloc(asm_idx).op(OpCode::Ldelem_Ref).stloc(current_asm);
+                    e.ldloc(current_asm).callvirt(get_asm_name3).callvirt(get_name_prop3);
+                    let string_eq2 = string_equals3.clone();
+                    e.ldloc(asm_name_local).call(string_equals3);
+                    let skip_asm = e.label();
+                    e.branch(OpCode::Brfalse, skip_asm);
+
+                    // type = asm.GetType(typeName)
+                    e.ldloc(current_asm).ldloc(type_name_local).callvirt(asm_get_type3).stloc(found_type_local);
+                    e.ldloc(found_type_local).branch(OpCode::Brfalse, skip_asm);
+
+                    // methods = type.GetMethods(flags)
+                    e.ldloc(found_type_local).ldc_i4(BINDING_FLAGS).callvirt(get_methods).stloc(methods_arr);
+                    e.ldc_i4(0).stloc(m_idx);
+                    let m_loop_check = e.label();
+                    let m_loop_body = e.label();
+                    e.branch(OpCode::Br, m_loop_check);
+
+                    e.mark(m_loop_body);
+                    e.ldloc(methods_arr).ldloc(m_idx).op(OpCode::Ldelem_Ref).stloc(candidate);
+                    // if (candidate.Name == methodName)
+                    e.ldloc(candidate).callvirt(get_member_name);
+                    e.ldloc(method_name_local).call(string_eq2);
+                    let skip_m = e.label();
+                    e.branch(OpCode::Brfalse, skip_m);
+                    // if (candidate.GetParameters().Length == paramCount)
+                    e.ldloc(candidate).callvirt(get_parameters).op(OpCode::Ldlen).op(OpCode::Conv_I4);
+                    e.ldarg(3); // paramCount
+                    e.branch(OpCode::Bne_Un, skip_m);
+
+                    // Found it — PrepareMethod + GetFunctionPointer
+                    e.ldloc(candidate).callvirt(method_handle3).stloc(handle_local);
+                    e.ldloc(handle_local).call(prepare3);
+                    e.ldloca(handle_local).call(function_pointer3).stloc(result_local);
+                    e.branch(OpCode::Leave, done);
+
+                    e.mark(skip_m);
+                    e.ldloc(m_idx).ldc_i4(1).op(OpCode::Add).stloc(m_idx);
+
+                    e.mark(m_loop_check);
+                    e.ldloc(m_idx).ldloc(methods_arr).op(OpCode::Ldlen).op(OpCode::Conv_I4);
+                    e.branch(OpCode::Blt, m_loop_body);
+
+                    e.mark(skip_asm);
+                    e.ldloc(asm_idx).ldc_i4(1).op(OpCode::Add).stloc(asm_idx);
+
+                    e.mark(asm_loop_check);
+                    e.ldloc(asm_idx).ldloc(assemblies).op(OpCode::Ldlen).op(OpCode::Conv_I4);
+                    e.branch(OpCode::Blt, asm_loop_body);
+                },
+                |e| {
+                    e.pop();
+                },
+            );
+
+            e.mark(done);
+            e.ldloc(result_local).ret();
+        });
+
         let loader = module.add_static_class("Hao", "Loader")?;
         TypeDef::add_method(
             &loader,
@@ -767,8 +945,25 @@ fn loader_assembly(major: u16) -> Result<Vec<u8>> {
                     vec![TypeSig::NATIVE_INT, TypeSig::NATIVE_INT, TypeSig::NATIVE_INT],
                 ),
             )
-            .with_attribute(uco)
+            .with_attribute(uco.clone())
             .with_body(get_method_from_loaded_body),
+        );
+        TypeDef::add_method(
+            &loader,
+            Method::public_static(
+                "FindMethodFromLoaded",
+                MethodSig::new_static(
+                    TypeSig::NATIVE_INT,
+                    vec![
+                        TypeSig::NATIVE_INT,
+                        TypeSig::NATIVE_INT,
+                        TypeSig::NATIVE_INT,
+                        TypeSig::INT32,
+                    ],
+                ),
+            )
+            .with_attribute(uco)
+            .with_body(find_method_from_loaded_body),
         );
         module.write()
     };
