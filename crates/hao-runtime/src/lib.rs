@@ -17,6 +17,8 @@ pub mod jit;
 #[cfg(feature = "coreclr")]
 mod coreclr;
 mod error;
+#[cfg(feature = "hao")]
+mod loader;
 #[cfg(feature = "coreclr")]
 pub mod profiler;
 #[cfg(feature = "hao")]
