@@ -370,3 +370,175 @@ fn rewrite_and_patch_for_mono() {
         eprintln!("mono not installed, only checked the rewritten structure");
     }
 }
+
+const GODOTSHARP_PATH: &str = "/games/SteamLibrary/steamapps/common/Slay the Spire 2/data_sts2_linuxbsd_x86_64/GodotSharp.dll";
+
+fn read_godotsharp() -> Option<Vec<u8>> {
+    match std::fs::read(GODOTSHARP_PATH) {
+        Ok(bytes) => Some(bytes),
+        Err(_) => {
+            eprintln!("skipping: {GODOTSHARP_PATH} not found");
+            None
+        }
+    }
+}
+
+/// Checks that no PE sections have overlapping virtual address ranges after a
+/// roundtrip. This is the core regression test for the section-overlap bug.
+fn assert_no_section_overlaps(pe_bytes: &[u8]) {
+    use pewter::pe::definition::PEImageDef;
+
+    let image = PEImageDef::parse(pe_bytes).unwrap();
+    let sections: Vec<_> = image
+        .sections
+        .iter()
+        .map(|s| (s.name.clone(), s.virtual_address, s.virtual_size()))
+        .collect();
+    for pair in sections.windows(2) {
+        let (ref name_a, va_a, vsize_a) = pair[0];
+        let (ref name_b, va_b, _) = pair[1];
+        let end_a = va_a as usize + vsize_a;
+        assert!(
+            end_a <= va_b as usize,
+            "section overlap: {name_a} (VA=0x{va_a:x}, end=0x{end_a:x}) overlaps {name_b} (VA=0x{va_b:x})"
+        );
+    }
+    assert!(
+        !image.sections.has_overlapping_sections(),
+        "PEImageDef::has_overlapping_sections returned true"
+    );
+}
+
+/// Roundtrip GodotSharp.dll and verify no sections overlap in the output.
+#[test]
+fn roundtrip_no_section_overlap() {
+    let Some(original) = read_godotsharp() else {
+        return;
+    };
+    let module = Module::from_bytes(&original).unwrap();
+    let roundtripped = module.write().unwrap();
+    assert_no_section_overlaps(&roundtripped);
+    eprintln!("roundtrip_no_section_overlap: passed, {} bytes", roundtripped.len());
+}
+
+/// Roundtrip GodotSharp.dll, reload it, and verify the metadata is intact.
+#[test]
+fn roundtrip_valid_metadata() {
+    let Some(original) = read_godotsharp() else {
+        return;
+    };
+    let module = Module::from_bytes(&original).unwrap();
+    let roundtripped = module.write().unwrap();
+    let reloaded = Module::from_bytes(&roundtripped).expect("reload roundtripped GodotSharp.dll");
+
+    // Check BSJB signature by verifying we can read types.
+    let scene_tree = reloaded.find_type("Godot", "SceneTree");
+    assert!(scene_tree.is_some(), "Godot.SceneTree not found in roundtripped module");
+    assert_eq!(
+        reloaded.all_types().len(),
+        module.all_types().len(),
+        "type count differs after roundtrip"
+    );
+}
+
+/// Patch GodotSharp.dll (add a P/Invoke), reload, verify the patch AND no
+/// section overlaps.
+#[test]
+fn roundtrip_patch_and_reload() {
+    use hao::dotnet::{
+        entries::{Entry, ImplMap, Method, ModuleRef, TypeDef},
+        il::Instruction,
+        md::streams::tables_stream::{MethodFlags, PInvokeMapFlags},
+        signature::{MethodSig, TypeSig},
+    };
+
+    let Some(original) = read_godotsharp() else {
+        return;
+    };
+    let mut module = Module::from_bytes(&original).unwrap();
+
+    let target = module.find_method("Godot.SceneTree", "InvokeGodotClassMethod").unwrap();
+    let declaring = target.get().declaring_type.upgrade().unwrap();
+    let module_ref = Entry::new(ModuleRef {
+        name: "libtest_hook.so".to_string(),
+        ..Default::default()
+    });
+    module.module_refs.push(module_ref.clone());
+    let mut pinvoke = Method::public_static(
+        "test_hook",
+        MethodSig::new_static(TypeSig::VOID, vec![]),
+    );
+    pinvoke.flags |= MethodFlags::PinvokeImpl;
+    pinvoke.impl_map = Some(ImplMap {
+        flags: PInvokeMapFlags::CallConvCdecl | PInvokeMapFlags::NoMangle,
+        import_name: "test_hook".to_string(),
+        scope: module_ref,
+    });
+    let pinvoke_entry = TypeDef::add_method(&declaring, pinvoke);
+    target.edit_body(|body| {
+        body.insert(0, [Instruction::call(pinvoke_entry)]);
+    });
+
+    let patched = module.write().unwrap();
+    assert_no_section_overlaps(&patched);
+
+    let reloaded = Module::from_bytes(&patched).expect("reload patched GodotSharp.dll");
+    let hook = reloaded.find_method("Godot.SceneTree", "test_hook");
+    assert!(hook.is_some(), "test_hook P/Invoke not found");
+    let hook = hook.unwrap();
+    let hook_data = hook.get();
+    let impl_map = hook_data.impl_map.as_ref().expect("P/Invoke impl_map missing");
+    assert_eq!(impl_map.import_name, "test_hook");
+    assert_eq!(impl_map.scope.get().name, "libtest_hook.so");
+}
+
+/// If the original PE has a non-zero entry point, verify it still falls inside
+/// a valid section in the rewritten file.
+#[test]
+fn roundtrip_entry_point_valid() {
+    use pewter::pe::definition::PEImageDef;
+
+    let Some(original) = read_godotsharp() else {
+        return;
+    };
+    let orig_image = PEImageDef::parse(&original).unwrap();
+    let orig_entry = orig_image.optional_header.standard_fields.address_of_entry_point;
+    if orig_entry == 0 {
+        eprintln!("no entry point in original, nothing to check");
+        return;
+    }
+    eprintln!("original entry point RVA: 0x{orig_entry:x}");
+
+    let module = Module::from_bytes(&original).unwrap();
+    let roundtripped = module.write().unwrap();
+    let new_image = PEImageDef::parse(&roundtripped).unwrap();
+    let new_entry = new_image.optional_header.standard_fields.address_of_entry_point;
+    eprintln!("new entry point RVA: 0x{new_entry:x}");
+
+    // The entry point must land inside some section.
+    let in_section = new_image.sections.iter().any(|s| {
+        let start = s.virtual_address as usize;
+        let end = start + s.virtual_size();
+        (new_entry as usize) >= start && (new_entry as usize) < end
+    });
+    assert!(
+        in_section,
+        "entry point RVA 0x{new_entry:x} is not inside any section"
+    );
+
+    // The entry point should contain the JMP thunk (FF 25 = jmp [rip+disp]).
+    let entry_data = new_image.data_at_rva(new_entry);
+    assert!(entry_data.is_some(), "cannot read data at entry point RVA");
+    let bytes = entry_data.unwrap();
+    assert!(
+        bytes.len() >= 2,
+        "not enough data at entry point"
+    );
+    assert_eq!(
+        bytes[0..2],
+        [0xFF, 0x25],
+        "entry point does not start with JMP [disp] (FF 25), got {:02x} {:02x}",
+        bytes[0],
+        bytes[1]
+    );
+}

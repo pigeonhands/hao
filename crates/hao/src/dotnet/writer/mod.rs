@@ -1,9 +1,9 @@
 //! Rebuilds the metadata of a [`Module`] and writes it into a copy of the
 //! original PE image.
 //!
-//! The new metadata, method bodies, field data and resources go into a new
-//! section. The original sections are kept as they are so native stubs, imports
-//! and relocations stay valid.
+//! New metadata, method bodies, field data and resources replace the content
+//! after the COR20 header inside the existing code section. The import table
+//! is rebuilt at the end of the section so the IAT stays valid.
 
 mod heaps;
 mod tables;
@@ -12,13 +12,17 @@ use std::collections::HashMap;
 
 use pewter::pe::{
     coff::{ImageFileCharacteristics, ImageFileMachine},
-    definition::{align_up, PEImageDef},
-    optional_header::{data_directories::ImageDataDirectory, ImageSubsystem, OptionalHeader},
+    definition::{align_up, PEImageDef, SectionHeap},
+    optional_header::{
+        data_directories::{DataDirectories, ImageDataDirectory, SectionName},
+        ImageSubsystem, OptionalHeader,
+    },
     sections::{
         cor20::{Cor20Flags, ImageCor20Header},
         SectionFlags,
     },
 };
+use strum::IntoEnumIterator;
 
 use heaps::*;
 use tables::*;
@@ -41,8 +45,6 @@ use crate::{
     error::{HaoError, Result},
     Module,
 };
-
-const SECTION_NAME: &str = ".hao";
 
 struct Rids<T> {
     map: HashMap<usize, u32>,
@@ -1214,9 +1216,22 @@ pub(crate) fn write_module(module: &Module) -> Result<Vec<u8>> {
         .data_directories
         .clr_runtime_header
         .virtual_address;
-    let section_rva = image
+    let has_imports = !image
+        .optional_header
+        .data_directories
+        .import_table
+        .is_null();
+
+    let code_va = image
         .sections
-        .next_virtual_address(image.section_alignment()) as u32;
+        .find_rva(cor20_rva as usize)
+        .ok_or_else(|| err("CLR runtime header is not inside any section"))?
+        .virtual_address;
+    let content_offset = align_up(
+        (cor20_rva - code_va) as usize + ImageCor20Header::SIZE,
+        8,
+    );
+    let section_rva = code_va + content_offset as u32;
 
     let mut writer = ModuleWriter::new(module, section_rva);
     let security = writer.build()?;
@@ -1249,7 +1264,6 @@ pub(crate) fn write_module(module: &Module) -> Result<Vec<u8>> {
         ImageDataDirectory::default()
     };
     cor20.flags.remove(Cor20Flags::STRONG_NAME_SIGNED);
-    // ReadyToRun code refers to the old metadata, so drop it and run from IL.
     if !cor20.managed_native_header.is_null() {
         cor20.managed_native_header = ImageDataDirectory::default();
         cor20.flags.remove(Cor20Flags::IL_LIBRARY);
@@ -1269,11 +1283,72 @@ pub(crate) fn write_module(module: &Module) -> Result<Vec<u8>> {
         };
     }
 
-    let section = image.new_section(
-        SECTION_NAME,
-        SectionFlags::CNT_CODE | SectionFlags::MEM_EXECUTE | SectionFlags::MEM_READ,
-    );
-    section.data = data;
+    let is_pe32_plus = image.optional_header.windows_specific_fields.is_pe32_plus();
+    let is_dll = image
+        .coff_header
+        .characteristics
+        .contains(ImageFileCharacteristics::FILE_DLL);
+    let section = image
+        .sections
+        .find_rva_mut(cor20_rva as usize)
+        .ok_or_else(|| err("CLR runtime header section disappeared"))?;
+    section.virtual_size = 0;
+    section.data.truncate(content_offset);
+    section.data.extend_from_slice(&data);
+    let import_dir_rva = if has_imports {
+        Some(rebuild_imports(section, is_pe32_plus, is_dll))
+    } else {
+        None
+    };
+
+    // Write the PE entry point startup stub (JMP to _Cor{Exe,Dll}Main via IAT).
+    // The original stub lived near the end of .text and was destroyed by the
+    // truncation above. Rebuild it after the import directory, matching dnlib's
+    // ModuleWriter layout.
+    let has_entry = image.optional_header.standard_fields.address_of_entry_point != 0;
+    let stub_info = if has_imports && has_entry {
+        let image_base = image.optional_header.windows_specific_fields.image_base();
+        let iat_rva = section.virtual_address; // IAT is at the start of the section
+        let (entry_rva, abs_addr_rva) = if is_pe32_plus {
+            write_startup_stub_x64(section, image_base, iat_rva)
+        } else {
+            write_startup_stub_x86(section, image_base, iat_rva)
+        };
+        image.optional_header.standard_fields.address_of_entry_point = entry_rva;
+        Some(abs_addr_rva)
+    } else {
+        None
+    };
+
+    // Fix section overlaps: the modified .text section may now be larger than
+    // the original, causing it to overlap .rsrc, .reloc, etc. Walk sections in
+    // VA order and push any that overlap forward, then adjust data directories
+    // whose RVAs fall in moved sections.
+    let section_alignment = image.section_alignment();
+    fix_section_overlaps(&mut image, section_alignment);
+
+    image.optional_header.data_directories.debug = ImageDataDirectory::default();
+    if let Some(import_rva) = import_dir_rva {
+        let entry_size = if is_pe32_plus { 8usize } else { 4 };
+        let iat_va = image
+            .sections
+            .find_rva(cor20_rva as usize)
+            .ok_or_else(|| err("CLR runtime header section disappeared"))?
+            .virtual_address;
+        image.optional_header.data_directories.import_table = ImageDataDirectory {
+            virtual_address: import_rva,
+            size: 40,
+        };
+        image.optional_header.data_directories.ita = ImageDataDirectory {
+            virtual_address: iat_va,
+            size: (entry_size * 2) as u32,
+        };
+    }
+
+    // Rebuild the .reloc section with a relocation for the startup stub.
+    if let Some(abs_addr_rva) = stub_info {
+        rebuild_reloc(&mut image, abs_addr_rva, is_pe32_plus);
+    }
 
     let mut cor20_bytes = Vec::new();
     pewter::io::Writer::write(&mut cor20_bytes, &cor20).map_err(HaoError::PeError)?;
@@ -1283,6 +1358,192 @@ pub(crate) fn write_module(module: &Module) -> Result<Vec<u8>> {
     image.strip_certificate();
 
     image.write_file().map_err(HaoError::PeError)
+}
+
+/// When the .text section grows, subsequent sections may overlap. Walk sections
+/// in virtual-address order and push any that collide forward (respecting
+/// section alignment). Data directories whose RVAs fall inside a moved section
+/// are adjusted by the same delta.
+fn fix_section_overlaps(image: &mut PEImageDef, section_alignment: usize) {
+    // Sections are sorted by VA in PEImageDef. Collect the relocations first.
+    let mut deltas: Vec<(u32, u32, u32)> = Vec::new(); // (old_va, new_va, old_vsize)
+    let mut prev_end: usize = 0;
+    for section in image.sections.iter_mut() {
+        let va = section.virtual_address as usize;
+        if prev_end > va {
+            // This section overlaps the previous one. Push it forward.
+            let new_va = align_up(prev_end, section_alignment) as u32;
+            let old_va = section.virtual_address;
+            let old_vsize = section.virtual_size().max(section.data.len()) as u32;
+            deltas.push((old_va, new_va, old_vsize));
+            section.virtual_address = new_va;
+        }
+        prev_end = section.virtual_address as usize + section.virtual_size().max(section.data.len());
+    }
+
+    if deltas.is_empty() {
+        return;
+    }
+
+    // Adjust data directories that point into moved sections.
+    relocate_data_directories(&mut image.optional_header.data_directories, &deltas);
+
+    // Also adjust the PE entry point RVA if it was in a moved section.
+    let entry = image.optional_header.standard_fields.address_of_entry_point;
+    if entry != 0 {
+        for &(old_va, new_va, old_vsize) in &deltas {
+            if entry >= old_va && entry < old_va + old_vsize {
+                image.optional_header.standard_fields.address_of_entry_point =
+                    new_va + (entry - old_va);
+                break;
+            }
+        }
+    }
+}
+
+/// Adjusts data directory RVAs that fall inside moved sections.
+fn relocate_data_directories(dirs: &mut DataDirectories, deltas: &[(u32, u32, u32)]) {
+    // Certificate table is a file offset, not an RVA — skip it.
+    for name in SectionName::iter() {
+        if matches!(name, SectionName::CertificateTable) {
+            continue;
+        }
+        let dir = dirs.get_directory(name);
+        if dir.is_null() {
+            continue;
+        }
+        for &(old_va, new_va, old_vsize) in deltas {
+            if dir.virtual_address >= old_va && dir.virtual_address < old_va + old_vsize {
+                dirs.set_directory(
+                    name,
+                    ImageDataDirectory {
+                        virtual_address: new_va + (dir.virtual_address - old_va),
+                        size: dir.size,
+                    },
+                );
+                break;
+            }
+        }
+    }
+}
+
+fn import_entry_name(is_dll: bool) -> &'static [u8] {
+    if is_dll {
+        b"_CorDllMain\0"
+    } else {
+        b"_CorExeMain\0"
+    }
+}
+
+/// Builds the import directory (IDT + ILT + hint/name + DLL name) and fills the
+/// IAT at the section start. Returns the RVA of the import directory table.
+fn rebuild_imports(section: &mut SectionHeap, is_pe32_plus: bool, is_dll: bool) -> u32 {
+    section.data.resize(align_up(section.data.len(), 4), 0);
+
+    let section_va = section.virtual_address;
+    let entry_size = if is_pe32_plus { 8usize } else { 4 };
+    let name = import_entry_name(is_dll);
+
+    let block_offset = section.data.len();
+    let block_rva = section_va + block_offset as u32;
+
+    let ilt_offset = 40usize;
+    let hint_name_offset = ilt_offset + entry_size * 2;
+    let dll_name_offset = align_up(hint_name_offset + 2 + name.len(), 2);
+    let total = dll_name_offset + b"mscoree.dll\0".len();
+
+    let ilt_rva = block_rva + ilt_offset as u32;
+    let hint_name_rva = block_rva + hint_name_offset as u32;
+    let dll_name_rva = block_rva + dll_name_offset as u32;
+
+    let mut block = vec![0u8; total];
+    block[0..4].copy_from_slice(&ilt_rva.to_le_bytes());
+    block[12..16].copy_from_slice(&dll_name_rva.to_le_bytes());
+    block[16..20].copy_from_slice(&section_va.to_le_bytes());
+
+    if is_pe32_plus {
+        block[ilt_offset..ilt_offset + 8]
+            .copy_from_slice(&(hint_name_rva as u64).to_le_bytes());
+    } else {
+        block[ilt_offset..ilt_offset + 4].copy_from_slice(&hint_name_rva.to_le_bytes());
+    }
+
+    block[hint_name_offset + 2..hint_name_offset + 2 + name.len()].copy_from_slice(name);
+    block[dll_name_offset..dll_name_offset + b"mscoree.dll\0".len()]
+        .copy_from_slice(b"mscoree.dll\0");
+
+    section.data.extend_from_slice(&block);
+
+    if is_pe32_plus {
+        section.data[0..8].copy_from_slice(&(hint_name_rva as u64).to_le_bytes());
+        section.data[8..16].copy_from_slice(&0u64.to_le_bytes());
+    } else {
+        section.data[0..4].copy_from_slice(&hint_name_rva.to_le_bytes());
+        section.data[4..8].copy_from_slice(&0u32.to_le_bytes());
+    }
+
+    block_rva
+}
+
+/// Writes the x86 startup stub: `JMP DWORD PTR [image_base + iat_rva]`.
+/// Returns `(entry_point_rva, abs_addr_rva)` where `abs_addr_rva` is the RVA
+/// of the 4-byte absolute address field (needs a base relocation).
+fn write_startup_stub_x86(section: &mut SectionHeap, image_base: u64, iat_rva: u32) -> (u32, u32) {
+    section.data.resize(align_up(section.data.len(), 4), 0);
+    let stub_offset = section.data.len();
+    // 2 bytes padding + FF 25 xx xx xx xx
+    section.data.extend_from_slice(&[0x00, 0x00]);
+    section.data.extend_from_slice(&[0xFF, 0x25]);
+    let abs_addr = (image_base as u32).wrapping_add(iat_rva);
+    section.data.extend_from_slice(&abs_addr.to_le_bytes());
+    let base = section.virtual_address + stub_offset as u32;
+    // Entry point is at the FF 25 (offset +2), abs addr field at +4
+    (base + 2, base + 4)
+}
+
+/// Writes the x64 startup stub: `MOVABS RAX, [abs]; JMP RAX`.
+/// Returns `(entry_point_rva, abs_addr_rva)`.
+fn write_startup_stub_x64(section: &mut SectionHeap, image_base: u64, iat_rva: u32) -> (u32, u32) {
+    section.data.resize(align_up(section.data.len(), 4), 0);
+    let stub_offset = section.data.len();
+    // 2 bytes padding + 48 A1 xx*8 FF E0
+    section.data.extend_from_slice(&[0x00, 0x00]);
+    section.data.extend_from_slice(&[0x48, 0xA1]);
+    let abs_addr = image_base + iat_rva as u64;
+    section.data.extend_from_slice(&abs_addr.to_le_bytes());
+    section.data.extend_from_slice(&[0xFF, 0xE0]);
+    let base = section.virtual_address + stub_offset as u32;
+    (base + 2, base + 4)
+}
+
+/// Rebuilds the `.reloc` section with a single base relocation entry for the
+/// startup stub's absolute address field.
+fn rebuild_reloc(image: &mut PEImageDef, abs_addr_rva: u32, is_pe32_plus: bool) {
+    let reloc_section = match image.sections.by_name_mut(".reloc") {
+        Some(s) => s,
+        None => return, // no .reloc section to rebuild
+    };
+
+    let page_rva = abs_addr_rva & !0xFFF;
+    let page_offset = abs_addr_rva & 0xFFF;
+    // Type 3 = IMAGE_REL_BASED_HIGHLOW (32-bit), type 10 = IMAGE_REL_BASED_DIR64
+    let reloc_type: u16 = if is_pe32_plus { 10 } else { 3 };
+    let entry = (reloc_type << 12) | (page_offset as u16);
+
+    // Block: 4 page_rva + 4 block_size + 2 entry + 2 padding = 12 bytes
+    let mut block = vec![0u8; 12];
+    block[0..4].copy_from_slice(&page_rva.to_le_bytes());
+    block[4..8].copy_from_slice(&12u32.to_le_bytes());
+    block[8..10].copy_from_slice(&entry.to_le_bytes());
+    // block[10..12] is already zero (IMAGE_REL_BASED_ABSOLUTE padding)
+
+    reloc_section.data = block;
+    reloc_section.virtual_size = 0;
+
+    image.optional_header.data_directories.base_relocation_table = ImageDataDirectory {
+        virtual_address: reloc_section.virtual_address,
+        size: 12,
+    };
 }
 
 /// An AnyCPU, IL only image holding just a placeholder cor20 header.
