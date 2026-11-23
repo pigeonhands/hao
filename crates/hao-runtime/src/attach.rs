@@ -110,11 +110,32 @@ impl ClrHost {
 
 type Callback = Box<dyn FnOnce(ClrHost) + Send>;
 
+pub(crate) fn diag(msg: &str) {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/hao-diag.log")
+    {
+        let _ = writeln!(f, "[hao-diag] {msg}");
+    }
+}
+
 static CALLBACKS: Mutex<Vec<Callback>> = Mutex::new(Vec::new());
 static HOST: OnceLock<ClrHost> = OnceLock::new();
 static CREATE_DELEGATE: AtomicUsize = AtomicUsize::new(0);
 static LOADER_HOOKED: AtomicBool = AtomicBool::new(false);
 static INIT_HOOKED: AtomicBool = AtomicBool::new(false);
+
+/// Installs the loader hook (`dlopen` / `LoadLibraryExW`) so that the
+/// runtime's library load is detected as early as possible.
+///
+/// Safe to call more than once — subsequent calls are no-ops. Call it from
+/// `.init_array` / `ctor()` when the mod needs the CLR but registers the
+/// [`on_clr_init`] callback later (e.g. from a separate thread).
+pub fn ensure_loader_hook() {
+    install_loader_hook();
+}
 
 /// Runs `callback` once the game's CoreCLR host has been captured. Call it from
 /// a mod's entry point (which the loader runs before the game starts the
@@ -127,10 +148,12 @@ static INIT_HOOKED: AtomicBool = AtomicBool::new(false);
 /// main-thread-only API until it has a main-thread callback to run on.
 pub fn on_clr_init(callback: impl FnOnce(ClrHost) + Send + 'static) {
     if let Some(host) = HOST.get() {
+        diag("on_clr_init: HOST already set, fast path");
         let host = *host;
         std::thread::spawn(move || callback(host));
         return;
     }
+    diag("on_clr_init: HOST not set, registering callback + loader hook");
     CALLBACKS
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -148,8 +171,6 @@ fn run_callbacks(host: ClrHost) {
     });
 }
 
-/// Inline-hooks `coreclr_initialize`, resolving it (and `coreclr_create_delegate`)
-/// from the now-loaded CoreCLR library. Shared across platforms.
 fn hook_coreclr_init() {
     if INIT_HOOKED.swap(true, Ordering::SeqCst) {
         return;
@@ -195,8 +216,21 @@ extern "C" fn coreclr_init_detour(
     let original =
         hooking::original_function_ptr().expect("original! inside the coreclr_initialize hook");
     let original: CoreclrInitialize = unsafe { std::mem::transmute(original.as_ptr()) };
+
+    // Arm assembly interception BEFORE the original coreclr_initialize runs.
+    // The CLR opens assemblies (including GodotSharp.dll) during init, so
+    // the open/openat hooks must be in place before the first assembly load.
+    // The redirect() function only intercepts registered target basenames —
+    // all other file opens pass through, so this is safe.
+    diag("coreclr_init_detour entered, arming interception");
+    #[cfg(all(unix, target_arch = "x86_64"))]
+    crate::rewrite::arm_interception();
+    diag("arm_interception done, calling original");
+
     let result = unsafe { original(exe, name, count, keys, values, host_handle, domain_id) };
+    diag(&format!("coreclr_initialize returned 0x{result:x}"));
     tracing::info!("coreclr_initialize returned 0x{result:x}");
+
     if result == 0 && !host_handle.is_null() && !domain_id.is_null() {
         let handle = unsafe { *host_handle };
         let domain = unsafe { *domain_id };
@@ -211,8 +245,6 @@ extern "C" fn coreclr_init_detour(
             };
             tracing::info!("captured CLR host: handle={handle:?}, domain={domain}");
             let _ = HOST.set(host);
-            // Run callbacks off this thread: it is mid-coreclr_initialize, and
-            // managed work here corrupts the game's runtime bootstrap.
             run_callbacks(host);
         }
     }
@@ -226,6 +258,24 @@ fn install_loader_hook() {
     if LOADER_HOOKED.swap(true, Ordering::SeqCst) {
         return;
     }
+    // Check whether CoreCLR is already loaded (the game's init may have
+    // loaded it before our thread started).  RTLD_DEFAULT searches all
+    // loaded shared objects — if coreclr_initialize is resolvable, the
+    // runtime is already in the process and we hook it directly.
+    unsafe extern "C" {
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+    const RTLD_DEFAULT: *mut c_void = std::ptr::null_mut();
+    let probe =
+        unsafe { dlsym(RTLD_DEFAULT, c"coreclr_initialize".as_ptr()) };
+    if !probe.is_null() {
+        diag("coreclr already loaded, hooking directly");
+        tracing::info!("{CORECLR} is already loaded, hooking coreclr_initialize directly");
+        hook_coreclr_init();
+        return;
+    }
+
+    diag("hooking dlopen to wait for coreclr");
     tracing::info!("hooking dlopen to wait for {CORECLR}");
     match unsafe { hooking::Hook::by_name(None, c"dlopen", dlopen_detour as *mut u8) } {
         Ok(mut hook) => {
@@ -245,11 +295,27 @@ extern "C" fn dlopen_detour(filename: *const c_char, flags: c_int) -> *mut c_voi
     let original: unsafe extern "C" fn(*const c_char, c_int) -> *mut c_void =
         unsafe { std::mem::transmute(original.as_ptr()) };
     let handle = unsafe { original(filename, flags) };
-    if !handle.is_null() && !filename.is_null() && !INIT_HOOKED.load(Ordering::SeqCst) {
-        let name = unsafe { std::ffi::CStr::from_ptr(filename) }.to_string_lossy();
-        if name.contains(CORECLR) {
-            tracing::info!("{CORECLR} loaded: {name}");
-            hook_coreclr_init();
+    if !handle.is_null() && !INIT_HOOKED.load(Ordering::SeqCst) {
+        if !filename.is_null() {
+            let name = unsafe { std::ffi::CStr::from_ptr(filename) }.to_string_lossy();
+            if name.contains(CORECLR) {
+                tracing::info!("{CORECLR} loaded: {name}");
+                hook_coreclr_init();
+            }
+        }
+        // CoreCLR may arrive through a chain (hostfxr → hostpolicy →
+        // coreclr) where intermediate loads don't mention "coreclr" in
+        // the filename.  Probe the specific handle for coreclr_initialize.
+        if !INIT_HOOKED.load(Ordering::SeqCst) {
+            unsafe extern "C" {
+                fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+            }
+            let sym = unsafe {
+                dlsym(handle, c"coreclr_initialize".as_ptr())
+            };
+            if !sym.is_null() {
+                hook_coreclr_init();
+            }
         }
     }
     handle
