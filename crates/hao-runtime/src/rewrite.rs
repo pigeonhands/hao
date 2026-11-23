@@ -212,28 +212,16 @@ mod intercept {
     /// `/proc/self/fd/{fd}` path that the CLR can open.
     fn build(path: &str, patch: &PatchFn) -> Option<CString> {
         BUILDING.with(|b| b.set(true));
-        // diag here is safe: BUILDING is true so the open() for the diag
-        // file won't re-enter redirect().
-        crate::attach::diag(&format!("rewrite::build intercepted: {path}"));
         let result = (|| {
             let original = std::fs::read(path).ok()?;
             BUILDING.with(|b| b.set(false));
             let patched = match patch(&original) {
                 Ok(bytes) => bytes,
                 Err(e) => {
-                    BUILDING.with(|b| b.set(true));
-                    crate::attach::diag(&format!("rewrite: patch FAILED for {path}: {e}"));
                     tracing::error!("rewriting {path} failed: {e}");
                     return None;
                 }
             };
-            BUILDING.with(|b| b.set(true));
-            crate::attach::diag(&format!(
-                "rewrite: patch OK, {} -> {} bytes, creating memfd",
-                original.len(),
-                patched.len()
-            ));
-            BUILDING.with(|b| b.set(false));
             let fd = unsafe { memfd_create(c"hao-rewrite".as_ptr(), 0) };
             if fd < 0 {
                 tracing::error!("memfd_create failed for {path}");
@@ -247,10 +235,6 @@ mod intercept {
                 tracing::error!("write to memfd failed for {path}");
                 return None;
             }
-            BUILDING.with(|b| b.set(true));
-            crate::attach::diag(&format!(
-                "rewrite: serving {path} from /proc/self/fd/{fd}"
-            ));
             tracing::info!("serving a rewritten {path} from memfd (fd {fd})");
             CString::new(format!("/proc/self/fd/{fd}")).ok()
         })();

@@ -114,6 +114,7 @@ pub fn hook_scene_tree(lib_name: &str) {
                     tracing::info!("lifecycle: GodotSharp.dll IL rewrite succeeded");
                     SCENE_TREE_PATCHED.store(true, Ordering::SeqCst);
                     PUMP_ACTIVE.store(true, Ordering::SeqCst);
+                    deferred_native_hook();
                 }
                 Err(e) => tracing::error!("lifecycle: GodotSharp.dll IL rewrite failed: {e}"),
             }
@@ -128,21 +129,63 @@ pub fn hook_scene_tree(lib_name: &str) {
     let _ = lib_name;
 }
 
+/// Spawns a thread that waits for the runtime and GodotSharp to be fully
+/// loaded, then installs the native hook. Called from the rewrite callback
+/// which runs during the assembly's `open()` — the method isn't JIT'd yet.
+#[cfg(all(unix, target_arch = "x86_64"))]
+fn deferred_native_hook() {
+    fn diag(msg: &str) {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/hao-diag.log")
+        {
+            let _ = writeln!(f, "[lifecycle] {msg}");
+        }
+    }
+
+    std::thread::spawn(|| {
+        diag("deferred_native_hook thread started");
+        for i in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            match crate::runtime() {
+                Ok(rt) => match SCENE_TREE_INVOKE.resolve(rt) {
+                    Ok(ptr) => {
+                        diag(&format!("resolved at {ptr:#x} after {i} attempts"));
+                        match start_pump(ptr) {
+                            Ok(()) => diag("native hook installed!"),
+                            Err(e) => diag(&format!("start_pump failed: {e}")),
+                        }
+                        return;
+                    }
+                    Err(e) => {
+                        if i == 0 {
+                            diag(&format!("resolve attempt {i}: {e}"));
+                        }
+                    }
+                },
+                Err(e) => {
+                    if i == 0 {
+                        diag(&format!("runtime not available: {e}"));
+                    }
+                }
+            }
+        }
+        diag("TIMED OUT after 5s — native hook NOT installed");
+    });
+}
+
 /// Ensures the SceneTree lifecycle pump is running after CLR attach.
 ///
-/// If [`hook_scene_tree`] was called and the IL rewrite fired (the common
-/// `LD_PRELOAD` path), this is a no-op. If the interception didn't fire
-/// (GodotSharp was already loaded, or the platform lacks assembly
-/// interception), this falls back to native code patching.
+/// Tries to install the native hook immediately. If the assembly hasn't been
+/// loaded yet (common on the LD_PRELOAD path), the rewrite callback's
+/// [`deferred_native_hook`] will handle it once the assembly is available.
 #[cfg(target_arch = "x86_64")]
 pub fn ensure_scene_tree_pump(runtime: &hao_runtime::Runtime) -> hao_runtime::Result<()> {
     if !SCENE_TREE_REQUESTED.load(Ordering::SeqCst) {
         return Ok(());
     }
-    if SCENE_TREE_PATCHED.load(Ordering::SeqCst) {
-        return Ok(());
-    }
-    tracing::info!("lifecycle: GodotSharp already loaded, falling back to native hook");
     let ptr = SCENE_TREE_INVOKE.resolve(runtime)?;
     tracing::info!("lifecycle: resolved SceneTree.InvokeGodotClassMethod at {ptr:#x}");
     start_pump(ptr)
@@ -193,6 +236,13 @@ pub fn intercept_process(
 /// Exported so the P/Invoke can resolve it.
 #[no_mangle]
 pub extern "C" fn hao_godot_tick() {
+    static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/hao-diag.log") {
+            let _ = writeln!(f, "[tick] hao_godot_tick called for the first time");
+        }
+    }
     tick();
 }
 
@@ -206,8 +256,10 @@ pub extern "C" fn hao_godot_tick() {
 /// via [`Runtime::method_pointer_from_loaded`](hao_runtime::Runtime::method_pointer_from_loaded).
 #[cfg(target_arch = "x86_64")]
 pub fn start_pump(addr: usize) -> hao_runtime::Result<()> {
-    let hook = unsafe { hooking::Hook::create(addr as *mut u8, pump_detour as *mut u8) }
+    let mut hook = unsafe { hooking::Hook::create(addr as *mut u8, pump_detour as *mut u8) }
         .map_err(|e| hao_runtime::Error::Other(format!("lifecycle hook failed: {e:?}")))?;
+    unsafe { hook.apply_hook() }
+        .map_err(|e| hao_runtime::Error::Other(format!("applying lifecycle hook failed: {e:?}")))?;
 
     // Leak the hook — it stays active for the process lifetime.
     std::mem::forget(hook);
@@ -217,9 +269,16 @@ pub fn start_pump(addr: usize) -> hao_runtime::Result<()> {
 }
 
 #[cfg(target_arch = "x86_64")]
-unsafe extern "C" fn pump_detour(this: usize, delta: f64) {
-    tick();
-    let original: unsafe extern "C" fn(usize, f64) =
+unsafe extern "C" fn pump_detour(this: usize, a: usize, b: usize, c: usize) -> usize {
+    let original: unsafe extern "C" fn(usize, usize, usize, usize) -> usize =
         std::mem::transmute(hooking::original_function_ptr().unwrap());
-    unsafe { original(this, delta) };
+    static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/hao-diag.log") {
+            let _ = writeln!(f, "[tick] pump_detour called for the first time");
+        }
+    }
+    tick();
+    unsafe { original(this, a, b, c) }
 }
