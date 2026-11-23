@@ -55,6 +55,7 @@ pub fn drain_pending() {
 /// immediately without waiting for `f` to execute.
 pub fn queue(f: impl FnOnce() + Send + 'static) -> Result<()> {
     if !crate::lifecycle::is_pump_active() {
+        tracing::warn!("dispatch::queue called but pump not active");
         return Err(Error::Other(
             "dispatch: lifecycle pump not started — call lifecycle::start_pump or \
              lifecycle::intercept_process first"

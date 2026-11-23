@@ -2,9 +2,11 @@
 //!
 //! Three setup paths, in order of preference:
 //!
-//! **Path A — SceneTree hook** ([`hook_scene_tree`]): hooks
-//! `SceneTree._Process` from GodotSharp — works for any Godot game with
-//! no game-specific knowledge. Call after `host.attach()`.
+//! **Path A — SceneTree hook** ([`hook_scene_tree`]): rewrites
+//! `SceneTree._Process` in GodotSharp via IL patching — works for any
+//! Godot game with no game-specific knowledge. Call early (before
+//! GodotSharp loads). If the assembly is already loaded (DLL injection),
+//! [`ensure_scene_tree_pump`] falls back to native code patching.
 //!
 //! **Path B — IL rewrite** ([`intercept_process`]): splices a P/Invoke
 //! into a game type's `_Process` before the assembly loads. Must be called
@@ -27,6 +29,13 @@ type Callback = Arc<dyn Fn() + Send + Sync>;
 static CALLBACKS: Mutex<Vec<Callback>> = Mutex::new(Vec::new());
 static PUMP_ACTIVE: AtomicBool = AtomicBool::new(false);
 static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+static SCENE_TREE_REQUESTED: AtomicBool = AtomicBool::new(false);
+static SCENE_TREE_PATCHED: AtomicBool = AtomicBool::new(false);
+static TICK_LOGGED: AtomicBool = AtomicBool::new(false);
+
+crate::bindings! {
+    SCENE_TREE_INVOKE: "Godot.SceneTree" "InvokeGodotClassMethod" 3;
+}
 
 /// Returns `true` after [`shutdown`] has been called.
 pub fn is_shutting_down() -> bool {
@@ -56,6 +65,9 @@ pub fn on_process(callback: impl Fn() + Send + Sync + 'static) {
 // ── pump core ──────────────────────────────────────────────────────────
 
 fn tick() {
+    if !TICK_LOGGED.swap(true, Ordering::Relaxed) {
+        tracing::info!("lifecycle: tick() called for the first time");
+    }
     if SHUTTING_DOWN.load(Ordering::Relaxed) {
         return;
     }
@@ -70,34 +82,70 @@ fn tick() {
 
 // ── Path A: SceneTree hook ─────────────────────────────────────────────
 
-/// Hooks `SceneTree._Process` from the engine's GodotSharp assembly.
+/// Sets up a lifecycle pump on `SceneTree._Process` from GodotSharp.
 ///
-/// This is the simplest lifecycle setup — it works for any Godot game
-/// without needing to know any game-specific types or methods. The
-/// engine calls `SceneTree._Process` every frame on the main thread.
+/// On platforms with assembly interception (unix), this rewrites the
+/// method's IL to include a P/Invoke call to [`hao_godot_tick`] — the
+/// same mechanism as [`intercept_process`], but hardcoded for the
+/// engine's own SceneTree. Call **before** GodotSharp loads (from your
+/// library constructor or `on_clr_init` before `host.attach()`).
 ///
-/// Call after `host.attach()` with the [`Runtime`](hao_runtime::Runtime)
-/// returned by attach.
+/// After CLR attach, call [`ensure_scene_tree_pump`] (or have your init
+/// code call it) to fall back to native code patching if the IL rewrite
+/// didn't fire (e.g. DLL injection where GodotSharp was already loaded,
+/// or platforms without assembly interception).
 ///
-/// # Example
+/// `lib_name` is the native library exporting `hao_godot_tick` (usually
+/// the `LD_PRELOAD` path or DLL name).
+pub fn hook_scene_tree(lib_name: &str) {
+    SCENE_TREE_REQUESTED.store(true, Ordering::SeqCst);
+
+    #[cfg(all(unix, target_arch = "x86_64"))]
+    {
+        let ty = "Godot.SceneTree".to_string();
+        let method = "InvokeGodotClassMethod".to_string();
+        let lib = lib_name.to_string();
+
+        hao_runtime::rewrite::intercept_assembly("GodotSharp.dll", move |bytes| {
+            let result =
+                hao_runtime::rewrite::patch_call(bytes, &ty, &method, &lib, "hao_godot_tick");
+            match &result {
+                Ok(_) => {
+                    tracing::info!("lifecycle: GodotSharp.dll IL rewrite succeeded");
+                    SCENE_TREE_PATCHED.store(true, Ordering::SeqCst);
+                    PUMP_ACTIVE.store(true, Ordering::SeqCst);
+                }
+                Err(e) => tracing::error!("lifecycle: GodotSharp.dll IL rewrite failed: {e}"),
+            }
+            result
+        });
+        tracing::info!(
+            "lifecycle: will patch Godot.SceneTree::InvokeGodotClassMethod \
+             in GodotSharp.dll to call hao_godot_tick"
+        );
+    }
+
+    let _ = lib_name;
+}
+
+/// Ensures the SceneTree lifecycle pump is running after CLR attach.
 ///
-/// ```no_run
-/// hao_godot::on_clr_init(|host| {
-///     let runtime = host.attach(9).unwrap();
-///     hao_godot::lifecycle::hook_scene_tree(&runtime).unwrap();
-///     // lifecycle pump is now active
-/// });
-/// ```
+/// If [`hook_scene_tree`] was called and the IL rewrite fired (the common
+/// `LD_PRELOAD` path), this is a no-op. If the interception didn't fire
+/// (GodotSharp was already loaded, or the platform lacks assembly
+/// interception), this falls back to native code patching.
 #[cfg(target_arch = "x86_64")]
-pub fn hook_scene_tree(runtime: &hao_runtime::Runtime) -> hao_runtime::Result<()> {
-    let ptr = runtime.find_method_from_loaded(
-        "GodotSharp",
-        "Godot.SceneTree",
-        "_Process",
-        1, // (double delta)
-    )?;
-    tracing::info!("lifecycle: resolved SceneTree._Process at {:#x}", ptr as usize);
-    start_pump(ptr as usize)
+pub fn ensure_scene_tree_pump(runtime: &hao_runtime::Runtime) -> hao_runtime::Result<()> {
+    if !SCENE_TREE_REQUESTED.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    if SCENE_TREE_PATCHED.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    tracing::info!("lifecycle: GodotSharp already loaded, falling back to native hook");
+    let ptr = SCENE_TREE_INVOKE.resolve(runtime)?;
+    tracing::info!("lifecycle: resolved SceneTree.InvokeGodotClassMethod at {ptr:#x}");
+    start_pump(ptr)
 }
 
 // ── Path B: IL rewrite (game-specific) ────────────────────────────────
@@ -127,10 +175,14 @@ pub fn intercept_process(
     let lib = lib_name.to_string();
 
     hao_runtime::rewrite::intercept_assembly(assembly_basename, move |bytes| {
-        hao_runtime::rewrite::patch_call(bytes, &ty, &method, &lib, "hao_godot_tick")
+        let result =
+            hao_runtime::rewrite::patch_call(bytes, &ty, &method, &lib, "hao_godot_tick");
+        if result.is_ok() {
+            PUMP_ACTIVE.store(true, Ordering::SeqCst);
+        }
+        result
     });
 
-    PUMP_ACTIVE.store(true, Ordering::SeqCst);
     tracing::info!(
         "lifecycle: will patch {type_name}::{method_name} in {assembly_basename} \
          to call hao_godot_tick"
@@ -165,9 +217,9 @@ pub fn start_pump(addr: usize) -> hao_runtime::Result<()> {
 }
 
 #[cfg(target_arch = "x86_64")]
-unsafe extern "C" fn pump_detour() {
+unsafe extern "C" fn pump_detour(this: usize, delta: f64) {
     tick();
-    let original: unsafe extern "C" fn() =
+    let original: unsafe extern "C" fn(usize, f64) =
         std::mem::transmute(hooking::original_function_ptr().unwrap());
-    unsafe { original() };
+    unsafe { original(this, delta) };
 }
