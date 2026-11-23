@@ -65,9 +65,21 @@ impl Binding {
         if let Some(&ptr) = self.cache.get() {
             return Ok(ptr);
         }
+        tracing::info!(
+            "Binding::resolve: {}::{} ({})",
+            self.type_name,
+            self.method,
+            self.param_count
+        );
         let ptr = rt
             .find_method_from_loaded("GodotSharp", self.type_name, self.method, self.param_count)
             .map(|p| p as usize)?;
+        tracing::info!(
+            "Binding::resolve: {}::{} -> 0x{:x}",
+            self.type_name,
+            self.method,
+            ptr
+        );
         let _ = self.cache.set(ptr);
         Ok(ptr)
     }
@@ -95,6 +107,13 @@ impl Binding {
     pub fn call_ptr(&self, rt: &Runtime, args: &[u64]) -> Result<*const c_void> {
         let ptr = self.resolve(rt)?;
         Ok(unsafe { call_native(ptr, args) } as *const c_void)
+    }
+
+    /// Call the method and read a 4×f32 struct return (e.g. Rect2, Vector4)
+    /// from xmm0+xmm1 on x86-64.
+    pub fn call_f32x4(&self, rt: &Runtime, args: &[u64]) -> Result<[f32; 4]> {
+        let ptr = self.resolve(rt)?;
+        Ok(unsafe { hao_runtime::jit::call_native_f32x4(ptr, args) })
     }
 }
 

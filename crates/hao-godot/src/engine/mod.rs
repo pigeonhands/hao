@@ -51,11 +51,15 @@
 //! | [`viewport`] | `Godot.Viewport` | Mouse position, cameras, worlds |
 //! | [`input`] | `Godot.Input` | Actions, keys, mouse, mouse mode |
 //! | [`resource_loader`] | `Godot.ResourceLoader` | Load/exists |
+//! | [`texture2d`] | `Godot.Texture2D` | GetImage, dimensions |
+//! | [`image`] | `Godot.Image` | Decompress, convert, get data, extract RGBA |
 //! | [`timer`] | `Godot.Timer` | Start/stop, wait time, one-shot |
 //! | [`animation_player`] | `Godot.AnimationPlayer` | Play/stop, speed scale |
 
 pub mod animation_player;
+pub mod atlas_texture;
 pub mod camera2d;
+
 pub mod camera3d;
 pub mod canvas_item;
 pub mod control;
@@ -63,14 +67,17 @@ pub mod display_server;
 pub mod engine;
 pub mod gd;
 pub mod godot_object;
+pub mod image;
 pub mod input;
 pub mod node;
 pub mod node2d;
 pub mod node3d;
 pub mod os;
 pub mod performance;
+pub mod rendering_server;
 pub mod resource_loader;
 pub mod scene_tree;
+pub mod texture2d;
 pub mod time;
 pub mod timer;
 pub mod viewport;

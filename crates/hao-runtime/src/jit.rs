@@ -128,6 +128,29 @@ pub unsafe fn call_native(ptr: usize, args: &[u64]) -> u64 {
     }
 }
 
+/// Like [`call_native`], but for methods returning a small struct of floats
+/// (up to 4 × f32) via xmm0+xmm1 on x86-64 SysV ABI.
+///
+/// # Safety
+///
+/// Same requirements as [`call_native`].
+#[cfg(target_arch = "x86_64")]
+pub unsafe fn call_native_f32x4(ptr: usize, args: &[u64]) -> [f32; 4] {
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct F4(f32, f32, f32, f32);
+
+    type F1 = unsafe extern "C" fn(u64) -> F4;
+
+    let r = unsafe {
+        match args.len() {
+            1 => std::mem::transmute::<usize, F1>(ptr)(args[0]),
+            _ => panic!("call_native_f32x4: only 1-arg supported"),
+        }
+    };
+    [r.0, r.1, r.2, r.3]
+}
+
 /// Like [`call_native`], but for methods returning a float (xmm0 on x86-64).
 /// Supports up to 3 integer arguments.
 ///

@@ -4,6 +4,7 @@
 //! Hooks are installed by exporting `vkGetInstanceProcAddr`. The game loads
 //! Vulkan through us, and we intercept key functions while forwarding the rest.
 
+use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CStr};
 use std::sync::Mutex;
 
@@ -36,13 +37,10 @@ struct VkOverlay {
     pipeline: vk::Pipeline,
     descriptor_set_layout: vk::DescriptorSetLayout,
     descriptor_pool: vk::DescriptorPool,
-    descriptor_set: vk::DescriptorSet,
     sampler: vk::Sampler,
     command_pool: vk::CommandPool,
 
-    font_texture: Option<VkTexture>,
-    font_atlas: Vec<u8>,
-    font_size: [usize; 2],
+    textures: HashMap<egui::TextureId, ManagedTexture>,
 
     framebuffers: Vec<vk::Framebuffer>,
     image_views: Vec<vk::ImageView>,
@@ -51,7 +49,7 @@ struct VkOverlay {
     semaphores: Vec<vk::Semaphore>,
 
     extent: vk::Extent2D,
-    #[allow(dead_code)] // stored for swapchain recreation
+    #[allow(dead_code)]
     format: vk::Format,
 
     vertex_buffers: Vec<Option<VkBuffer>>,
@@ -66,6 +64,13 @@ struct VkTexture {
     image: vk::Image,
     view: vk::ImageView,
     memory: vk::DeviceMemory,
+}
+
+struct ManagedTexture {
+    vk_tex: VkTexture,
+    descriptor_set: vk::DescriptorSet,
+    atlas: Vec<u8>,
+    size: [usize; 2],
 }
 
 struct VkBuffer {
@@ -352,19 +357,15 @@ impl VkOverlay {
         device.destroy_shader_module(vert_module, None);
         device.destroy_shader_module(frag_module, None);
 
-        // Descriptor pool & set
+        // Descriptor pool (sized for multiple textures: font + user textures)
         let pool_size = vk::DescriptorPoolSize::default()
             .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(1);
+            .descriptor_count(64);
         let dp_info = vk::DescriptorPoolCreateInfo::default()
-            .max_sets(1)
+            .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
+            .max_sets(64)
             .pool_sizes(std::slice::from_ref(&pool_size));
         let descriptor_pool = device.create_descriptor_pool(&dp_info, None).unwrap();
-
-        let ds_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(descriptor_pool)
-            .set_layouts(std::slice::from_ref(&descriptor_set_layout));
-        let descriptor_set = device.allocate_descriptor_sets(&ds_info).unwrap()[0];
 
         // Sampler
         let sampler_info = vk::SamplerCreateInfo::default()
@@ -435,12 +436,9 @@ impl VkOverlay {
             pipeline,
             descriptor_set_layout,
             descriptor_pool,
-            descriptor_set,
             sampler,
             command_pool,
-            font_texture: None,
-            font_atlas: Vec::new(),
-            font_size: [0, 0],
+            textures: HashMap::new(),
             framebuffers,
             image_views,
             command_buffers,
@@ -478,10 +476,10 @@ impl VkOverlay {
             device.destroy_buffer(ib.buffer, None);
             device.free_memory(ib.memory, None);
         }
-        if let Some(tex) = &self.font_texture {
-            device.destroy_image_view(tex.view, None);
-            device.destroy_image(tex.image, None);
-            device.free_memory(tex.memory, None);
+        for mt in self.textures.values() {
+            device.destroy_image_view(mt.vk_tex.view, None);
+            device.destroy_image(mt.vk_tex.image, None);
+            device.free_memory(mt.vk_tex.memory, None);
         }
         device.destroy_command_pool(self.command_pool, None);
         device.destroy_descriptor_pool(self.descriptor_pool, None);
@@ -492,9 +490,10 @@ impl VkOverlay {
         device.destroy_sampler(self.sampler, None);
     }
 
-    unsafe fn update_font_texture(
+    unsafe fn update_texture(
         &mut self,
         ds: &DeviceState,
+        tex_id: egui::TextureId,
         delta: &egui::epaint::ImageDelta,
     ) {
         let [dw, dh] = delta.image.size();
@@ -506,34 +505,56 @@ impl VkOverlay {
 
         match delta.pos {
             None => {
-                self.font_atlas = pixels;
-                self.font_size = [dw, dh];
-                self.recreate_font_image(ds);
+                // Full replacement — (re)create the Vulkan image.
+                if let Some(old) = self.textures.remove(&tex_id) {
+                    ds.device.destroy_image_view(old.vk_tex.view, None);
+                    ds.device.destroy_image(old.vk_tex.image, None);
+                    ds.device.free_memory(old.vk_tex.memory, None);
+                    ds.device
+                        .free_descriptor_sets(self.descriptor_pool, &[old.descriptor_set])
+                        .ok();
+                }
+                let mt = self.create_texture_image(ds, dw, dh, &pixels);
+                self.textures.insert(tex_id, mt);
             }
             Some([x, y]) => {
-                let full_w = self.font_size[0];
-                for row in 0..dh {
-                    let dst = ((y + row) * full_w + x) * 4;
-                    let src = row * dw * 4;
-                    if dst + dw * 4 <= self.font_atlas.len() {
-                        self.font_atlas[dst..dst + dw * 4]
-                            .copy_from_slice(&pixels[src..src + dw * 4]);
+                // Partial update — merge into atlas and re-upload.
+                if let Some(mt) = self.textures.get_mut(&tex_id) {
+                    let full_w = mt.size[0];
+                    for row in 0..dh {
+                        let dst = ((y + row) * full_w + x) * 4;
+                        let src = row * dw * 4;
+                        if dst + dw * 4 <= mt.atlas.len() {
+                            mt.atlas[dst..dst + dw * 4]
+                                .copy_from_slice(&pixels[src..src + dw * 4]);
+                        }
                     }
+                    Self::upload_texture_data(&ds.device, &mt.vk_tex, mt.size[0], mt.size[1], &mt.atlas);
                 }
-                self.upload_font_data(ds);
             }
         }
     }
 
-    unsafe fn recreate_font_image(&mut self, ds: &DeviceState) {
-        let device = &ds.device;
-        if let Some(old) = self.font_texture.take() {
-            device.destroy_image_view(old.view, None);
-            device.destroy_image(old.image, None);
-            device.free_memory(old.memory, None);
+    unsafe fn free_texture(&mut self, ds: &DeviceState, tex_id: egui::TextureId) {
+        if let Some(mt) = self.textures.remove(&tex_id) {
+            ds.device.destroy_image_view(mt.vk_tex.view, None);
+            ds.device.destroy_image(mt.vk_tex.image, None);
+            ds.device.free_memory(mt.vk_tex.memory, None);
+            ds.device
+                .free_descriptor_sets(self.descriptor_pool, &[mt.descriptor_set])
+                .ok();
         }
+    }
 
-        let [w, h] = self.font_size;
+    unsafe fn create_texture_image(
+        &mut self,
+        ds: &DeviceState,
+        w: usize,
+        h: usize,
+        pixels: &[u8],
+    ) -> ManagedTexture {
+        let device = &ds.device;
+
         let img_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
             .format(vk::Format::R8G8B8A8_UNORM)
@@ -577,32 +598,43 @@ impl VkOverlay {
             );
         let view = device.create_image_view(&view_info, None).unwrap();
 
-        self.font_texture = Some(VkTexture {
+        let vk_tex = VkTexture {
             image,
             view,
             memory,
-        });
+        };
 
-        // Update descriptor set
+        // Allocate a descriptor set for this texture
+        let layouts = [self.descriptor_set_layout];
+        let ds_alloc = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(self.descriptor_pool)
+            .set_layouts(&layouts);
+        let descriptor_set = device.allocate_descriptor_sets(&ds_alloc).unwrap()[0];
+
         let img_info_ds = vk::DescriptorImageInfo::default()
             .sampler(self.sampler)
             .image_view(view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
         let write = vk::WriteDescriptorSet::default()
-            .dst_set(self.descriptor_set)
+            .dst_set(descriptor_set)
             .dst_binding(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(std::slice::from_ref(&img_info_ds));
         device.update_descriptor_sets(&[write], &[]);
 
-        self.upload_font_data(ds);
+        // Upload pixel data
+        Self::upload_texture_data(device, &vk_tex, w, h, pixels);
 
         // Transition to SHADER_READ_ONLY_OPTIMAL
         let cb = self.command_buffers[0];
         let _ = device.wait_for_fences(&[self.fences[0]], true, u64::MAX);
         let _ = device.reset_fences(&[self.fences[0]]);
         device
-            .begin_command_buffer(cb, &vk::CommandBufferBeginInfo::default().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT))
+            .begin_command_buffer(
+                cb,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )
             .unwrap();
 
         let barrier = vk::ImageMemoryBarrier::default()
@@ -633,19 +665,46 @@ impl VkOverlay {
             .queue_submit(ds.queue, &[submit], self.fences[0])
             .unwrap();
         let _ = device.wait_for_fences(&[self.fences[0]], true, u64::MAX);
+
+        ManagedTexture {
+            vk_tex,
+            descriptor_set,
+            atlas: pixels.to_vec(),
+            size: [w, h],
+        }
     }
 
-    unsafe fn upload_font_data(&self, ds: &DeviceState) {
-        let Some(tex) = &self.font_texture else { return };
-        let device = &ds.device;
+    unsafe fn upload_texture_data(
+        device: &ash::Device,
+        tex: &VkTexture,
+        width: usize,
+        height: usize,
+        data: &[u8],
+    ) {
+        let subres = vk::ImageSubresource::default()
+            .aspect_mask(vk::ImageAspectFlags::COLOR);
+        let layout = device.get_image_subresource_layout(tex.image, subres);
+        let row_pitch = layout.row_pitch as usize;
+        let src_stride = width * 4;
+
         let data_ptr = device
             .map_memory(tex.memory, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
             .unwrap();
-        std::ptr::copy_nonoverlapping(
-            self.font_atlas.as_ptr(),
-            data_ptr as *mut u8,
-            self.font_atlas.len(),
-        );
+        let dst = data_ptr as *mut u8;
+
+        if row_pitch == src_stride {
+            std::ptr::copy_nonoverlapping(data.as_ptr(), dst, data.len());
+        } else {
+            for row in 0..height {
+                let src_off = row * src_stride;
+                let dst_off = layout.offset as usize + row * row_pitch;
+                std::ptr::copy_nonoverlapping(
+                    data.as_ptr().add(src_off),
+                    dst.add(dst_off),
+                    src_stride,
+                );
+            }
+        }
         device.unmap_memory(tex.memory);
     }
 
@@ -725,11 +784,12 @@ impl VkOverlay {
         let output = self.ctx.run_pass(raw_input, |ctx| draw(ctx));
 
         for (id, deltas) in &output.textures_delta.set {
-            if matches!(id, egui::TextureId::Managed(_)) {
-                for delta in deltas {
-                    self.update_font_texture(ds, delta);
-                }
+            for delta in deltas {
+                self.update_texture(ds, *id, delta);
             }
+        }
+        for id in &output.textures_delta.free {
+            self.free_texture(ds, *id);
         }
 
         let primitives = self.ctx.tessellate(output.shapes, scale);
@@ -742,6 +802,7 @@ impl VkOverlay {
             index_offset: u32,
             index_count: u32,
             clip_rect: egui::Rect,
+            texture_id: egui::TextureId,
         }
         let mut draw_cmds = Vec::new();
 
@@ -771,6 +832,7 @@ impl VkOverlay {
                 index_offset,
                 index_count: mesh.indices.len() as u32,
                 clip_rect: prim.clip_rect,
+                texture_id: mesh.texture_id,
             });
         }
 
@@ -822,15 +884,6 @@ impl VkOverlay {
             .clear_values(&clear_values);
         device.cmd_begin_render_pass(cb, &rp_begin, vk::SubpassContents::INLINE);
         device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
-        device.cmd_bind_descriptor_sets(
-            cb,
-            vk::PipelineBindPoint::GRAPHICS,
-            self.pipeline_layout,
-            0,
-            &[self.descriptor_set],
-            &[],
-        );
-
         let screen_size = [pw, ph];
         device.cmd_push_constants(
             cb,
@@ -852,6 +905,18 @@ impl VkOverlay {
         device.cmd_bind_index_buffer(cb, ib, 0, vk::IndexType::UINT32);
 
         for cmd in &draw_cmds {
+            let Some(mt) = self.textures.get(&cmd.texture_id) else {
+                continue;
+            };
+            device.cmd_bind_descriptor_sets(
+                cb,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                0,
+                &[mt.descriptor_set],
+                &[],
+            );
+
             let min_x = (cmd.clip_rect.min.x * scale).round().max(0.0) as i32;
             let min_y = (cmd.clip_rect.min.y * scale).round().max(0.0) as i32;
             let max_x = (cmd.clip_rect.max.x * scale)
