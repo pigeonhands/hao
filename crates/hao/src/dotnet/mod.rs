@@ -1,3 +1,4 @@
+pub mod class;
 pub mod csharp;
 pub mod entries;
 pub mod il;

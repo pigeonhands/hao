@@ -143,7 +143,7 @@ impl ChainImports {
 /// ```
 #[macro_export]
 macro_rules! callchain {
-    // ── entry point ──────────────────────────────────────────────────
+    // ── entry point: normalize sections and dispatch to @build ───────
     (
         imports: $imports:expr,
         $( methods { $($mname:ident : $mexpr:expr),+ $(,)? }, )?
@@ -158,13 +158,70 @@ macro_rules! callchain {
             $(,)?
         } )?
         $(,)?
+    ) => {
+        $crate::callchain!(@build ($imports),
+            methods( $($( $mname : $mexpr, )+)? ),
+            consts( $($( $cname : $cexpr, )+)? ),
+            params( $($( $pname : $pkind, )+)? ),
+            errors( $( $ename = $ecode, )* ),
+            chain( $($stmts)* ),
+            returns( $( $rptr : $rty {
+                $( $rfield : $rlocal ),+
+                $(, ..copy( $tsrc + $tsoff , $tlen )
+                    within $tcap else $terr )?
+            } )? )
+        )
+    };
+
+    // ── entry point used by `dotnet_class!`: the class declaration owns
+    //    the parameter list, so the signature always matches the chain. ──
+    (@from_class params( $($pname:ident : $pkind:ident),* $(,)? ),
+        imports: $imports:expr,
+        $( methods { $($mname:ident : $mexpr:expr),+ $(,)? }, )?
+        $( consts { $($cname:ident : $cexpr:expr),+ $(,)? }, )?
+        errors { $($ename:ident = $ecode:literal),* $(,)? },
+        chain { $($stmts:tt)* }
+        $( , returns $rptr:ident : $rty:ty {
+            $($rfield:ident : $rlocal:ident),+
+            $(, ..copy( $tsrc:ident + $tsoff:expr , $tlen:ident )
+                within $tcap:ident else $terr:ident )?
+            $(,)?
+        } )?
+        $(,)?
+    ) => {
+        $crate::callchain!(@build ($imports),
+            methods( $($( $mname : $mexpr, )+)? ),
+            consts( $($( $cname : $cexpr, )+)? ),
+            params( $( $pname : $pkind, )* ),
+            errors( $( $ename = $ecode, )* ),
+            chain( $($stmts)* ),
+            returns( $( $rptr : $rty {
+                $( $rfield : $rlocal ),+
+                $(, ..copy( $tsrc + $tsoff , $tlen )
+                    within $tcap else $terr )?
+            } )? )
+        )
+    };
+
+    // ── the single expansion both entry points dispatch to ───────────
+    (@build ($imports:expr),
+        methods( $($mname:ident : $mexpr:expr,)* ),
+        consts( $($cname:ident : $cexpr:expr,)* ),
+        params( $($pname:ident : $pkind:ident,)* ),
+        errors( $($ename:ident = $ecode:literal,)* ),
+        chain( $($stmts:tt)* ),
+        returns( $( $rptr:ident : $rty:ty {
+            $($rfield:ident : $rlocal:ident),+
+            $(, ..copy( $tsrc:ident + $tsoff:expr , $tlen:ident )
+                within $tcap:ident else $terr:ident )?
+        } )? )
     ) => {{
         let __imports = $imports;
-        $( $( let $mname: usize = $mexpr; )+ )?
-        $( $( let $cname: i64 = $cexpr; )+ )?
+        $( let $mname: usize = $mexpr; )*
+        $( let $cname: i64 = $cexpr; )*
         $crate::dotnet::il::Emitter::build(|__e| {
             // Baked method pointers → NATIVE_INT locals.
-            $( $( let $mname: u16 = {
+            $( let $mname: u16 = {
                 let __ptr = $mname;
                 let __local =
                     __e.declare_local($crate::dotnet::signature::TypeSig::NATIVE_INT);
@@ -172,17 +229,17 @@ macro_rules! callchain {
                     .op($crate::dotnet::il::OpCode::Conv_I)
                     .stloc(__local);
                 __local
-            }; )+ )?
+            }; )*
             // Baked constants → INT64 locals.
-            $( $( let $cname: u16 = {
+            $( let $cname: u16 = {
                 let __value = $cname;
                 let __local =
                     __e.declare_local($crate::dotnet::signature::TypeSig::INT64);
                 __e.ldc_i8(__value).stloc(__local);
                 __local
-            }; )+ )?
+            }; )*
             // Parameters → locals, by position.
-            $( $crate::callchain!(@params __e, 0u16, $($pname : $pkind,)+); )?
+            $crate::callchain!(@params __e, 0u16, $($pname : $pkind,)*);
             let __result: u16 =
                 __e.declare_local($crate::dotnet::signature::TypeSig::INT64);
             // Default return value = -1 (managed exception).
