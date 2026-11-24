@@ -152,6 +152,17 @@ impl Emitter {
         self
     }
 
+    /// Calls the function pointer on top of the stack (above the arguments)
+    /// with the given signature, e.g. one built with
+    /// [`MethodSig::unmanaged_suppress_gc`].
+    pub fn calli(&mut self, signature: MethodSig) -> &mut Self {
+        self.emit(Instruction::new(OpCode::Calli, Operand::Sig(signature)))
+    }
+
+    pub fn ldc_i8(&mut self, value: i64) -> &mut Self {
+        self.emit(Instruction::new(OpCode::Ldc_I8, Operand::Int64(value)))
+    }
+
     pub fn ret(&mut self) -> &mut Self {
         self.emit(Instruction::ret())
     }

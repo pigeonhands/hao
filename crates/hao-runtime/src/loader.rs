@@ -575,33 +575,6 @@ fn get_method_names_body(t: &Tokens) -> hao::dotnet::il::MethodBody {
     })
 }
 
-/// Builds a `calli` signature that uses `CallingConvention::Unmanaged` with
-/// `modopt(CallConvCdecl)` + `modopt(CallConvSuppressGCTransition)` on the
-/// return type.  This keeps the calling thread in cooperative GC mode during
-/// the call, so the GC cannot relocate managed objects mid-flight.
-fn suppress_gc_calli_sig(
-    ret: TypeSig,
-    params: Vec<TypeSig>,
-    callconv_cdecl: &TypeDefOrRef,
-    callconv_suppress: &TypeDefOrRef,
-) -> MethodSig {
-    let wrapped_ret = TypeSig::Modified {
-        required: false,
-        modifier: callconv_suppress.clone(),
-        ty: Box::new(TypeSig::Modified {
-            required: false,
-            modifier: callconv_cdecl.clone(),
-            ty: Box::new(ret),
-        }),
-    };
-    MethodSig {
-        calling_convention: hao::dotnet::signature::CallingConvention::Unmanaged,
-        ret: wrapped_ret,
-        params,
-        ..Default::default()
-    }
-}
-
 /// `long Invoke(IntPtr methodPtr, long a0, long a1, long a2, long a3, long a4, long a5)`
 ///
 /// Calls the JIT'd method at `methodPtr` with up to 6 int64 arguments.
@@ -613,20 +586,16 @@ fn invoke_body(
     callconv_cdecl: &TypeDefOrRef,
     callconv_suppress: &TypeDefOrRef,
 ) -> hao::dotnet::il::MethodBody {
-    use hao::dotnet::il::{Instruction, Operand};
     Emitter::build(|e| {
         for i in 1..=6u16 {
             e.ldarg(i);
         }
         e.ldarg(0);
-        e.emit(Instruction::new(
-            OpCode::Calli,
-            Operand::Sig(suppress_gc_calli_sig(
-                TypeSig::INT64,
-                vec![TypeSig::INT64; 6],
-                callconv_cdecl,
-                callconv_suppress,
-            )),
+        e.calli(MethodSig::unmanaged_suppress_gc(
+            TypeSig::INT64,
+            vec![TypeSig::INT64; 6],
+            callconv_cdecl,
+            callconv_suppress,
         ));
         e.ret();
     })
@@ -639,20 +608,16 @@ fn invoke_float_body(
     callconv_cdecl: &TypeDefOrRef,
     callconv_suppress: &TypeDefOrRef,
 ) -> hao::dotnet::il::MethodBody {
-    use hao::dotnet::il::{Instruction, Operand};
     Emitter::build(|e| {
         for i in 1..=6u16 {
             e.ldarg(i);
         }
         e.ldarg(0);
-        e.emit(Instruction::new(
-            OpCode::Calli,
-            Operand::Sig(suppress_gc_calli_sig(
-                TypeSig::FLOAT64,
-                vec![TypeSig::INT64; 6],
-                callconv_cdecl,
-                callconv_suppress,
-            )),
+        e.calli(MethodSig::unmanaged_suppress_gc(
+            TypeSig::FLOAT64,
+            vec![TypeSig::INT64; 6],
+            callconv_cdecl,
+            callconv_suppress,
         ));
         e.ret();
     })

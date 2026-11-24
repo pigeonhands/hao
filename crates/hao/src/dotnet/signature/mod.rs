@@ -279,6 +279,38 @@ impl MethodSig {
         }
     }
 
+    /// A `calli` signature with `CallingConvention::Unmanaged` and
+    /// `modopt(CallConvSuppressGCTransition)` + `modopt(CallConvCdecl)`
+    /// wrapping the return type, keeping the calling thread in cooperative
+    /// GC mode for the duration of the call — the GC cannot relocate
+    /// managed objects while such calls are in flight.
+    ///
+    /// The modifier nesting order (suppress outermost) is what the runtime
+    /// expects; pass the two `System.Runtime.CompilerServices` modifier
+    /// types resolved via `Module::corlib_type`.
+    pub fn unmanaged_suppress_gc(
+        ret: TypeSig,
+        params: Vec<TypeSig>,
+        callconv_cdecl: &TypeDefOrRef,
+        callconv_suppress: &TypeDefOrRef,
+    ) -> Self {
+        let wrapped_ret = TypeSig::Modified {
+            required: false,
+            modifier: callconv_suppress.clone(),
+            ty: Box::new(TypeSig::Modified {
+                required: false,
+                modifier: callconv_cdecl.clone(),
+                ty: Box::new(ret),
+            }),
+        };
+        Self {
+            calling_convention: CallingConvention::Unmanaged,
+            ret: wrapped_ret,
+            params,
+            ..Default::default()
+        }
+    }
+
     pub fn new_instance(ret: TypeSig, params: Vec<TypeSig>) -> Self {
         Self {
             flags: SignatureFlags::HAS_THIS,

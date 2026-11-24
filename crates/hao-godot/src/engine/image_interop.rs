@@ -22,9 +22,9 @@ use hao_runtime::hao::{
             },
             Method, TypeDef, TypeDefOrRef,
         },
-        il::{Emitter, Instruction, MethodBody, OpCode, Operand},
+        il::{Emitter, MethodBody, OpCode},
         module::{ModuleKind, TargetRuntime},
-        signature::{CallingConvention, MethodSig, TypeSig},
+        signature::{MethodSig, TypeSig},
     },
     Module,
 };
@@ -109,32 +109,6 @@ fn build_assembly(major: u16) -> hao_runtime::hao::error::Result<Module> {
     Ok(module)
 }
 
-/// A `calli` signature with `CallingConvention::Unmanaged` and
-/// `modopt(CallConvCdecl)` + `modopt(CallConvSuppressGCTransition)` on the
-/// return type, keeping the calling thread in cooperative GC mode.
-fn suppress_gc_calli_sig(
-    ret: TypeSig,
-    params: Vec<TypeSig>,
-    callconv_cdecl: &TypeDefOrRef,
-    callconv_suppress: &TypeDefOrRef,
-) -> MethodSig {
-    let wrapped_ret = TypeSig::Modified {
-        required: false,
-        modifier: callconv_suppress.clone(),
-        ty: Box::new(TypeSig::Modified {
-            required: false,
-            modifier: callconv_cdecl.clone(),
-            ty: Box::new(ret),
-        }),
-    };
-    MethodSig {
-        calling_convention: CallingConvention::Unmanaged,
-        ret: wrapped_ret,
-        params,
-        ..Default::default()
-    }
-}
-
 /// `long ExtractImageRgba(IntPtr argsPtr, IntPtr resultPtr, long resultBufSize)`
 ///
 /// ## Args buffer layout (8 × i64)
@@ -167,13 +141,13 @@ fn extract_image_rgba_body(
     callconv_cdecl: &TypeDefOrRef,
     callconv_suppress: &TypeDefOrRef,
 ) -> MethodBody {
-    let calli_1_arg = suppress_gc_calli_sig(
+    let calli_1_arg = MethodSig::unmanaged_suppress_gc(
         TypeSig::INT64,
         vec![TypeSig::INT64],
         callconv_cdecl,
         callconv_suppress,
     );
-    let calli_2_arg = suppress_gc_calli_sig(
+    let calli_2_arg = MethodSig::unmanaged_suppress_gc(
         TypeSig::INT64,
         vec![TypeSig::INT64, TypeSig::INT64],
         callconv_cdecl,
@@ -221,38 +195,38 @@ fn extract_image_rgba_body(
                 // ── Texture2DGet(rid) → managed Image ─────────────────
                 e.ldloc(rid);
                 e.ldloc(fn_tex2d_get);
-                e.emit(Instruction::new(OpCode::Calli, Operand::Sig(calli_1_arg.clone())));
+                e.calli(calli_1_arg.clone());
                 e.stloc(img);
                 e.ldloc(img).branch(OpCode::Brfalse, err_null_image);
 
                 // ── Decompress(img) ───────────────────────────────────
                 e.ldloc(img);
                 e.ldloc(fn_decompress);
-                e.emit(Instruction::new(OpCode::Calli, Operand::Sig(calli_1_arg.clone())));
+                e.calli(calli_1_arg.clone());
                 e.op(OpCode::Pop);
 
                 // ── Convert(img, rgba8) ───────────────────────────────
                 e.ldloc(img);
                 e.ldloc(rgba8);
                 e.ldloc(fn_convert);
-                e.emit(Instruction::new(OpCode::Calli, Operand::Sig(calli_2_arg.clone())));
+                e.calli(calli_2_arg.clone());
                 e.op(OpCode::Pop);
 
                 // ── GetWidth(img), GetHeight(img) ─────────────────────
                 e.ldloc(img);
                 e.ldloc(fn_get_width);
-                e.emit(Instruction::new(OpCode::Calli, Operand::Sig(calli_1_arg.clone())));
+                e.calli(calli_1_arg.clone());
                 e.stloc(w);
 
                 e.ldloc(img);
                 e.ldloc(fn_get_height);
-                e.emit(Instruction::new(OpCode::Calli, Operand::Sig(calli_1_arg.clone())));
+                e.calli(calli_1_arg.clone());
                 e.stloc(h);
 
                 // ── GetData(img) → managed byte[] ─────────────────────
                 e.ldloc(img);
                 e.ldloc(fn_get_data);
-                e.emit(Instruction::new(OpCode::Calli, Operand::Sig(calli_1_arg.clone())));
+                e.calli(calli_1_arg.clone());
                 e.stloc(arr);
                 e.ldloc(arr).branch(OpCode::Brfalse, err_null_data);
 
