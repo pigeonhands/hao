@@ -133,6 +133,142 @@ fn matches_hand_built_body() {
 }
 
 #[test]
+fn control_flow_matches_hand_built_body() {
+    use hao::dotnet::entries::well_known::{AppDomainMethod, StringExtMethod};
+
+    let mut module = test_module();
+    let exception = module.corlib_type(SystemType::Exception).unwrap();
+    let app_domain = module.corlib_type(SystemType::AppDomain).unwrap();
+    let assembly = module.corlib_type(SystemReflectionType::Assembly).unwrap();
+    let get_current_domain = module
+        .import_well_known_method(WellKnownMethod::AppDomain(AppDomainMethod::GetCurrentDomain))
+        .unwrap();
+    let get_assemblies = module
+        .import_well_known_method(WellKnownMethod::AppDomain(AppDomainMethod::GetAssemblies))
+        .unwrap();
+    let string_equals = module
+        .import_well_known_method(WellKnownMethod::StringExt(StringExtMethod::OpEquality))
+        .unwrap();
+    let get_length = module
+        .import_well_known_method(WellKnownMethod::String(
+            hao::dotnet::entries::well_known::StringMethod::GetLength,
+        ))
+        .unwrap();
+    let concat = module
+        .import_well_known_method(WellKnownMethod::String(
+            hao::dotnet::entries::well_known::StringMethod::Concat2,
+        ))
+        .unwrap();
+
+    let generated = hao::managed_body! {
+        exception: exception.clone(),
+        types {
+            AppDomain: class(app_domain.clone()),
+            Assembly: class(assembly.clone()),
+            Assemblies: array(Assembly),
+        },
+        methods {
+            get_current_domain: static &get_current_domain,
+            get_assemblies: virtual &get_assemblies,
+            string_equals: static &string_equals,
+            get_length: virtual &get_length,
+            concat: static &concat,
+        },
+        params(k: i32),
+        result: i32 = 0,
+        body {
+            let acc: string = str "";
+            let needle: string = str "x";
+            let domain: AppDomain = get_current_domain();
+            let asms: Assemblies = domain.get_assemblies();
+            let n: i32 = len(asms);
+            for a: Assembly in asms {
+                if n == k {
+                    result = const 1;
+                    return;
+                }
+                if acc.get_length() {
+                    acc = concat(acc, str "\n");
+                } else {
+                    acc = concat(acc, needle);
+                }
+                if string_equals(acc, needle) {
+                    return;
+                }
+            }
+        },
+    };
+
+    let expected = Emitter::build(|e| {
+        let k = e.declare_local(TypeSig::INT32);
+        e.ldarg(0).stloc(k);
+        let result = e.declare_local(TypeSig::INT32);
+        e.ldc_i4(0).stloc(result);
+        let done = e.label();
+        e.try_catch(
+            exception,
+            |e| {
+                let acc = e.declare_local(TypeSig::STRING);
+                e.ldstr("").stloc(acc);
+                let needle = e.declare_local(TypeSig::STRING);
+                e.ldstr("x").stloc(needle);
+                let domain = e.declare_local(TypeSig::class(app_domain.clone()));
+                e.call(&get_current_domain).stloc(domain);
+                let asms =
+                    e.declare_local(TypeSig::sz_array(TypeSig::class(assembly.clone())));
+                e.ldloc(domain).callvirt(&get_assemblies).stloc(asms);
+                let n = e.declare_local(TypeSig::INT32);
+                e.ldloc(asms).op(OpCode::Ldlen).op(OpCode::Conv_I4).stloc(n);
+                // for a: Assembly in asms
+                let idx = e.declare_local(TypeSig::INT32);
+                e.ldc_i4(0).stloc(idx);
+                let a = e.declare_local(TypeSig::class(assembly.clone()));
+                e.while_loop(
+                    |e| {
+                        e.ldloc(idx).ldloc(asms);
+                        e.op(OpCode::Ldlen).op(OpCode::Conv_I4).op(OpCode::Clt);
+                    },
+                    |e| {
+                        e.ldloc(asms).ldloc(idx).op(OpCode::Ldelem_Ref).stloc(a);
+                        // if n == k { result = 1; return; }
+                        e.ldloc(n).ldloc(k).op(OpCode::Ceq);
+                        e.if_then(|e| {
+                            e.ldc_i4(1).stloc(result);
+                            e.branch(OpCode::Leave, done);
+                        });
+                        // if acc.get_length() { .. } else { .. }
+                        e.ldloc(acc).callvirt(&get_length);
+                        e.if_else(
+                            |e| {
+                                e.ldloc(acc).ldstr("\n").call(&concat).stloc(acc);
+                            },
+                            |e| {
+                                e.ldloc(acc).ldloc(needle).call(&concat).stloc(acc);
+                            },
+                        );
+                        // if string_equals(acc, needle) { return; }
+                        e.ldloc(acc).ldloc(needle).call(&string_equals);
+                        e.if_then(|e| {
+                            e.branch(OpCode::Leave, done);
+                        });
+                        e.ldloc(idx).ldc_i4(1).op(OpCode::Add).stloc(idx);
+                    },
+                );
+            },
+            |e| {
+                e.pop();
+            },
+        );
+        e.mark(done);
+        e.ldloc(result).ret();
+    });
+
+    assert_eq!(generated.locals, expected.locals);
+    assert_eq!(generated.instructions, expected.instructions);
+    assert_eq!(generated.exception_handlers, expected.exception_handlers);
+}
+
+#[test]
 fn void_body_and_custom_catch() {
     let mut module = test_module();
     let exception = module.corlib_type(SystemType::Exception).unwrap();

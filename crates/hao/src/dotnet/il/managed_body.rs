@@ -112,6 +112,7 @@ impl ManagedMethod {
 ///     types {                                           // named local types
 ///         Name: class(<expr: TypeDefOrRef>),
 ///         Name: valuetype(<expr: TypeDefOrRef>),
+///         Name: array(Earlier),         // sz-array of a previously declared name
 ///     },
 ///     methods {                                         // named methods
 ///         name: static <expr: impl Into<MemberToken>>,  // call, no receiver
@@ -123,20 +124,33 @@ impl ManagedMethod {
 ///     body {
 ///         let x: Ty = m(a, b);      // Ty: a `types` name, or a primitive
 ///         let x: Ty = recv.m(a);    //   (string/object/i64/i32/nint/f64/bool)
+///         let x: Ty = str "lit";    // ldstr init
+///         let n: i32 = len(arr);    // array length (ldlen + conv.i4)
 ///         m(a); | recv.m(a);        // void call
 ///         _ = m(a);                 // call, discard result
+///         x = [recv.]m(a);          // assign an existing local
 ///         result = [recv.]m(a);     // call -> conv to result type -> store
+///         result = const <expr>;    // set the result to an emit-time i32
+///         for x: Ty in arr { ... }  // index loop over an array local
+///         if <cond> { ... }         // structured if; optional else { ... }
+///         return;                   // early exit to the function epilogue
 ///         raw |e| { ... }           // &mut Emitter; add `, r` for the result
 ///         raw |e, r| { ... }        //   local as a ManagedLocal
 ///     },
+///     // <cond> ::= local            (truthy: non-null / non-zero)
+///     //          | [recv.]m(a, b)   (call result, truthy)
+///     //          | a == b           (i32 equality)
 ///     catch |e| { ... },            // optional; default handler is `pop`.
 ///     catch |e, r| { ... },         //   The exception object is on the stack.
 /// }
 /// ```
 ///
-/// Argument positions take a local/param name or `const <expr>`
-/// (an emit-time `i32`, loaded with `ldc_i4`).  A non-`()` result requires a
-/// default literal; it is returned when the body throws.
+/// Argument positions take a local/param name, `const <expr>` (an emit-time
+/// `i32`, loaded with `ldc_i4`), or `str "lit"` (`ldstr`).  A non-`()` result
+/// requires a default literal; it is returned when the body throws.
+/// `len`, `str`, `const`, `for`, `if`, `return` and `raw` are reserved words
+/// in the body DSL.  Anything the statement forms cannot express — further
+/// loop shapes, arithmetic — belongs in `raw` or directly on `Emitter`.
 ///
 /// # Example
 ///
@@ -255,16 +269,18 @@ macro_rules! managed_body {
             $crate::managed_body!(@params __e, 0u16, $($pname : $pkind,)*);
             // Result local + default, unless the body is void.
             $crate::managed_body!(@result_decl __e, __result, $rty $( = $rdefault )?);
+            let __done = __e.label();
             __e.try_catch(
                 __exc,
                 |__e| {
-                    $crate::managed_body!(@stmts __e, __result, $rty, $($stmts)*);
+                    $crate::managed_body!(@stmts __e, __result, $rty, __done, $($stmts)*);
                 },
                 |__e| {
                     $crate::managed_body!(@catch __e, __result,
                         $( | $ce $(, $cr)? | $cbody )?);
                 },
             );
+            __e.mark(__done);
             $crate::managed_body!(@result_ret __e, __result, $rty);
         })
     }};
@@ -272,6 +288,8 @@ macro_rules! managed_body {
     // ── sections ─────────────────────────────────────────────────────
     (@type_sig class, $e:expr) => { $crate::dotnet::signature::TypeSig::class($e) };
     (@type_sig valuetype, $e:expr) => { $crate::dotnet::signature::TypeSig::value_type($e) };
+    // array(Name) — an sz-array of a previously declared `types` name.
+    (@type_sig array, $e:expr) => { $crate::dotnet::signature::TypeSig::sz_array($e.clone()) };
     (@call_kind static) => { $crate::dotnet::il::CallKind::Static };
     (@call_kind instance) => { $crate::dotnet::il::CallKind::Instance };
     (@call_kind virtual) => { $crate::dotnet::il::CallKind::Virtual };
@@ -339,8 +357,36 @@ macro_rules! managed_body {
     };
 
     // ── body statements (muncher; arm order matters) ─────────────────
-    (@stmts $e:ident, $r:ident, $rty:tt,) => {};
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,) => {};
+    // let x: Ty = str "lit";
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        let $dst:ident : $ty:tt = str $s:literal ; $($rest:tt)*
+    ) => {
+        let $dst: $crate::dotnet::il::ManagedLocal =
+            $crate::dotnet::il::ManagedLocal::declare(
+                $e,
+                $crate::managed_body!(@local_sig $ty),
+            );
+        $e.ldstr($s);
+        $dst.store($e);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    // let n: i32 = len(arr);
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        let $dst:ident : i32 = len ( $arr:ident ) ; $($rest:tt)*
+    ) => {
+        let $dst: $crate::dotnet::il::ManagedLocal =
+            $crate::dotnet::il::ManagedLocal::declare(
+                $e,
+                $crate::dotnet::signature::TypeSig::INT32,
+            );
+        $arr.load($e);
+        $e.op($crate::dotnet::il::OpCode::Ldlen)
+            .op($crate::dotnet::il::OpCode::Conv_I4);
+        $dst.store($e);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         let $dst:ident : $ty:tt = $recv:ident . $m:ident ( $($args:tt)* ) ; $($rest:tt)*
     ) => {
         let $dst: $crate::dotnet::il::ManagedLocal =
@@ -352,9 +398,9 @@ macro_rules! managed_body {
         $crate::managed_body!(@args $e, $($args)*);
         $m.emit_call($e);
         $dst.store($e);
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         let $dst:ident : $ty:tt = $m:ident ( $($args:tt)* ) ; $($rest:tt)*
     ) => {
         let $dst: $crate::dotnet::il::ManagedLocal =
@@ -365,9 +411,18 @@ macro_rules! managed_body {
         $crate::managed_body!(@args $e, $($args)*);
         $m.emit_call($e);
         $dst.store($e);
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    // result = const <expr>;
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        result = const $c:expr ; $($rest:tt)*
+    ) => {
+        $e.ldc_i4($c);
+        $crate::managed_body!(@result_conv $e, $rty);
+        $r.store($e);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         result = $recv:ident . $m:ident ( $($args:tt)* ) ; $($rest:tt)*
     ) => {
         $recv.load_receiver($e);
@@ -375,44 +430,166 @@ macro_rules! managed_body {
         $m.emit_call($e);
         $crate::managed_body!(@result_conv $e, $rty);
         $r.store($e);
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         result = $m:ident ( $($args:tt)* ) ; $($rest:tt)*
     ) => {
         $crate::managed_body!(@args $e, $($args)*);
         $m.emit_call($e);
         $crate::managed_body!(@result_conv $e, $rty);
         $r.store($e);
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         _ = $recv:ident . $m:ident ( $($args:tt)* ) ; $($rest:tt)*
     ) => {
         $recv.load_receiver($e);
         $crate::managed_body!(@args $e, $($args)*);
         $m.emit_call($e);
         $e.pop();
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         _ = $m:ident ( $($args:tt)* ) ; $($rest:tt)*
     ) => {
         $crate::managed_body!(@args $e, $($args)*);
         $m.emit_call($e);
         $e.pop();
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    // return; — leave the try region for the function epilogue.
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        return ; $($rest:tt)*
+    ) => {
+        $e.branch($crate::dotnet::il::OpCode::Leave, $d);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    // for x: Ty in arr { ... }
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        for $x:ident : $ty:tt in $arr:ident { $($body:tt)* } $($rest:tt)*
+    ) => {
+        let __idx = $crate::dotnet::il::ManagedLocal::declare(
+            $e,
+            $crate::dotnet::signature::TypeSig::INT32,
+        );
+        $e.ldc_i4(0);
+        __idx.store($e);
+        let $x: $crate::dotnet::il::ManagedLocal =
+            $crate::dotnet::il::ManagedLocal::declare(
+                $e,
+                $crate::managed_body!(@local_sig $ty),
+            );
+        $e.while_loop(
+            |__e| {
+                __idx.load(__e);
+                $arr.load(__e);
+                __e.op($crate::dotnet::il::OpCode::Ldlen)
+                    .op($crate::dotnet::il::OpCode::Conv_I4)
+                    .op($crate::dotnet::il::OpCode::Clt);
+            },
+            |__e| {
+                $arr.load(__e);
+                __idx.load(__e);
+                __e.op($crate::dotnet::il::OpCode::Ldelem_Ref);
+                $x.store(__e);
+                $crate::managed_body!(@stmts __e, $r, $rty, $d, $($body)*);
+                __idx.load(__e);
+                __e.ldc_i4(1).op($crate::dotnet::il::OpCode::Add);
+                __idx.store(__e);
+            },
+        );
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    // if <cond> { ... } [else { ... }]
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        if $a:ident == $b:ident { $($then:tt)* } else { $($else:tt)* } $($rest:tt)*
+    ) => {
+        $a.load($e);
+        $b.load($e);
+        $e.op($crate::dotnet::il::OpCode::Ceq);
+        $e.if_else(
+            |__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($then)*); },
+            |__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($else)*); },
+        );
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        if $a:ident == $b:ident { $($then:tt)* } $($rest:tt)*
+    ) => {
+        $a.load($e);
+        $b.load($e);
+        $e.op($crate::dotnet::il::OpCode::Ceq);
+        $e.if_then(|__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($then)*); });
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        if $recv:ident . $m:ident ( $($args:tt)* ) { $($then:tt)* } else { $($else:tt)* } $($rest:tt)*
+    ) => {
+        $recv.load_receiver($e);
+        $crate::managed_body!(@args $e, $($args)*);
+        $m.emit_call($e);
+        $e.if_else(
+            |__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($then)*); },
+            |__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($else)*); },
+        );
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        if $recv:ident . $m:ident ( $($args:tt)* ) { $($then:tt)* } $($rest:tt)*
+    ) => {
+        $recv.load_receiver($e);
+        $crate::managed_body!(@args $e, $($args)*);
+        $m.emit_call($e);
+        $e.if_then(|__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($then)*); });
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        if $m:ident ( $($args:tt)* ) { $($then:tt)* } else { $($else:tt)* } $($rest:tt)*
+    ) => {
+        $crate::managed_body!(@args $e, $($args)*);
+        $m.emit_call($e);
+        $e.if_else(
+            |__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($then)*); },
+            |__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($else)*); },
+        );
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        if $m:ident ( $($args:tt)* ) { $($then:tt)* } $($rest:tt)*
+    ) => {
+        $crate::managed_body!(@args $e, $($args)*);
+        $m.emit_call($e);
+        $e.if_then(|__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($then)*); });
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        if $x:ident { $($then:tt)* } else { $($else:tt)* } $($rest:tt)*
+    ) => {
+        $x.load($e);
+        $e.if_else(
+            |__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($then)*); },
+            |__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($else)*); },
+        );
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        if $x:ident { $($then:tt)* } $($rest:tt)*
+    ) => {
+        $x.load($e);
+        $e.if_then(|__e| { $crate::managed_body!(@stmts __e, $r, $rty, $d, $($then)*); });
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         raw | $re:ident | $body:block $($rest:tt)*
     ) => {
         {
             let $re: &mut $crate::dotnet::il::Emitter = &mut *$e;
             $body
         }
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         raw | $re:ident , $rr:ident | $body:block $($rest:tt)*
     ) => {
         {
@@ -420,26 +597,51 @@ macro_rules! managed_body {
             let $re: &mut $crate::dotnet::il::Emitter = &mut *$e;
             $body
         }
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    // x = [recv.]m(...); — assign to an existing local.
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        $x:ident = $recv:ident . $m:ident ( $($args:tt)* ) ; $($rest:tt)*
+    ) => {
+        $recv.load_receiver($e);
+        $crate::managed_body!(@args $e, $($args)*);
+        $m.emit_call($e);
+        $x.store($e);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
+        $x:ident = $m:ident ( $($args:tt)* ) ; $($rest:tt)*
+    ) => {
+        $crate::managed_body!(@args $e, $($args)*);
+        $m.emit_call($e);
+        $x.store($e);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
+    };
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         $recv:ident . $m:ident ( $($args:tt)* ) ; $($rest:tt)*
     ) => {
         $recv.load_receiver($e);
         $crate::managed_body!(@args $e, $($args)*);
         $m.emit_call($e);
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
-    (@stmts $e:ident, $r:ident, $rty:tt,
+    (@stmts $e:ident, $r:ident, $rty:tt, $d:ident,
         $m:ident ( $($args:tt)* ) ; $($rest:tt)*
     ) => {
         $crate::managed_body!(@args $e, $($args)*);
         $m.emit_call($e);
-        $crate::managed_body!(@stmts $e, $r, $rty, $($rest)*);
+        $crate::managed_body!(@stmts $e, $r, $rty, $d, $($rest)*);
     };
 
-    // ── call arguments: local names or `const <i32 expr>` ────────────
+    // ── call arguments: locals, `const <i32 expr>`, or `str "lit"` ───
     (@args $e:ident,) => {};
+    (@args $e:ident, str $s:literal) => {
+        $e.ldstr($s);
+    };
+    (@args $e:ident, str $s:literal, $($rest:tt)*) => {
+        $e.ldstr($s);
+        $crate::managed_body!(@args $e, $($rest)*);
+    };
     (@args $e:ident, const $c:expr) => {
         $e.ldc_i4($c);
     };
