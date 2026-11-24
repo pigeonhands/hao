@@ -72,6 +72,15 @@ pub fn resolve_all(rt: &Runtime) -> Result<()> {
     Ok(())
 }
 
+/// Builds, loads and resolves the compound `ExtractImageRgba` method,
+/// caching its JIT entry pointer. Must be called off the Godot main thread
+/// (resolution uses UCO Hao.Loader methods that cannot run in the game
+/// thread's cooperative GC mode); afterwards [`extract_rgba_compound`] makes
+/// only a raw native call and is safe from the game thread.
+pub fn warm_compound(rt: &Runtime) -> Result<()> {
+    super::image_interop::warm(rt)
+}
+
 /// Read the managed `byte[]` returned by `Image.GetData()` into a `Vec<u8>`.
 ///
 /// # Safety

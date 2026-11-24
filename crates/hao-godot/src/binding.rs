@@ -84,27 +84,27 @@ impl Binding {
 
     pub fn call0(&self, rt: &Runtime) -> Result<u64> {
         let ptr = self.resolve(rt)?;
-        rt.invoke(ptr, &[])
+        Ok(unsafe { hao_runtime::jit::call_native(ptr, &[]) })
     }
 
     pub fn call1(&self, rt: &Runtime, a: u64) -> Result<u64> {
         let ptr = self.resolve(rt)?;
-        rt.invoke(ptr, &[a])
+        Ok(unsafe { hao_runtime::jit::call_native(ptr, &[a]) })
     }
 
     pub fn call2(&self, rt: &Runtime, a: u64, b: u64) -> Result<u64> {
         let ptr = self.resolve(rt)?;
-        rt.invoke(ptr, &[a, b])
+        Ok(unsafe { hao_runtime::jit::call_native(ptr, &[a, b]) })
     }
 
     pub fn call3(&self, rt: &Runtime, a: u64, b: u64, c: u64) -> Result<u64> {
         let ptr = self.resolve(rt)?;
-        rt.invoke(ptr, &[a, b, c])
+        Ok(unsafe { hao_runtime::jit::call_native(ptr, &[a, b, c]) })
     }
 
     pub fn call_ptr(&self, rt: &Runtime, args: &[u64]) -> Result<*const c_void> {
         let ptr = self.resolve(rt)?;
-        Ok(rt.invoke(ptr, args)? as *const c_void)
+        Ok(unsafe { hao_runtime::jit::call_native(ptr, args) } as *const c_void)
     }
 
     /// Call the method and read a 4×f32 struct return (e.g. Rect2, Vector4)
