@@ -11,8 +11,8 @@ use hao::{
     dotnet::{
         entries::{
             well_known::{
-                AppDomainMethod, AssemblyMethod, AssemblyNameMethod, ExceptionMethod,
-                GcMethod, MarshalMethod, MemberInfoMethod, MethodBaseMethod,
+                AppDomainMethod, AssemblyMethod, AssemblyNameMethod, BindingFlags,
+                ExceptionMethod, GcMethod, MarshalMethod, MemberInfoMethod, MethodBaseMethod,
                 RuntimeHelpersMethod, RuntimeMethodHandleMethod, StringExtMethod,
                 StringMethod, SystemReflectionType, SystemType, TypeExtMethod, TypeMethod,
                 WellKnownMethod,
@@ -30,8 +30,11 @@ use crate::error::{Error, Result};
 
 const LOADER: &str = "Hao.Loader";
 
-/// Instance | Static | Public | NonPublic
-const BINDING_FLAGS: i32 = 4 | 8 | 16 | 32;
+const BINDING_FLAGS: i32 = BindingFlags::INSTANCE
+    .union(BindingFlags::STATIC)
+    .union(BindingFlags::PUBLIC)
+    .union(BindingFlags::NON_PUBLIC)
+    .bits();
 
 /// Shared tokens imported once and referenced by every body builder.
 struct Tokens {

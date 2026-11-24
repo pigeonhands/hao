@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+
+use bitflags::bitflags;
 use strum::{EnumString, IntoStaticStr};
 
 #[macro_use]
@@ -6,6 +8,38 @@ mod macros;
 
 mod method;
 pub use method::*;
+
+bitflags! {
+    /// The values of `System.Reflection.BindingFlags`, for passing to
+    /// reflection methods such as `Type.GetMethod(string, BindingFlags)`
+    /// (emit with `ldc.i4` via [`bits`](Self::bits)).
+    ///
+    /// The *type reference* for signatures is separate:
+    /// [`SystemReflectionType::BindingFlags`].
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct BindingFlags: i32 {
+        const DEFAULT = 0;
+        const IGNORE_CASE = 1;
+        const DECLARED_ONLY = 2;
+        const INSTANCE = 4;
+        const STATIC = 8;
+        const PUBLIC = 16;
+        const NON_PUBLIC = 32;
+        const FLATTEN_HIERARCHY = 64;
+        const INVOKE_METHOD = 0x100;
+        const CREATE_INSTANCE = 0x200;
+        const GET_FIELD = 0x400;
+        const SET_FIELD = 0x800;
+        const GET_PROPERTY = 0x1000;
+        const SET_PROPERTY = 0x2000;
+        const PUT_DISP_PROPERTY = 0x4000;
+        const PUT_REF_DISP_PROPERTY = 0x8000;
+        const EXACT_BINDING = 0x1_0000;
+        const SUPPRESS_CHANGE_TYPE = 0x2_0000;
+        const OPTIONAL_PARAM_BINDING = 0x4_0000;
+        const IGNORE_RETURN = 0x100_0000;
+    }
+}
 
 well_known_namespaces! {
     "System" => System(SystemType),
