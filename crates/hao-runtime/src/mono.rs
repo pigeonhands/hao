@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     ffi::{c_char, c_int, c_void, CString},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Mutex, OnceLock},
 };
 
 use libloading::Library;
@@ -41,6 +41,10 @@ struct Api {
     method_get_unmanaged_thunk: unsafe extern "C" fn(Ptr) -> Ptr,
     compile_method: unsafe extern "C" fn(Ptr) -> Ptr,
     get_root_domain: unsafe extern "C" fn() -> Ptr,
+    // Bound for completeness; the `enumerate` path resolves virtual methods on
+    // the object directly via `object_get_virtual_method`, which needs no
+    // separate class lookup.
+    #[allow(dead_code)]
     object_get_class: unsafe extern "C" fn(Ptr) -> Ptr,
     object_get_virtual_method: unsafe extern "C" fn(Ptr, Ptr) -> Ptr,
     runtime_invoke: unsafe extern "C" fn(Ptr, Ptr, *mut Ptr, *mut Ptr) -> Ptr,
@@ -59,11 +63,20 @@ const MONO_TABLE_TYPEDEF: c_int = 2;
 /// The top byte of a `TypeDef` metadata token.
 const MONO_TOKEN_TYPE_DEF: u32 = 0x0200_0000;
 
+/// The three corlib `MonoMethod*` (as `usize`) the `enumerate` walk needs,
+/// resolved once so each call avoids a corlib lookup.
+struct EnumMethods {
+    get_enumerator: usize,
+    move_next: usize,
+    get_current: usize,
+}
+
 pub(crate) struct Mono {
     _library: Library,
     api: Api,
     domain: Ptr,
     images: Mutex<HashMap<String, usize>>,
+    enum_methods: OnceLock<EnumMethods>,
 }
 
 // Mono is thread safe once threads are attached, which every call does.
@@ -170,6 +183,7 @@ impl Mono {
             api,
             domain,
             images: Mutex::new(HashMap::new()),
+            enum_methods: OnceLock::new(),
         })
     }
 
@@ -208,6 +222,7 @@ impl Mono {
             api,
             domain,
             images: Mutex::new(HashMap::new()),
+            enum_methods: OnceLock::new(),
         })
     }
 
@@ -469,6 +484,113 @@ impl Mono {
                 break;
             }
             out.push(cstr(unsafe { (self.api.method_get_name)(method) }));
+        }
+        Ok(out)
+    }
+
+    /// Resolves and caches the three `System.Collections` enumerator methods
+    /// (`IEnumerable::GetEnumerator`, `IEnumerator::MoveNext`,
+    /// `IEnumerator::get_Current`) from Mono's corlib, so `enumerate` does no
+    /// per-call lookups. Idempotent.
+    fn enum_methods(&self) -> Result<&EnumMethods> {
+        if let Some(methods) = self.enum_methods.get() {
+            return Ok(methods);
+        }
+        self.attach_thread();
+        let corlib = unsafe { (self.api.get_corlib)() };
+        if corlib.is_null() {
+            return Err(Error::Other("mono_get_corlib returned null".into()));
+        }
+        let resolve = |ns: &str, ty: &str, m: &str| -> Result<usize> {
+            let (ns_c, ty_c, m_c) = (cstring(ns)?, cstring(ty)?, cstring(m)?);
+            unsafe {
+                let class = (self.api.class_from_name)(corlib, ns_c.as_ptr(), ty_c.as_ptr());
+                if class.is_null() {
+                    return Err(Error::NotFound(format!("corlib type {}.{}", ns, ty)));
+                }
+                let method = (self.api.class_get_method_from_name)(class, m_c.as_ptr(), 0);
+                if method.is_null() {
+                    return Err(Error::NotFound(format!("corlib method {}.{}::{}", ns, ty, m)));
+                }
+                Ok(method as usize)
+            }
+        };
+        let methods = EnumMethods {
+            get_enumerator: resolve("System.Collections", "IEnumerable", "GetEnumerator")?,
+            move_next: resolve("System.Collections", "IEnumerator", "MoveNext")?,
+            get_current: resolve("System.Collections", "IEnumerator", "get_Current")?,
+        };
+        Ok(self.enum_methods.get_or_init(|| methods))
+    }
+
+    /// Invokes `method` virtually on `target`: resolves the concrete override
+    /// with `mono_object_get_virtual_method`, then `mono_runtime_invoke` with no
+    /// arguments. Returns `None` if the method can't be resolved or the call
+    /// threw a managed exception; otherwise the (possibly null) returned object.
+    ///
+    /// # Safety
+    /// `target` must be a live `MonoObject*` and `method` a `MonoMethod*`
+    /// applicable to it. Each call is a GC safepoint.
+    unsafe fn invoke_virtual(&self, target: Ptr, method: Ptr) -> Option<Ptr> {
+        let concrete = (self.api.object_get_virtual_method)(target, method);
+        if concrete.is_null() {
+            return None;
+        }
+        let mut exc: Ptr = std::ptr::null_mut();
+        let result = (self.api.runtime_invoke)(concrete, target, std::ptr::null_mut(), &mut exc);
+        if exc.is_null() {
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    /// Resolves and caches the enumerator methods so [`enumerate`](Self::enumerate)
+    /// does no corlib lookups per call. `enumerate` resolves them lazily too, so
+    /// this is only an optimisation and is always safe to skip.
+    pub fn warm_enumerate(&self) -> Result<()> {
+        self.enum_methods()?;
+        Ok(())
+    }
+
+    /// Materializes any managed `IEnumerable` into the addresses of its
+    /// elements, by driving the enumerator through the embedding API:
+    /// `GetEnumerator`, then `MoveNext`/`get_Current` until `MoveNext` is false.
+    ///
+    /// Each element address is a live `MonoObject*`. Unlike CoreCLR's one-shot
+    /// `object[]` read, Mono's SGen is a moving collector and every
+    /// `mono_runtime_invoke` here is a GC safepoint, so a returned address is
+    /// only valid until the next GC — the same raw-pointer contract as the rest
+    /// of this Mono backend. Read or pin what you need before iterating further.
+    pub fn enumerate(&self, obj: usize) -> Result<Vec<usize>> {
+        self.attach_thread();
+        if obj == 0 {
+            return Ok(Vec::new());
+        }
+        let methods = self.enum_methods()?;
+        let target = obj as Ptr;
+        // GetEnumerator -> the enumerator object (boxed when it is a struct).
+        let enumerator = match unsafe { self.invoke_virtual(target, methods.get_enumerator as Ptr) }
+        {
+            Some(e) if !e.is_null() => e,
+            _ => return Ok(Vec::new()),
+        };
+        let mut out = Vec::new();
+        loop {
+            // MoveNext -> a boxed bool; unbox and read the byte.
+            let moved = match unsafe { self.invoke_virtual(enumerator, methods.move_next as Ptr) } {
+                Some(m) if !m.is_null() => m,
+                _ => break,
+            };
+            let unboxed = unsafe { (self.api.object_unbox)(moved) };
+            if unboxed.is_null() || unsafe { std::ptr::read(unboxed as *const u8) } == 0 {
+                break;
+            }
+            // get_Current -> the element (a reference type, returned directly).
+            match unsafe { self.invoke_virtual(enumerator, methods.get_current as Ptr) } {
+                Some(current) => out.push(current as usize),
+                None => break,
+            }
         }
         Ok(out)
     }

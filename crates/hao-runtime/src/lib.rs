@@ -342,16 +342,25 @@ impl Runtime {
 
     /// Requests a no-GC region for the next `budget` bytes of managed
     /// allocation.  Returns `true` if the runtime agreed to suppress GC.
+    ///
+    /// Mono (SGen) has no `GC.TryStartNoGCRegion` equivalent, so this is an
+    /// honest no-op there that always returns `false`.
     pub fn suppress_gc(&self, budget: i64) -> Result<bool> {
         match &*self.0 {
             #[cfg(feature = "coreclr")]
             Inner::CoreClr(clr) => clr.suppress_gc(budget),
             #[cfg(feature = "mono")]
-            Inner::Mono(_) => Ok(false),
+            Inner::Mono(_) => {
+                let _ = budget;
+                Ok(false)
+            }
         }
     }
 
     /// Ends a no-GC region started by [`suppress_gc`](Self::suppress_gc).
+    ///
+    /// A no-op on Mono, which has no no-GC-region to end (see
+    /// [`suppress_gc`](Self::suppress_gc)).
     pub fn resume_gc(&self) -> Result<()> {
         match &*self.0 {
             #[cfg(feature = "coreclr")]
@@ -361,15 +370,19 @@ impl Runtime {
         }
     }
 
-    /// JIT-compiles and caches the `Hao.Loader::Enumerate` helper so
-    /// [`enumerate`](Self::enumerate) can be called from a cooperative-mode
-    /// thread. Must be called off such a thread (e.g. at init). CoreCLR only.
+    /// Warms [`enumerate`](Self::enumerate) so it does no lazy setup on the
+    /// game thread.
+    ///
+    /// On CoreCLR this JIT-compiles and caches the `Hao.Loader::Enumerate`
+    /// helper, and MUST be called off a cooperative-mode thread (e.g. at init).
+    /// On Mono it resolves and caches the corlib enumerator methods; `enumerate`
+    /// resolves them lazily too, so warming is only an optimisation there.
     pub fn warm_enumerate(&self) -> Result<()> {
         match &*self.0 {
             #[cfg(feature = "coreclr")]
             Inner::CoreClr(clr) => clr.warm_enumerate(),
             #[cfg(feature = "mono")]
-            Inner::Mono(_) => Err(Error::Other("enumerate is CoreCLR-only".into())),
+            Inner::Mono(mono) => mono.warm_enumerate(),
         }
     }
 
@@ -380,13 +393,18 @@ impl Runtime {
     ///
     /// Call [`warm_enumerate`](Self::warm_enumerate) once off a cooperative-mode
     /// thread first; this call must run ON the cooperative (game) thread, like
-    /// any [`method_pointer`](Self::method_pointer) call. CoreCLR only.
+    /// any [`method_pointer`](Self::method_pointer) call.
+    ///
+    /// On Mono the returned addresses are live `MonoObject*`s that SGen may move
+    /// at the next GC (each step of the walk is a safepoint), so read or pin
+    /// them before continuing — the same raw-pointer contract as the rest of the
+    /// Mono backend.
     pub fn enumerate(&self, obj: usize) -> Result<Vec<usize>> {
         match &*self.0 {
             #[cfg(feature = "coreclr")]
             Inner::CoreClr(clr) => clr.enumerate(obj),
             #[cfg(feature = "mono")]
-            Inner::Mono(_) => Err(Error::Other("enumerate is CoreCLR-only".into())),
+            Inner::Mono(mono) => mono.enumerate(obj),
         }
     }
 
