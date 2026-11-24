@@ -7,22 +7,18 @@
 //! stale pointer then corrupts the next call.  `ExtractImageRgba` instead
 //! wraps the whole sequence (Texture2DGet → Decompress → Convert → GetWidth
 //! → GetHeight → GetData → copy-out) inside a single `[UnmanagedCallersOnly]`
-//! method whose internal `calli`s all use `SuppressGCTransition`: the thread
-//! stays cooperative from entry to exit, so the GC cannot relocate anything
-//! while the managed pointers are live.
+//! method emitted with [`callchain!`](hao_runtime::hao::callchain): the
+//! resolved GodotSharp method pointers are baked into the IL, every internal
+//! `calli` uses `SuppressGCTransition`, and the thread stays cooperative from
+//! entry to exit, so the GC cannot relocate anything while the managed
+//! pointers are live.
 
 use std::sync::OnceLock;
 
 use hao_runtime::hao::{
     dotnet::{
-        entries::{
-            well_known::{
-                SystemRuntimeCompilerServicesType, SystemRuntimeInteropServicesType,
-                SystemType,
-            },
-            Method, TypeDef, TypeDefOrRef,
-        },
-        il::{MethodBody, OpCode},
+        entries::{well_known::SystemRuntimeInteropServicesType, Method, TypeDef},
+        il::ChainImports,
         module::{ModuleKind, TargetRuntime},
         signature::{MethodSig, TypeSig},
     },
@@ -32,25 +28,29 @@ use hao_runtime::{Error, Result, Runtime};
 
 const ASSEMBLY: &str = "Hao.Godot.Interop";
 
-type ExtractFn = unsafe extern "system" fn(*const u64, *mut u8, i64) -> i64;
+/// The fixed result-buffer header, written by the chain's `returns` section
+/// and read back by [`extract_rgba_compound`](super::image::extract_rgba_compound).
+/// Pixel data follows immediately after.
+#[repr(C)]
+pub(crate) struct ExtractHeader {
+    pub(crate) width: i64,
+    pub(crate) height: i64,
+    pub(crate) data_len: i64,
+}
+
+/// `long ExtractImageRgba(long rid, IntPtr resultPtr, long bufSize)`
+type ExtractFn = unsafe extern "system" fn(u64, *mut u8, i64) -> i64;
 
 static EXTRACT_PTR: OnceLock<usize> = OnceLock::new();
 
-/// Calls the compound extraction method.
+/// Calls the compound extraction method for the texture `rid`.
 ///
-/// `args` layout: `[fnTexture2DGet, fnDecompress, fnConvert, fnGetData,
-/// fnGetWidth, fnGetHeight, rid, rgba8Format]`.
-///
-/// On success `result` is filled with `[0i64, width, height, dataLen,
-/// pixel_data...]`.
-pub(crate) fn extract_image_rgba(
-    rt: &Runtime,
-    args: &[u64; 8],
-    result: &mut [u8],
-) -> Result<()> {
+/// On success `result` starts with an [`ExtractHeader`] followed by
+/// `data_len` bytes of RGBA8 pixels.
+pub(crate) fn extract_image_rgba(rt: &Runtime, rid: u64, result: &mut [u8]) -> Result<()> {
     let ptr = resolve(rt)?;
     let f: ExtractFn = unsafe { std::mem::transmute(ptr) };
-    let rc = unsafe { f(args.as_ptr(), result.as_mut_ptr(), result.len() as i64) };
+    let rc = unsafe { f(rid, result.as_mut_ptr(), result.len() as i64) };
     match rc {
         0 => Ok(()),
         1 => Err(Error::Other("Texture2DGet returned null".into())),
@@ -69,14 +69,17 @@ fn resolve(rt: &Runtime) -> Result<usize> {
     let major = rt
         .dotnet_major()
         .ok_or_else(|| Error::Other("compound image extraction is CoreCLR-only".into()))?;
-    let module = build_assembly(major)
-        .map_err(|e| Error::Other(format!("could not build {ASSEMBLY}: {e}")))?;
+    let module = build_assembly(rt, major)?;
     rt.load_module(&module)?;
     let ptr = rt.function_pointer(ASSEMBLY, ASSEMBLY, "ExtractImageRgba")? as usize;
     Ok(*EXTRACT_PTR.get_or_init(|| ptr))
 }
 
-fn build_assembly(major: u16) -> hao_runtime::hao::error::Result<Module> {
+fn hao_err(e: impl std::fmt::Display) -> Error {
+    Error::Other(format!("could not build {ASSEMBLY}: {e}"))
+}
+
+fn build_assembly(rt: &Runtime, major: u16) -> Result<Module> {
     let mut module = Module::new(
         ASSEMBLY,
         ModuleKind::Dll,
@@ -84,107 +87,53 @@ fn build_assembly(major: u16) -> hao_runtime::hao::error::Result<Module> {
     );
 
     let uco = module
-        .corlib_attribute(SystemRuntimeInteropServicesType::UnmanagedCallersOnlyAttribute)?;
-    let exception = module.corlib_type(SystemType::Exception)?;
-    let callconv_cdecl =
-        module.corlib_type(SystemRuntimeCompilerServicesType::CallConvCdecl)?;
-    let callconv_suppress =
-        module.corlib_type(SystemRuntimeCompilerServicesType::CallConvSuppressGCTransition)?;
+        .corlib_attribute(SystemRuntimeInteropServicesType::UnmanagedCallersOnlyAttribute)
+        .map_err(hao_err)?;
+    let imports = ChainImports::resolve(&mut module).map_err(hao_err)?;
 
-    let body = extract_image_rgba_body(&exception, &callconv_cdecl, &callconv_suppress);
+    let body = hao_runtime::hao::callchain! {
+        imports: &imports,
+        methods {
+            tex2d_get: super::rendering_server::TEXTURE_2D_GET.resolve(rt)?,
+            decompress: super::image::DECOMPRESS.resolve(rt)?,
+            convert: super::image::CONVERT.resolve(rt)?,
+            get_data: super::image::GET_DATA.resolve(rt)?,
+            get_width: super::image::GET_WIDTH.resolve(rt)?,
+            get_height: super::image::GET_HEIGHT.resolve(rt)?,
+        },
+        consts { rgba8: super::image::format::RGBA8 },
+        params(rid: i64, result_ptr: nint, buf_size: i64),
+        errors { err_null_image = 1, err_null_data = 2, err_overflow = 3 },
+        chain {
+            let img = tex2d_get(rid) else err_null_image;
+            decompress(img);
+            convert(img, rgba8);
+            let w = get_width(img);
+            let h = get_height(img);
+            let arr = get_data(img) else err_null_data;
+            // .NET byte[]: [MethodTable*:8][Length:4][pad:4][data…]
+            let len: i32 = *(arr + 8);
+        },
+        returns result_ptr: ExtractHeader {
+            width: w,
+            height: h,
+            data_len: len,
+            ..copy(arr + 16, len) within buf_size else err_overflow,
+        },
+    };
 
-    let interop = module.add_static_class("Hao.Godot", "Interop")?;
+    let interop = module.add_static_class("Hao.Godot", "Interop").map_err(hao_err)?;
     TypeDef::add_method(
         &interop,
         Method::public_static(
             "ExtractImageRgba",
             MethodSig::new_static(
                 TypeSig::INT64,
-                vec![TypeSig::NATIVE_INT, TypeSig::NATIVE_INT, TypeSig::INT64],
+                vec![TypeSig::INT64, TypeSig::NATIVE_INT, TypeSig::INT64],
             ),
         )
         .with_attribute(uco)
         .with_body(body),
     );
     Ok(module)
-}
-
-/// `long ExtractImageRgba(IntPtr argsPtr, IntPtr resultPtr, long resultBufSize)`
-///
-/// ## Args buffer layout (8 × i64)
-///
-/// | offset | field            |
-/// |--------|------------------|
-/// | 0      | fnTexture2DGet   |
-/// | 8      | fnDecompress     |
-/// | 16     | fnConvert        |
-/// | 24     | fnGetData        |
-/// | 32     | fnGetWidth       |
-/// | 40     | fnGetHeight      |
-/// | 48     | rid (u64)        |
-/// | 56     | rgba8Format (i64)|
-///
-/// ## Result buffer layout
-///
-/// | offset | field        |
-/// |--------|--------------|
-/// | 0      | error (i64)  |
-/// | 8      | width (i64)  |
-/// | 16     | height (i64) |
-/// | 24     | dataLen (i64)|
-/// | 32..   | pixel data   |
-///
-/// Returns 0 on success, 1 on null image, 2 on null data, 3 on buffer
-/// overflow, -1 on managed exception.
-fn extract_image_rgba_body(
-    exception: &TypeDefOrRef,
-    callconv_cdecl: &TypeDefOrRef,
-    callconv_suppress: &TypeDefOrRef,
-) -> MethodBody {
-    hao_runtime::hao::callchain! {
-        exception: exception.clone(),
-        suppress_gc: (callconv_cdecl, callconv_suppress),
-        args_from: arg 0 {
-            fn_tex2d_get: fnptr,
-            fn_decompress: fnptr,
-            fn_convert: fnptr,
-            fn_get_data: fnptr,
-            fn_get_width: fnptr,
-            fn_get_height: fnptr,
-            rid: i64,
-            rgba8: i64,
-        },
-        errors { err_null_image = 1, err_null_data = 2, err_overflow = 3 },
-        chain {
-            let img = fn_tex2d_get(rid) else err_null_image;
-            fn_decompress(img);
-            fn_convert(img, rgba8);
-            let w = fn_get_width(img);
-            let h = fn_get_height(img);
-            let arr = fn_get_data(img) else err_null_data;
-            raw |e| {
-                let len = e.declare_local(TypeSig::INT64);
-                let data_ptr = e.declare_local(TypeSig::NATIVE_INT);
-                // .NET byte[]: [MethodTable*:8][Length:4][pad:4][data…]
-                e.ldloc(arr).ldc_i4(8).op(OpCode::Add).op(OpCode::Ldind_I4);
-                e.op(OpCode::Conv_I8).stloc(len);
-                e.ldloc(arr).ldc_i4(16).op(OpCode::Add).stloc(data_ptr);
-
-                // Bounds check: 32 + len ≤ resultBufSize (arg 2)
-                e.ldc_i4(32).op(OpCode::Conv_I8).ldloc(len).op(OpCode::Add);
-                e.ldarg(2).branch(OpCode::Bgt, err_overflow);
-
-                // Result header (resultPtr = arg 1)
-                e.ldarg(1).ldc_i4(0).op(OpCode::Conv_I8).op(OpCode::Stind_I8);
-                e.ldarg(1).ldc_i4(8).op(OpCode::Add).ldloc(w).op(OpCode::Stind_I8);
-                e.ldarg(1).ldc_i4(16).op(OpCode::Add).ldloc(h).op(OpCode::Stind_I8);
-                e.ldarg(1).ldc_i4(24).op(OpCode::Add).ldloc(len).op(OpCode::Stind_I8);
-
-                // cpblk(resultPtr + 32, dataPtr, len)
-                e.ldarg(1).ldc_i4(32).op(OpCode::Add);
-                e.ldloc(data_ptr).ldloc(len).op(OpCode::Conv_I4);
-                e.op(OpCode::Cpblk);
-            }
-        }
-    }
 }

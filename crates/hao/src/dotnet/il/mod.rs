@@ -7,6 +7,7 @@ mod reader;
 mod writer;
 
 pub use crate::callchain;
+pub use callchain::ChainImports;
 pub use emitter::{EmitLabel, Emitter};
 pub use opcodes::*;
 pub(crate) use reader::{BodyReader, BodyResolver};

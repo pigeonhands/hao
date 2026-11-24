@@ -89,45 +89,21 @@ unsafe fn read_managed_byte_array(arr: *const c_void) -> Result<Vec<u8>> {
 /// This avoids the GC compaction bug where managed Image pointers are
 /// invalidated between individual `rt.invoke()` calls.
 pub fn extract_rgba_compound(rt: &Runtime, rid: u64) -> Result<(u32, u32, Vec<u8>)> {
-    let fn_tex2d_get = super::rendering_server::TEXTURE_2D_GET.resolve(rt)?;
-    let fn_decompress = DECOMPRESS.resolve(rt)?;
-    let fn_convert = CONVERT.resolve(rt)?;
-    let fn_get_data = GET_DATA.resolve(rt)?;
-    let fn_get_width = GET_WIDTH.resolve(rt)?;
-    let fn_get_height = GET_HEIGHT.resolve(rt)?;
+    use super::image_interop::ExtractHeader;
 
-    let args: [u64; 8] = [
-        fn_tex2d_get as u64,
-        fn_decompress as u64,
-        fn_convert as u64,
-        fn_get_data as u64,
-        fn_get_width as u64,
-        fn_get_height as u64,
-        rid,
-        format::RGBA8 as u64,
-    ];
+    // Header + up to 16 MiB of pixel data.
+    let header_size = std::mem::size_of::<ExtractHeader>();
+    let mut buf = vec![0u8; header_size + 16 * 1024 * 1024];
 
-    // 32-byte header + up to 16 MiB of pixel data.
-    let buf_size = 32 + 16 * 1024 * 1024;
-    let mut buf = vec![0u8; buf_size];
+    super::image_interop::extract_image_rgba(rt, rid, &mut buf)?;
 
-    super::image_interop::extract_image_rgba(rt, &args, &mut buf)?;
-
-    let error = i64::from_le_bytes(buf[0..8].try_into().unwrap());
-    if error != 0 {
-        return Err(hao_runtime::Error::Other(format!(
-            "ExtractImageRgba returned error {error}"
-        )));
-    }
-    let w = i64::from_le_bytes(buf[8..16].try_into().unwrap()) as u32;
-    let h = i64::from_le_bytes(buf[16..24].try_into().unwrap()) as u32;
-    let data_len = i64::from_le_bytes(buf[24..32].try_into().unwrap()) as usize;
-
+    let header: ExtractHeader = unsafe { std::ptr::read_unaligned(buf.as_ptr().cast()) };
+    let (w, h) = (header.width as u32, header.height as u32);
     if w == 0 || h == 0 {
         return Err(hao_runtime::Error::Other("image has zero dimensions".into()));
     }
 
-    let data = buf[32..32 + data_len].to_vec();
+    let data = buf[header_size..header_size + header.data_len as usize].to_vec();
     Ok((w, h, data))
 }
 
