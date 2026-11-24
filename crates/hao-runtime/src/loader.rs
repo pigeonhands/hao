@@ -15,10 +15,10 @@ use hao::{
                 GcMethod, MarshalMethod, MemberInfoMethod, MethodBaseMethod,
                 RuntimeHelpersMethod, RuntimeMethodHandleMethod, StringExtMethod,
                 StringMethod, SystemReflectionType, SystemRuntimeCompilerServicesType,
-                SystemRuntimeInteropServicesType, SystemType, TypeExtMethod, TypeMethod,
+                SystemType, TypeExtMethod, TypeMethod,
                 WellKnownMethod,
             },
-            Method, TypeDef, TypeDefOrRef,
+            TypeDefOrRef,
         },
         il::{Emitter, MemberToken, OpCode},
         module::{ModuleKind, TargetRuntime},
@@ -698,9 +698,6 @@ pub fn loader_assembly(major: u16) -> Result<Vec<u8>> {
             TargetRuntime::NetCoreImplementation(major),
         );
 
-        let uco = module
-            .corlib_attribute(SystemRuntimeInteropServicesType::UnmanagedCallersOnlyAttribute)?;
-
         // ── Type refs needed for IL locals ────────────────────────────────
         let exception = module.corlib_type(SystemType::Exception)?;
         let type_ty = module.corlib_type(SystemType::Type)?;
@@ -801,154 +798,41 @@ pub fn loader_assembly(major: u16) -> Result<Vec<u8>> {
         let callconv_suppress =
             module.corlib_type(SystemRuntimeCompilerServicesType::CallConvSuppressGCTransition)?;
 
-        // ── Build method bodies ───────────────────────────────────────────
-        let load_from =
-            load_from_body(&tokens.to_string, &tokens.exception, asm_load_from, hresult);
-        let get_method = get_method_body(&tokens);
-        let get_method_from_loaded = get_method_from_loaded_body(&tokens);
-        let find_method_from_loaded = find_method_from_loaded_body(&tokens);
-        let get_type_names = get_type_names_body(&tokens);
-        let get_method_names = get_method_names_body(&tokens);
-        let invoke = invoke_body(&callconv_cdecl, &callconv_suppress);
-        let invoke_float = invoke_float_body(&callconv_cdecl, &callconv_suppress);
-        let suppress_gc = suppress_gc_body(&tokens.exception, gc_try_start);
-        let resume_gc = resume_gc_body(&tokens.exception, gc_end);
-
         // ── Assemble the Hao.Loader class ─────────────────────────────────
-        let loader = module.add_static_class("Hao", "Loader")?;
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "LoadFrom",
-                MethodSig::new_static(TypeSig::INT32, vec![TypeSig::NATIVE_INT]),
-            )
-            .with_attribute(uco.clone())
-            .with_body(load_from),
-        );
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "GetMethod",
-                MethodSig::new_static(
-                    TypeSig::NATIVE_INT,
-                    vec![TypeSig::NATIVE_INT, TypeSig::NATIVE_INT],
-                ),
-            )
-            .with_attribute(uco.clone())
-            .with_body(get_method),
-        );
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "GetMethodFromLoaded",
-                MethodSig::new_static(
-                    TypeSig::NATIVE_INT,
-                    vec![
-                        TypeSig::NATIVE_INT,
-                        TypeSig::NATIVE_INT,
-                        TypeSig::NATIVE_INT,
-                    ],
-                ),
-            )
-            .with_attribute(uco.clone())
-            .with_body(get_method_from_loaded),
-        );
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "FindMethodFromLoaded",
-                MethodSig::new_static(
-                    TypeSig::NATIVE_INT,
-                    vec![
-                        TypeSig::NATIVE_INT,
-                        TypeSig::NATIVE_INT,
-                        TypeSig::NATIVE_INT,
-                        TypeSig::INT32,
-                    ],
-                ),
-            )
-            .with_attribute(uco.clone())
-            .with_body(find_method_from_loaded),
-        );
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "Invoke",
-                MethodSig::new_static(
-                    TypeSig::INT64,
-                    vec![
-                        TypeSig::NATIVE_INT,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                    ],
-                ),
-            )
-            .with_attribute(uco.clone())
-            .with_body(invoke),
-        );
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "InvokeFloat",
-                MethodSig::new_static(
-                    TypeSig::FLOAT64,
-                    vec![
-                        TypeSig::NATIVE_INT,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                        TypeSig::INT64,
-                    ],
-                ),
-            )
-            .with_attribute(uco.clone())
-            .with_body(invoke_float),
-        );
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "GetTypeNames",
-                MethodSig::new_static(TypeSig::NATIVE_INT, vec![TypeSig::NATIVE_INT]),
-            )
-            .with_attribute(uco.clone())
-            .with_body(get_type_names),
-        );
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "GetMethodNames",
-                MethodSig::new_static(
-                    TypeSig::NATIVE_INT,
-                    vec![TypeSig::NATIVE_INT, TypeSig::NATIVE_INT],
-                ),
-            )
-            .with_attribute(uco.clone())
-            .with_body(get_method_names),
-        );
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "SuppressGC",
-                MethodSig::new_static(TypeSig::INT64, vec![TypeSig::INT64]),
-            )
-            .with_attribute(uco.clone())
-            .with_body(suppress_gc),
-        );
-        TypeDef::add_method(
-            &loader,
-            Method::public_static(
-                "ResumeGC",
-                MethodSig::new_static(TypeSig::VOID, vec![]),
-            )
-            .with_attribute(uco)
-            .with_body(resume_gc),
-        );
+        hao::dotnet_class! { &mut module =>
+            static class "Hao".Loader {
+                #[unmanaged_callers_only]
+                fn LoadFrom(path: nint) -> i32 =
+                    load_from_body(&tokens.to_string, &tokens.exception, asm_load_from, hresult);
+                #[unmanaged_callers_only]
+                fn GetMethod(full_name: nint, name: nint) -> nint =
+                    get_method_body(&tokens);
+                #[unmanaged_callers_only]
+                fn GetMethodFromLoaded(type_name: nint, method_name: nint, asm_name: nint) -> nint =
+                    get_method_from_loaded_body(&tokens);
+                #[unmanaged_callers_only]
+                fn FindMethodFromLoaded(type_name: nint, method_name: nint, asm_name: nint, param_count: i32) -> nint =
+                    find_method_from_loaded_body(&tokens);
+                #[unmanaged_callers_only]
+                fn Invoke(method_ptr: nint, a0: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> i64 =
+                    invoke_body(&callconv_cdecl, &callconv_suppress);
+                #[unmanaged_callers_only]
+                fn InvokeFloat(method_ptr: nint, a0: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> f64 =
+                    invoke_float_body(&callconv_cdecl, &callconv_suppress);
+                #[unmanaged_callers_only]
+                fn GetTypeNames(asm_name: nint) -> nint =
+                    get_type_names_body(&tokens);
+                #[unmanaged_callers_only]
+                fn GetMethodNames(type_name: nint, asm_name: nint) -> nint =
+                    get_method_names_body(&tokens);
+                #[unmanaged_callers_only]
+                fn SuppressGC(budget: i64) -> i64 =
+                    suppress_gc_body(&tokens.exception, gc_try_start);
+                #[unmanaged_callers_only]
+                fn ResumeGC() -> () =
+                    resume_gc_body(&tokens.exception, gc_end);
+            }
+        }?;
         module.write()
     };
     build().map_err(|e| Error::Other(format!("could not build the loader assembly: {}", e)))
