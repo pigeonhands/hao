@@ -356,4 +356,25 @@ impl Mono {
         }
         Ok(code)
     }
+
+    /// Like [`method_pointer`](Self::method_pointer) but selects the overload
+    /// with `param_count` parameters, so it works with overloaded methods.
+    /// `mono_class_get_method_from_name` matches on name and arity natively.
+    pub fn find_method(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+        param_count: c_int,
+    ) -> Result<*const c_void> {
+        let method_ptr = self.resolve_method_arity(assembly, type_name, method, param_count)?;
+        let code = unsafe { (self.api.compile_method)(method_ptr) };
+        if code.is_null() {
+            return Err(Error::Other(format!(
+                "could not compile {}::{}({} params)",
+                type_name, method, param_count
+            )));
+        }
+        Ok(code)
+    }
 }

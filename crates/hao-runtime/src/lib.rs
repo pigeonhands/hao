@@ -241,7 +241,9 @@ impl Runtime {
 
     /// Like [`method_pointer`](Self::method_pointer), but resolves the type
     /// from whichever `AssemblyLoadContext` actually loaded the assembly.
-    /// CoreCLR only.
+    ///
+    /// Mono has no `AssemblyLoadContext`, so there it is identical to
+    /// [`method_pointer`](Self::method_pointer).
     pub fn method_pointer_from_loaded(
         &self,
         assembly: &str,
@@ -252,9 +254,7 @@ impl Runtime {
             #[cfg(feature = "coreclr")]
             Inner::CoreClr(clr) => clr.method_pointer_from_loaded(assembly, type_name, method),
             #[cfg(feature = "mono")]
-            Inner::Mono(_) => Err(Error::Other(
-                "method_pointer_from_loaded is CoreCLR-only".into(),
-            )),
+            Inner::Mono(mono) => mono.method_pointer(assembly, type_name, method),
         }
     }
 
@@ -284,7 +284,6 @@ impl Runtime {
 
     /// Like [`method_pointer_from_loaded`](Self::method_pointer_from_loaded)
     /// but matches by parameter count, so it works with overloaded methods.
-    /// CoreCLR only.
     pub fn find_method_from_loaded(
         &self,
         assembly: &str,
@@ -298,9 +297,7 @@ impl Runtime {
                 clr.find_method_from_loaded(assembly, type_name, method, param_count)
             }
             #[cfg(feature = "mono")]
-            Inner::Mono(_) => Err(Error::Other(
-                "find_method_from_loaded is CoreCLR-only".into(),
-            )),
+            Inner::Mono(mono) => mono.find_method(assembly, type_name, method, param_count),
         }
     }
 
