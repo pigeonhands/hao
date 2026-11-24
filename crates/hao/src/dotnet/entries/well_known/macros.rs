@@ -78,6 +78,15 @@ macro_rules! wk_type {
     ($m:ident, i32) => {
         TypeSig::INT32
     };
+    ($m:ident, i64) => {
+        TypeSig::INT64
+    };
+    ($m:ident, f64) => {
+        TypeSig::FLOAT64
+    };
+    ($m:ident, nint) => {
+        TypeSig::NATIVE_INT
+    };
     ($m:ident, string) => {
         TypeSig::STRING
     };
@@ -86,6 +95,14 @@ macro_rules! wk_type {
     };
     ($m:ident, { $wk:expr }) => {
         class($m, $wk)?
+    };
+    // valuetype wrapped in parens: (valuetype { WellKnown::... })
+    ($m:ident, (valuetype { $wk:expr })) => {
+        value_type($m, $wk)?
+    };
+    // array wrapped in brackets: [{ WellKnown::... }] or [i32] etc.
+    ($m:ident, [$($inner:tt)+]) => {
+        TypeSig::sz_array(wk_type!($m, $($inner)+))
     };
 }
 
@@ -109,6 +126,12 @@ macro_rules! wk_new_sig {
 
 /// Generates [`WellKnownMethod`], every per-type method sub-enum, and their
 /// `method_name`/`is_instance`/`signature` impls from a declarative table.
+///
+/// Each parameter and the return type is a single token tree consumed by
+/// `wk_type!`. Primitives (`void`, `bool`, `i32`, `nint`, …), `string` and
+/// `object` are bare keywords.  Class types are `{ WellKnown::… }`, value
+/// types `(valuetype { WellKnown::… })`, and arrays `[inner]` where `inner`
+/// is any of the above forms.
 macro_rules! well_known_methods {
     ( $(
         $group:ident($sub:ident) = $declaring:expr => {

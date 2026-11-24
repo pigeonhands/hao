@@ -188,6 +188,7 @@ pub enum SystemType {
     ValueTuple_7,
     #[strum(serialize = "ValueTuple`8")]
     ValueTuple_8,
+    AppDomain,
     ContextBoundObject,
     SerializableAttribute,
     RuntimeMethodHandleInternal,
@@ -318,6 +319,12 @@ pub enum SystemRuntimeCompilerServicesType {
     AsyncIteratorStateMachineAttribute,
     NullableAttribute,
     IsUnmanagedAttribute,
+    CallConvCdecl,
+    CallConvStdcall,
+    CallConvThiscall,
+    CallConvFastcall,
+    CallConvSuppressGCTransition,
+    CallConvMemberFunction,
 }
 
 
@@ -863,6 +870,12 @@ mod tests {
             ("System.IO", "Path"),
             ("System.Globalization", "CultureInfo"),
             ("System.Collections.Generic", "HashSet`1"),
+            ("System", "AppDomain"),
+            (
+                "System.Runtime.CompilerServices",
+                "CallConvSuppressGCTransition",
+            ),
+            ("System.Runtime.CompilerServices", "CallConvCdecl"),
         ] {
             let wk = WellKnown::from_full_name(namespace, name)
                 .unwrap_or_else(|| panic!("{namespace}.{name} should be well known"));

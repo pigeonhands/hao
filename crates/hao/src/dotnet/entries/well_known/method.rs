@@ -13,7 +13,10 @@
 //! brace-wrapped `{ <WellKnown> }` class type. The macro generates the enums and
 //! all the `method_name`/`is_instance`/`signature` impls.
 
-use super::{SystemReflectionType, SystemTextType, SystemType, WellKnown};
+use super::{
+    SystemReflectionType, SystemRuntimeCompilerServicesType, SystemRuntimeInteropServicesType,
+    SystemTextType, SystemType, WellKnown,
+};
 use crate::dotnet::entries::TypeDefOrRef;
 use crate::dotnet::module::Module;
 use crate::dotnet::signature::{MethodSig, TypeSig};
@@ -33,6 +36,11 @@ fn resolve_type(module: &mut Module, ty: WellKnown) -> Result<TypeDefOrRef> {
 /// A class-typed signature fragment, resolved against a module.
 fn class(module: &mut Module, ty: WellKnown) -> Result<TypeSig> {
     Ok(TypeSig::Class(resolve_type(module, ty)?))
+}
+
+/// A value-typed signature fragment, resolved against a module.
+fn value_type(module: &mut Module, ty: WellKnown) -> Result<TypeSig> {
+    Ok(TypeSig::value_type(resolve_type(module, ty)?))
 }
 
 well_known_methods! {
@@ -99,9 +107,53 @@ well_known_methods! {
         Exit                      = Static "Exit"                   (i32)    -> void;
     }
     Gc(GcMethod) = WellKnown::System(SystemType::GC) => {
-        Collect          = Static "Collect"          ()       -> void;
-        CollectGen       = Static "Collect"          (i32)    -> void;
-        SuppressFinalize = Static "SuppressFinalize" (object) -> void;
+        Collect              = Static "Collect"              ()    -> void;
+        CollectGen           = Static "Collect"              (i32) -> void;
+        SuppressFinalize     = Static "SuppressFinalize"     (object) -> void;
+        TryStartNoGCRegion   = Static "TryStartNoGCRegion"  (i64) -> bool;
+        EndNoGCRegion        = Static "EndNoGCRegion"        ()    -> void;
+    }
+    Marshal(MarshalMethod) = WellKnown::SystemRuntimeInteropServices(SystemRuntimeInteropServicesType::Marshal) => {
+        PtrToStringAuto      = Static "PtrToStringAuto"      (nint)   -> string;
+        StringToCoTaskMemUni = Static "StringToCoTaskMemUni" (string) -> nint;
+        FreeCoTaskMem        = Static "FreeCoTaskMem"        (nint)   -> void;
+    }
+    Exception(ExceptionMethod) = WellKnown::System(SystemType::Exception) => {
+        GetHResult = Instance "get_HResult" () -> i32;
+    }
+    Assembly(AssemblyMethod) = WellKnown::SystemReflection(SystemReflectionType::Assembly) => {
+        LoadFrom   = Static   "LoadFrom" (string) -> { WellKnown::SystemReflection(SystemReflectionType::Assembly) };
+        GetName    = Instance "GetName"  ()       -> { WellKnown::SystemReflection(SystemReflectionType::AssemblyName) };
+        GetTypeStr = Instance "GetType"  (string) -> { WellKnown::System(SystemType::Type) };
+        GetTypes   = Instance "GetTypes" ()       -> [{ WellKnown::System(SystemType::Type) }];
+    }
+    TypeExt(TypeExtMethod) = WellKnown::System(SystemType::Type) => {
+        GetTypeStatic = Static   "GetType"    (string) -> { WellKnown::System(SystemType::Type) };
+        GetMethodBF   = Instance "GetMethod"  (string, (valuetype { WellKnown::SystemReflection(SystemReflectionType::BindingFlags) })) -> { WellKnown::SystemReflection(SystemReflectionType::MethodInfo) };
+        GetMethodsBF  = Instance "GetMethods" ((valuetype { WellKnown::SystemReflection(SystemReflectionType::BindingFlags) })) -> [{ WellKnown::SystemReflection(SystemReflectionType::MethodInfo) }];
+    }
+    MethodBase(MethodBaseMethod) = WellKnown::SystemReflection(SystemReflectionType::MethodBase) => {
+        GetMethodHandle = Instance "get_MethodHandle" () -> (valuetype { WellKnown::System(SystemType::RuntimeMethodHandle) });
+        GetParameters   = Instance "GetParameters"    () -> [{ WellKnown::SystemReflection(SystemReflectionType::ParameterInfo) }];
+    }
+    RuntimeMethodHandle(RuntimeMethodHandleMethod) = WellKnown::System(SystemType::RuntimeMethodHandle) => {
+        GetFunctionPointer = Instance "GetFunctionPointer" () -> nint;
+    }
+    RuntimeHelpers(RuntimeHelpersMethod) = WellKnown::SystemRuntimeCompilerServices(SystemRuntimeCompilerServicesType::RuntimeHelpers) => {
+        PrepareMethod = Static "PrepareMethod" ((valuetype { WellKnown::System(SystemType::RuntimeMethodHandle) })) -> void;
+    }
+    AppDomain(AppDomainMethod) = WellKnown::System(SystemType::AppDomain) => {
+        GetCurrentDomain = Static   "get_CurrentDomain" () -> { WellKnown::System(SystemType::AppDomain) };
+        GetAssemblies    = Instance "GetAssemblies"     () -> [{ WellKnown::SystemReflection(SystemReflectionType::Assembly) }];
+    }
+    AssemblyName(AssemblyNameMethod) = WellKnown::SystemReflection(SystemReflectionType::AssemblyName) => {
+        GetName = Instance "get_Name" () -> string;
+    }
+    MemberInfo(MemberInfoMethod) = WellKnown::SystemReflection(SystemReflectionType::MemberInfo) => {
+        GetName = Instance "get_Name" () -> string;
+    }
+    StringExt(StringExtMethod) = WellKnown::System(SystemType::String) => {
+        OpEquality = Static "op_Equality" (string, string) -> bool;
     }
 }
 
@@ -153,6 +205,32 @@ mod tests {
             WellKnownMethod::Convert(ConvertMethod::ToInt32Str),
             WellKnownMethod::Environment(EnvironmentMethod::GetMachineName),
             WellKnownMethod::Gc(GcMethod::SuppressFinalize),
+            // nint parameter.
+            WellKnownMethod::Marshal(MarshalMethod::PtrToStringAuto),
+            // Value-type parameter (RuntimeMethodHandle).
+            WellKnownMethod::RuntimeHelpers(RuntimeHelpersMethod::PrepareMethod),
+            // Value-type return (RuntimeMethodHandle).
+            WellKnownMethod::MethodBase(MethodBaseMethod::GetMethodHandle),
+            // nint return.
+            WellKnownMethod::RuntimeMethodHandle(RuntimeMethodHandleMethod::GetFunctionPointer),
+            // Value-type parameter (BindingFlags), string.
+            WellKnownMethod::TypeExt(TypeExtMethod::GetMethodBF),
+            // Array return.
+            WellKnownMethod::AppDomain(AppDomainMethod::GetAssemblies),
+            WellKnownMethod::TypeExt(TypeExtMethod::GetMethodsBF),
+            WellKnownMethod::MethodBase(MethodBaseMethod::GetParameters),
+            // Various.
+            WellKnownMethod::Exception(ExceptionMethod::GetHResult),
+            WellKnownMethod::Assembly(AssemblyMethod::LoadFrom),
+            WellKnownMethod::Assembly(AssemblyMethod::GetName),
+            WellKnownMethod::Assembly(AssemblyMethod::GetTypeStr),
+            WellKnownMethod::Assembly(AssemblyMethod::GetTypes),
+            WellKnownMethod::Marshal(MarshalMethod::StringToCoTaskMemUni),
+            WellKnownMethod::Marshal(MarshalMethod::FreeCoTaskMem),
+            WellKnownMethod::AssemblyName(AssemblyNameMethod::GetName),
+            WellKnownMethod::MemberInfo(MemberInfoMethod::GetName),
+            WellKnownMethod::AppDomain(AppDomainMethod::GetCurrentDomain),
+            WellKnownMethod::StringExt(StringExtMethod::OpEquality),
         ] {
             let token = module
                 .import_well_known_method(m)
