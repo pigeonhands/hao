@@ -22,7 +22,7 @@ use hao_runtime::hao::{
             },
             Method, TypeDef, TypeDefOrRef,
         },
-        il::{Emitter, MethodBody, OpCode},
+        il::{MethodBody, OpCode},
         module::{ModuleKind, TargetRuntime},
         signature::{MethodSig, TypeSig},
     },
@@ -141,138 +141,50 @@ fn extract_image_rgba_body(
     callconv_cdecl: &TypeDefOrRef,
     callconv_suppress: &TypeDefOrRef,
 ) -> MethodBody {
-    let calli_1_arg = MethodSig::unmanaged_suppress_gc(
-        TypeSig::INT64,
-        vec![TypeSig::INT64],
-        callconv_cdecl,
-        callconv_suppress,
-    );
-    let calli_2_arg = MethodSig::unmanaged_suppress_gc(
-        TypeSig::INT64,
-        vec![TypeSig::INT64, TypeSig::INT64],
-        callconv_cdecl,
-        callconv_suppress,
-    );
-
-    Emitter::build(|e| {
-        let fn_tex2d_get = e.declare_local(TypeSig::NATIVE_INT);
-        let fn_decompress = e.declare_local(TypeSig::NATIVE_INT);
-        let fn_convert = e.declare_local(TypeSig::NATIVE_INT);
-        let fn_get_data = e.declare_local(TypeSig::NATIVE_INT);
-        let fn_get_width = e.declare_local(TypeSig::NATIVE_INT);
-        let fn_get_height = e.declare_local(TypeSig::NATIVE_INT);
-        let rid = e.declare_local(TypeSig::INT64);
-        let rgba8 = e.declare_local(TypeSig::INT64);
-        let img = e.declare_local(TypeSig::INT64);
-        let w = e.declare_local(TypeSig::INT64);
-        let h = e.declare_local(TypeSig::INT64);
-        let arr = e.declare_local(TypeSig::INT64);
-        let len = e.declare_local(TypeSig::INT64);
-        let data_ptr = e.declare_local(TypeSig::NATIVE_INT);
-        let result_local = e.declare_local(TypeSig::INT64);
-
-        // Default return value = -1 (exception)
-        e.ldc_i4(-1).op(OpCode::Conv_I8).stloc(result_local);
-
-        let err_null_image = e.label();
-        let err_null_data = e.label();
-        let err_overflow = e.label();
-        let done = e.label();
-
-        e.try_catch(
-            exception.clone(),
-            |e| {
-                // ── Read args from the native buffer (argsPtr = arg 0) ─
-                e.ldarg(0).op(OpCode::Ldind_I).stloc(fn_tex2d_get);
-                e.ldarg(0).ldc_i4(8).op(OpCode::Add).op(OpCode::Ldind_I).stloc(fn_decompress);
-                e.ldarg(0).ldc_i4(16).op(OpCode::Add).op(OpCode::Ldind_I).stloc(fn_convert);
-                e.ldarg(0).ldc_i4(24).op(OpCode::Add).op(OpCode::Ldind_I).stloc(fn_get_data);
-                e.ldarg(0).ldc_i4(32).op(OpCode::Add).op(OpCode::Ldind_I).stloc(fn_get_width);
-                e.ldarg(0).ldc_i4(40).op(OpCode::Add).op(OpCode::Ldind_I).stloc(fn_get_height);
-                e.ldarg(0).ldc_i4(48).op(OpCode::Add).op(OpCode::Ldind_I8).stloc(rid);
-                e.ldarg(0).ldc_i4(56).op(OpCode::Add).op(OpCode::Ldind_I8).stloc(rgba8);
-
-                // ── Texture2DGet(rid) → managed Image ─────────────────
-                e.ldloc(rid);
-                e.ldloc(fn_tex2d_get);
-                e.calli(calli_1_arg.clone());
-                e.stloc(img);
-                e.ldloc(img).branch(OpCode::Brfalse, err_null_image);
-
-                // ── Decompress(img) ───────────────────────────────────
-                e.ldloc(img);
-                e.ldloc(fn_decompress);
-                e.calli(calli_1_arg.clone());
-                e.op(OpCode::Pop);
-
-                // ── Convert(img, rgba8) ───────────────────────────────
-                e.ldloc(img);
-                e.ldloc(rgba8);
-                e.ldloc(fn_convert);
-                e.calli(calli_2_arg.clone());
-                e.op(OpCode::Pop);
-
-                // ── GetWidth(img), GetHeight(img) ─────────────────────
-                e.ldloc(img);
-                e.ldloc(fn_get_width);
-                e.calli(calli_1_arg.clone());
-                e.stloc(w);
-
-                e.ldloc(img);
-                e.ldloc(fn_get_height);
-                e.calli(calli_1_arg.clone());
-                e.stloc(h);
-
-                // ── GetData(img) → managed byte[] ─────────────────────
-                e.ldloc(img);
-                e.ldloc(fn_get_data);
-                e.calli(calli_1_arg.clone());
-                e.stloc(arr);
-                e.ldloc(arr).branch(OpCode::Brfalse, err_null_data);
-
-                // ── .NET byte[]: [MethodTable*:8][Length:4][pad:4][data…]
+    hao_runtime::hao::callchain! {
+        exception: exception.clone(),
+        suppress_gc: (callconv_cdecl, callconv_suppress),
+        args_from: arg 0 {
+            fn_tex2d_get: fnptr,
+            fn_decompress: fnptr,
+            fn_convert: fnptr,
+            fn_get_data: fnptr,
+            fn_get_width: fnptr,
+            fn_get_height: fnptr,
+            rid: i64,
+            rgba8: i64,
+        },
+        errors { err_null_image = 1, err_null_data = 2, err_overflow = 3 },
+        chain {
+            let img = fn_tex2d_get(rid) else err_null_image;
+            fn_decompress(img);
+            fn_convert(img, rgba8);
+            let w = fn_get_width(img);
+            let h = fn_get_height(img);
+            let arr = fn_get_data(img) else err_null_data;
+            raw |e| {
+                let len = e.declare_local(TypeSig::INT64);
+                let data_ptr = e.declare_local(TypeSig::NATIVE_INT);
+                // .NET byte[]: [MethodTable*:8][Length:4][pad:4][data…]
                 e.ldloc(arr).ldc_i4(8).op(OpCode::Add).op(OpCode::Ldind_I4);
                 e.op(OpCode::Conv_I8).stloc(len);
                 e.ldloc(arr).ldc_i4(16).op(OpCode::Add).stloc(data_ptr);
 
-                // ── Bounds check: 32 + len ≤ resultBufSize ────────────
+                // Bounds check: 32 + len ≤ resultBufSize (arg 2)
                 e.ldc_i4(32).op(OpCode::Conv_I8).ldloc(len).op(OpCode::Add);
-                e.ldarg(2);
-                e.branch(OpCode::Bgt, err_overflow);
+                e.ldarg(2).branch(OpCode::Bgt, err_overflow);
 
-                // ── Write result header (resultPtr = arg 1) ───────────
+                // Result header (resultPtr = arg 1)
                 e.ldarg(1).ldc_i4(0).op(OpCode::Conv_I8).op(OpCode::Stind_I8);
                 e.ldarg(1).ldc_i4(8).op(OpCode::Add).ldloc(w).op(OpCode::Stind_I8);
                 e.ldarg(1).ldc_i4(16).op(OpCode::Add).ldloc(h).op(OpCode::Stind_I8);
                 e.ldarg(1).ldc_i4(24).op(OpCode::Add).ldloc(len).op(OpCode::Stind_I8);
 
-                // ── cpblk(resultPtr + 32, dataPtr, len) ───────────────
+                // cpblk(resultPtr + 32, dataPtr, len)
                 e.ldarg(1).ldc_i4(32).op(OpCode::Add);
-                e.ldloc(data_ptr);
-                e.ldloc(len).op(OpCode::Conv_I4);
+                e.ldloc(data_ptr).ldloc(len).op(OpCode::Conv_I4);
                 e.op(OpCode::Cpblk);
-
-                e.ldc_i4(0).op(OpCode::Conv_I8).stloc(result_local);
-                e.branch(OpCode::Leave, done);
-
-                e.mark(err_null_image);
-                e.ldc_i4(1).op(OpCode::Conv_I8).stloc(result_local);
-                e.branch(OpCode::Leave, done);
-
-                e.mark(err_null_data);
-                e.ldc_i4(2).op(OpCode::Conv_I8).stloc(result_local);
-                e.branch(OpCode::Leave, done);
-
-                e.mark(err_overflow);
-                e.ldc_i4(3).op(OpCode::Conv_I8).stloc(result_local);
-                e.branch(OpCode::Leave, done);
-            },
-            |e| {
-                e.pop();
-            },
-        );
-
-        e.mark(done);
-        e.ldloc(result_local).ret();
-    })
+            }
+        }
+    }
 }
