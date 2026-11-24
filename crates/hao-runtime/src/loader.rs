@@ -79,19 +79,24 @@ fn load_from_body(
     load_from: MemberToken,
     hresult: MemberToken,
 ) -> hao::dotnet::il::MethodBody {
-    Emitter::build(|e| {
-        let result = e.declare_local(TypeSig::INT32);
-        e.try_catch(
-            exception.clone(),
-            |e| {
-                e.ldarg(0).call(to_string).call(load_from).pop();
-            },
-            |e| {
-                e.callvirt(hresult).stloc(result);
-            },
-        );
-        e.ldloc(result).ret();
-    })
+    hao::managed_body! {
+        exception: exception.clone(),
+        methods {
+            to_string: static to_string,
+            load_from: static &load_from,
+            hresult: virtual &hresult,
+        },
+        params(path: nint),
+        result: i32 = 0,
+        body {
+            let path_str: string = to_string(path);
+            _ = load_from(path_str);
+        },
+        catch |e, r| {
+            hresult.emit_call(e); // the exception object is the receiver
+            r.store(e);
+        },
+    }
 }
 
 /// `IntPtr GetMethod(IntPtr fullName, IntPtr name)`
@@ -99,35 +104,33 @@ fn load_from_body(
 /// Resolves via `Type.GetType(fullName).GetMethod(name, flags)`, then
 /// `PrepareMethod` + `GetFunctionPointer`. Returns 0 on any exception.
 fn get_method_body(t: &Tokens) -> hao::dotnet::il::MethodBody {
-    Emitter::build(|e| {
-        let found_type = e.declare_local(TypeSig::class(t.type_ty.clone()));
-        let method = e.declare_local(TypeSig::class(t.method_info.clone()));
-        let handle = e.declare_local(TypeSig::value_type(t.handle_ty.clone()));
-        let result = e.declare_local(TypeSig::NATIVE_INT);
-        e.ldc_i4(0).op(OpCode::Conv_I).stloc(result);
-        e.try_catch(
-            t.exception.clone(),
-            |e| {
-                e.ldarg(0)
-                    .call(&t.to_string)
-                    .call(&t.get_type)
-                    .stloc(found_type);
-                e.ldloc(found_type)
-                    .ldarg(1)
-                    .call(&t.to_string)
-                    .ldc_i4(BINDING_FLAGS)
-                    .callvirt(&t.get_method)
-                    .stloc(method);
-                e.ldloc(method).callvirt(&t.method_handle).stloc(handle);
-                e.ldloc(handle).call(&t.prepare);
-                e.ldloca(handle).call(&t.function_pointer).stloc(result);
-            },
-            |e| {
-                e.pop();
-            },
-        );
-        e.ldloc(result).ret();
-    })
+    hao::managed_body! {
+        exception: t.exception.clone(),
+        types {
+            Type: class(t.type_ty.clone()),
+            MethodInfo: class(t.method_info.clone()),
+            MethodHandle: valuetype(t.handle_ty.clone()),
+        },
+        methods {
+            to_string: static &t.to_string,
+            get_type: static &t.get_type,
+            get_method: virtual &t.get_method,
+            method_handle: virtual &t.method_handle,
+            prepare: static &t.prepare,
+            function_pointer: instance &t.function_pointer,
+        },
+        params(full_name: nint, name: nint),
+        result: nint = 0,
+        body {
+            let type_str: string = to_string(full_name);
+            let found: Type = get_type(type_str);
+            let name_str: string = to_string(name);
+            let method: MethodInfo = found.get_method(name_str, const BINDING_FLAGS);
+            let handle: MethodHandle = method.method_handle();
+            prepare(handle);
+            result = handle.function_pointer();
+        },
+    }
 }
 
 /// `IntPtr GetMethodFromLoaded(IntPtr typeName, IntPtr methodName, IntPtr asmName)`
@@ -631,22 +634,16 @@ fn suppress_gc_body(
     exception: &TypeDefOrRef,
     try_start: MemberToken,
 ) -> hao::dotnet::il::MethodBody {
-    Emitter::build(|e| {
-        let result = e.declare_local(TypeSig::INT64);
-        e.ldc_i4(0).op(OpCode::Conv_I8).stloc(result);
-        e.try_catch(
-            exception.clone(),
-            |e| {
-                e.ldarg(0).call(&try_start);
-                // TryStartNoGCRegion returns bool; convert to 1/0 i64
-                e.op(OpCode::Conv_I8).stloc(result);
-            },
-            |e| {
-                e.pop(); // discard exception
-            },
-        );
-        e.ldloc(result).ret();
-    })
+    hao::managed_body! {
+        exception: exception.clone(),
+        methods { try_start: static &try_start },
+        params(budget: i64),
+        result: i64 = 0,
+        body {
+            // TryStartNoGCRegion returns bool; the result store converts to 1/0 i64.
+            result = try_start(budget);
+        },
+    }
 }
 
 /// `void ResumeGC()`
@@ -658,18 +655,14 @@ fn resume_gc_body(
     exception: &TypeDefOrRef,
     end_no_gc: MemberToken,
 ) -> hao::dotnet::il::MethodBody {
-    Emitter::build(|e| {
-        e.try_catch(
-            exception.clone(),
-            |e| {
-                e.call(&end_no_gc);
-            },
-            |e| {
-                e.pop(); // discard exception
-            },
-        );
-        e.ret();
-    })
+    hao::managed_body! {
+        exception: exception.clone(),
+        methods { end_no_gc: static &end_no_gc },
+        result: (),
+        body {
+            end_no_gc();
+        },
+    }
 }
 
 // ---------------------------------------------------------------------------
