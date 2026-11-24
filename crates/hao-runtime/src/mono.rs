@@ -377,4 +377,46 @@ impl Mono {
         }
         Ok(code)
     }
+
+    /// Resolves a well-known corlib method to a native-callable pointer, using
+    /// Mono's own corlib image (`mono_get_corlib`) rather than a loaded
+    /// assembly. The type is `namespace.name`, the overload is picked by
+    /// `arity` (`-1` matches any).
+    #[cfg(feature = "hao")]
+    pub fn corlib_method_pointer(
+        &self,
+        namespace: &str,
+        name: &str,
+        method: &str,
+        arity: c_int,
+    ) -> Result<*const c_void> {
+        self.attach_thread();
+        let corlib = unsafe { (self.api.get_corlib)() };
+        if corlib.is_null() {
+            return Err(Error::Other("mono_get_corlib returned null".into()));
+        }
+        let (namespace_c, name_c, method_c) =
+            (cstring(namespace)?, cstring(name)?, cstring(method)?);
+        unsafe {
+            let class = (self.api.class_from_name)(corlib, namespace_c.as_ptr(), name_c.as_ptr());
+            if class.is_null() {
+                return Err(Error::NotFound(format!("corlib type {}.{}", namespace, name)));
+            }
+            let method_ptr = (self.api.class_get_method_from_name)(class, method_c.as_ptr(), arity);
+            if method_ptr.is_null() {
+                return Err(Error::NotFound(format!(
+                    "corlib method {}.{}::{}",
+                    namespace, name, method
+                )));
+            }
+            let code = (self.api.compile_method)(method_ptr);
+            if code.is_null() {
+                return Err(Error::Other(format!(
+                    "could not compile corlib {}::{}",
+                    name, method
+                )));
+            }
+            Ok(code)
+        }
+    }
 }

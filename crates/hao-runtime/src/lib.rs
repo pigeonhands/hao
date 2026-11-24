@@ -258,28 +258,42 @@ impl Runtime {
         }
     }
 
-    /// Resolves a well-known corlib method to a native-callable pointer in
-    /// the loaded `System.Private.CoreLib`, deriving the type name, method
-    /// name and overload arity from the
+    /// Resolves a well-known corlib method to a native-callable pointer,
+    /// deriving the type name, method name and overload arity from the
     /// [`WellKnownMethod`](hao::dotnet::entries::well_known::WellKnownMethod)
-    /// vocabulary instead of raw strings. CoreCLR only.
+    /// vocabulary instead of raw strings.
+    ///
+    /// On CoreCLR the method is found in the loaded `System.Private.CoreLib`;
+    /// on Mono it is found in `mono_get_corlib` (`mscorlib`).
     #[cfg(feature = "hao")]
     pub fn corlib_method_pointer(
         &self,
         method: hao::dotnet::entries::well_known::WellKnownMethod,
     ) -> Result<*const c_void> {
         let (namespace, name) = method.declaring().full_name();
-        let full_name = if namespace.is_empty() {
-            name.to_string()
-        } else {
-            format!("{namespace}.{name}")
-        };
-        self.find_method_from_loaded(
-            "System.Private.CoreLib",
-            &full_name,
-            method.method_name(),
-            method.param_count() as i32,
-        )
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => {
+                let full_name = if namespace.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{namespace}.{name}")
+                };
+                clr.find_method_from_loaded(
+                    "System.Private.CoreLib",
+                    &full_name,
+                    method.method_name(),
+                    method.param_count() as i32,
+                )
+            }
+            #[cfg(feature = "mono")]
+            Inner::Mono(mono) => mono.corlib_method_pointer(
+                namespace,
+                name,
+                method.method_name(),
+                method.param_count() as i32,
+            ),
+        }
     }
 
     /// Like [`method_pointer_from_loaded`](Self::method_pointer_from_loaded)
