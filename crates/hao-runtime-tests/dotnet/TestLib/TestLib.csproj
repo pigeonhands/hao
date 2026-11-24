@@ -3,5 +3,10 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <Nullable>disable</Nullable>
     <DebugType>none</DebugType>
+    <!-- The cargo build script redirects BaseIntermediateOutputPath to
+         OUT_DIR, which removes the default glob excludes for any stale
+         in-tree obj/bin; exclude them explicitly so leftover generated
+         sources never cause duplicate-attribute errors (CS0579). -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
   </PropertyGroup>
 </Project>

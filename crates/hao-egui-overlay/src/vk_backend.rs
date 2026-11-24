@@ -1090,6 +1090,7 @@ unsafe extern "C" fn hooked_create_device(
     result
 }
 
+#[cfg(feature = "hooking")]
 pub(crate) fn vk_get_device_proc_addr_raw() -> *const () {
     vkGetDeviceProcAddr as *const ()
 }
