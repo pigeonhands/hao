@@ -69,6 +69,12 @@ type GetMethodFromLoaded =
     unsafe extern "system" fn(*const CharT, *const CharT, *const CharT) -> *mut c_void;
 type FindMethodFromLoaded =
     unsafe extern "system" fn(*const CharT, *const CharT, *const CharT, i32) -> *mut c_void;
+type ManagedInvoke = unsafe extern "system" fn(usize, u64, u64, u64, u64, u64, u64) -> u64;
+type ManagedInvokeFloat = unsafe extern "system" fn(usize, u64, u64, u64, u64, u64, u64) -> f64;
+type GetTypeNames = unsafe extern "system" fn(*const CharT) -> *mut CharT;
+type GetMethodNames = unsafe extern "system" fn(*const CharT, *const CharT) -> *mut CharT;
+type SuppressGC = unsafe extern "system" fn(i64) -> i64;
+type ResumeGC = unsafe extern "system" fn();
 
 /// `GetFunctionPointer`'s sentinel for a `[UnmanagedCallersOnly]` method.
 const UNMANAGED_CALLERS_ONLY: *const CharT = usize::MAX as *const CharT;
@@ -277,6 +283,12 @@ struct Loader {
     get_method: GetMethod,
     get_method_from_loaded: GetMethodFromLoaded,
     find_method_from_loaded: FindMethodFromLoaded,
+    invoke: ManagedInvoke,
+    invoke_float: ManagedInvokeFloat,
+    get_type_names: GetTypeNames,
+    get_method_names: GetMethodNames,
+    suppress_gc: SuppressGC,
+    resume_gc: ResumeGC,
 }
 
 pub(crate) struct CoreClr {
@@ -347,6 +359,12 @@ impl CoreClr {
             self.function_pointer(LOADER, "Hao.Loader", "GetMethodFromLoaded")?;
         let find_method_from_loaded =
             self.function_pointer(LOADER, "Hao.Loader", "FindMethodFromLoaded")?;
+        let invoke = self.function_pointer(LOADER, "Hao.Loader", "Invoke")?;
+        let invoke_float = self.function_pointer(LOADER, "Hao.Loader", "InvokeFloat")?;
+        let get_type_names = self.function_pointer(LOADER, "Hao.Loader", "GetTypeNames")?;
+        let get_method_names = self.function_pointer(LOADER, "Hao.Loader", "GetMethodNames")?;
+        let suppress_gc = self.function_pointer(LOADER, "Hao.Loader", "SuppressGC")?;
+        let resume_gc = self.function_pointer(LOADER, "Hao.Loader", "ResumeGC")?;
         Ok(self.loader.get_or_init(|| unsafe {
             Loader {
                 load_from: std::mem::transmute::<*const c_void, LoadFrom>(load_from),
@@ -357,6 +375,18 @@ impl CoreClr {
                 find_method_from_loaded: std::mem::transmute::<*const c_void, FindMethodFromLoaded>(
                     find_method_from_loaded,
                 ),
+                invoke: std::mem::transmute::<*const c_void, ManagedInvoke>(invoke),
+                invoke_float: std::mem::transmute::<*const c_void, ManagedInvokeFloat>(
+                    invoke_float,
+                ),
+                get_type_names: std::mem::transmute::<*const c_void, GetTypeNames>(
+                    get_type_names,
+                ),
+                get_method_names: std::mem::transmute::<*const c_void, GetMethodNames>(
+                    get_method_names,
+                ),
+                suppress_gc: std::mem::transmute::<*const c_void, SuppressGC>(suppress_gc),
+                resume_gc: std::mem::transmute::<*const c_void, ResumeGC>(resume_gc),
             }
         }))
     }
@@ -496,6 +526,92 @@ impl CoreClr {
         }
         check("get_function_pointer", code)?;
         Ok(function)
+    }
+
+    /// Calls a managed method pointer through a P/Invoke wrapper that
+    /// auto-registers the calling thread with the CLR's GC.
+    pub fn invoke(&self, ptr: usize, args: &[u64]) -> Result<u64> {
+        let loader = self.loader()?;
+        let a = |i: usize| args.get(i).copied().unwrap_or(0);
+        Ok(unsafe { (loader.invoke)(ptr, a(0), a(1), a(2), a(3), a(4), a(5)) })
+    }
+
+    /// Like [`invoke`](Self::invoke) but returns `f64` for floating-point
+    /// return values.
+    pub fn invoke_float(&self, ptr: usize, args: &[u64]) -> Result<f64> {
+        let loader = self.loader()?;
+        let a = |i: usize| args.get(i).copied().unwrap_or(0);
+        Ok(unsafe { (loader.invoke_float)(ptr, a(0), a(1), a(2), a(3), a(4), a(5)) })
+    }
+
+    /// Requests a no-GC region for the next `budget` bytes of managed
+    /// allocation.  Returns `true` if the runtime agreed to suppress GC.
+    /// Safe to call from any thread — the managed wrapper catches exceptions.
+    pub fn suppress_gc(&self, budget: i64) -> Result<bool> {
+        let loader = self.loader()?;
+        Ok(unsafe { (loader.suppress_gc)(budget) } != 0)
+    }
+
+    /// Ends a no-GC region previously started by [`suppress_gc`](Self::suppress_gc).
+    /// No-op if no region is active (the managed wrapper catches the exception).
+    pub fn resume_gc(&self) -> Result<()> {
+        let loader = self.loader()?;
+        unsafe { (loader.resume_gc)() };
+        Ok(())
+    }
+
+    /// The .NET major version this runtime was started or attached with.
+    pub fn major(&self) -> u16 {
+        self.major
+    }
+
+    /// Returns `\n`-separated type full names from a loaded assembly.
+    pub fn type_names(&self, assembly: &str) -> Result<Vec<String>> {
+        let asm_w = wide(assembly);
+        let ptr = unsafe { (self.loader()?.get_type_names)(asm_w.as_ptr()) };
+        if ptr.is_null() {
+            return Err(Error::NotFound(format!(
+                "no types in loaded assembly \"{}\"",
+                assembly,
+            )));
+        }
+        let s = read_cotask_utf16(ptr);
+        Ok(s.lines().map(String::from).collect())
+    }
+
+    /// Returns `\n`-separated method names from a type in a loaded assembly.
+    pub fn method_names(&self, assembly: &str, type_name: &str) -> Result<Vec<String>> {
+        let type_w = wide(type_name);
+        let asm_w = wide(assembly);
+        let ptr = unsafe { (self.loader()?.get_method_names)(type_w.as_ptr(), asm_w.as_ptr()) };
+        if ptr.is_null() {
+            return Err(Error::NotFound(format!(
+                "no methods for {} in loaded assembly \"{}\"",
+                type_name, assembly,
+            )));
+        }
+        let s = read_cotask_utf16(ptr);
+        Ok(s.lines().map(String::from).collect())
+    }
+}
+
+/// Reads a null-terminated UTF-16 LE string from a `CoTaskMem`-allocated
+/// pointer and frees the memory.  `Marshal.StringToCoTaskMemUni` always
+/// writes UTF-16 on all platforms.
+fn read_cotask_utf16(ptr: *mut CharT) -> String {
+    extern "C" {
+        fn free(ptr: *mut c_void);
+    }
+    unsafe {
+        let mut len = 0usize;
+        let base = ptr as *const u16;
+        while *base.add(len) != 0 {
+            len += 1;
+        }
+        let slice = std::slice::from_raw_parts(base, len);
+        let result = String::from_utf16_lossy(slice);
+        free(ptr as *mut c_void);
+        result
     }
 }
 

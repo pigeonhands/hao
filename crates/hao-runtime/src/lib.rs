@@ -33,6 +33,12 @@ use std::{ffi::c_void, path::Path, sync::Arc};
 pub use bindings::{BoundAssembly, Object};
 pub use error::{Error, Result};
 
+/// The `hao` assembly-editing crate, re-exported so downstream crates can
+/// build modules to load with [`Runtime::load_module`] without pinning
+/// their own (possibly mismatched) `hao` version.
+#[cfg(feature = "hao")]
+pub use hao;
+
 #[cfg(feature = "coreclr")]
 pub use coreclr::{find_dotnet_root, CoreClrOptions};
 #[cfg(feature = "mono")]
@@ -271,6 +277,83 @@ impl Runtime {
             Inner::Mono(_) => Err(Error::Other(
                 "find_method_from_loaded is CoreCLR-only".into(),
             )),
+        }
+    }
+
+    /// Calls a managed method pointer through a P/Invoke wrapper that
+    /// ensures the calling thread is registered with the CLR's GC.
+    /// Falls back to `jit::call_native` on Mono (which handles thread
+    /// attach separately).
+    #[cfg(target_arch = "x86_64")]
+    pub fn invoke(&self, ptr: usize, args: &[u64]) -> Result<u64> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.invoke(ptr, args),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Ok(unsafe { jit::call_native(ptr, args) }),
+        }
+    }
+
+    /// Like [`invoke`](Self::invoke) but returns `f64`.
+    #[cfg(target_arch = "x86_64")]
+    pub fn invoke_float(&self, ptr: usize, args: &[u64]) -> Result<f64> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.invoke_float(ptr, args),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Ok(unsafe { jit::call_native_float(ptr, args) }),
+        }
+    }
+
+    /// Requests a no-GC region for the next `budget` bytes of managed
+    /// allocation.  Returns `true` if the runtime agreed to suppress GC.
+    pub fn suppress_gc(&self, budget: i64) -> Result<bool> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.suppress_gc(budget),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Ok(false),
+        }
+    }
+
+    /// Ends a no-GC region started by [`suppress_gc`](Self::suppress_gc).
+    pub fn resume_gc(&self) -> Result<()> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.resume_gc(),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Ok(()),
+        }
+    }
+
+    /// The .NET major version (e.g. 9) the runtime was started or attached
+    /// with. `None` on Mono, where no CoreCLR framework version applies.
+    pub fn dotnet_major(&self) -> Option<u16> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => Some(clr.major()),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => None,
+        }
+    }
+
+    /// Returns all type full names from a loaded assembly.
+    pub fn type_names(&self, assembly: &str) -> Result<Vec<String>> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.type_names(assembly),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Err(Error::Other("type_names is CoreCLR-only".into())),
+        }
+    }
+
+    /// Returns all method names from a type in a loaded assembly.
+    pub fn method_names(&self, assembly: &str, type_name: &str) -> Result<Vec<String>> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.method_names(assembly, type_name),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Err(Error::Other("method_names is CoreCLR-only".into())),
         }
     }
 }

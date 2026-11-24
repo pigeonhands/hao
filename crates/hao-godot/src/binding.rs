@@ -6,12 +6,11 @@
 //! Each entry specifies a fully-qualified C# type, the method name, and the
 //! number of parameters (used to disambiguate overloads):
 //!
-//! ```ignore
+//! ```no_run
 //! mod player {
 //!     use hao_runtime::{Result, Runtime};
-//!     use std::ffi::c_void;
 //!
-//!     crate::bindings! {
+//!     hao_godot::bindings! {
 //!         GET_POSITION: "Godot.Node2D" "get_Position" 0;
 //!         SET_POSITION: "Godot.Node2D" "set_Position" 1;
 //!         GET_HEALTH:   "Game.Player"  "get_Health"   0;
@@ -41,7 +40,6 @@
 use std::ffi::c_void;
 use std::sync::OnceLock;
 
-use hao_runtime::jit::call_native;
 use hao_runtime::{Result, Runtime};
 
 pub struct Binding {
@@ -86,27 +84,27 @@ impl Binding {
 
     pub fn call0(&self, rt: &Runtime) -> Result<u64> {
         let ptr = self.resolve(rt)?;
-        Ok(unsafe { call_native(ptr, &[]) })
+        rt.invoke(ptr, &[])
     }
 
     pub fn call1(&self, rt: &Runtime, a: u64) -> Result<u64> {
         let ptr = self.resolve(rt)?;
-        Ok(unsafe { call_native(ptr, &[a]) })
+        rt.invoke(ptr, &[a])
     }
 
     pub fn call2(&self, rt: &Runtime, a: u64, b: u64) -> Result<u64> {
         let ptr = self.resolve(rt)?;
-        Ok(unsafe { call_native(ptr, &[a, b]) })
+        rt.invoke(ptr, &[a, b])
     }
 
     pub fn call3(&self, rt: &Runtime, a: u64, b: u64, c: u64) -> Result<u64> {
         let ptr = self.resolve(rt)?;
-        Ok(unsafe { call_native(ptr, &[a, b, c]) })
+        rt.invoke(ptr, &[a, b, c])
     }
 
     pub fn call_ptr(&self, rt: &Runtime, args: &[u64]) -> Result<*const c_void> {
         let ptr = self.resolve(rt)?;
-        Ok(unsafe { call_native(ptr, args) } as *const c_void)
+        Ok(rt.invoke(ptr, args)? as *const c_void)
     }
 
     /// Call the method and read a 4×f32 struct return (e.g. Rect2, Vector4)
@@ -119,8 +117,8 @@ impl Binding {
 
 /// Declares GodotSharp bindings with lazy runtime resolution.
 ///
-/// ```ignore
-/// bindings! {
+/// ```no_run
+/// hao_godot::bindings! {
 ///     ENGINE_GET_MAIN_LOOP: "Godot.Engine" "GetMainLoop" 0;
 ///     NODE_GET_CHILD:       "Godot.Node"   "GetChild"    1;
 /// }
