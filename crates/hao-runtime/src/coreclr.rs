@@ -303,6 +303,9 @@ pub(crate) struct CoreClr {
     get_function_pointer: GetFunctionPointer,
     load_assembly_bytes: LoadAssemblyBytes,
     loader: OnceLock<Loader>,
+    // Serializes `loader()` initialization so the loader assembly is loaded and
+    // its helpers resolved exactly once, even under concurrent first-calls.
+    loader_init: std::sync::Mutex<()>,
     // `Hao.Loader::Enumerate`, JIT-compiled and cached by `warm_enumerate`.
     // Resolution is `[UnmanagedCallersOnly]`-based and must happen off a
     // cooperative-mode thread; the cached pointer is then callable on one.
@@ -325,6 +328,7 @@ impl CoreClr {
             get_function_pointer: host.activator_delegate("GetFunctionPointer")?,
             load_assembly_bytes: host.activator_delegate("LoadAssemblyBytes")?,
             loader: OnceLock::new(),
+            loader_init: std::sync::Mutex::new(()),
             enumerate: OnceLock::new(),
             _coreclr: Some(coreclr),
         })
@@ -352,6 +356,7 @@ impl CoreClr {
             get_function_pointer: host.activator_delegate("GetFunctionPointer")?,
             load_assembly_bytes: host.activator_delegate("LoadAssemblyBytes")?,
             loader: OnceLock::new(),
+            loader_init: std::sync::Mutex::new(()),
             enumerate: OnceLock::new(),
             _coreclr: None,
         })
@@ -359,6 +364,13 @@ impl CoreClr {
 
     /// The `Hao.Loader` helpers, generated with hao and loaded once.
     fn loader(&self) -> Result<&Loader> {
+        if let Some(loader) = self.loader.get() {
+            return Ok(loader);
+        }
+        // Hold the init lock so the side-effecting assembly load and helper
+        // resolution below run exactly once, even if several threads reach here
+        // before initialization completes. Double-check after acquiring it.
+        let _guard = self.loader_init.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(loader) = self.loader.get() {
             return Ok(loader);
         }
@@ -375,7 +387,7 @@ impl CoreClr {
         let get_method_names = self.function_pointer(LOADER, "Hao.Loader", "GetMethodNames")?;
         let suppress_gc = self.function_pointer(LOADER, "Hao.Loader", "SuppressGC")?;
         let resume_gc = self.function_pointer(LOADER, "Hao.Loader", "ResumeGC")?;
-        Ok(self.loader.get_or_init(|| unsafe {
+        let loader = unsafe {
             Loader {
                 load_from: std::mem::transmute::<*const c_void, LoadFrom>(load_from),
                 get_method: std::mem::transmute::<*const c_void, GetMethod>(get_method),
@@ -398,7 +410,11 @@ impl CoreClr {
                 suppress_gc: std::mem::transmute::<*const c_void, SuppressGC>(suppress_gc),
                 resume_gc: std::mem::transmute::<*const c_void, ResumeGC>(resume_gc),
             }
-        }))
+        };
+        // We hold the init lock and double-checked above, so no other thread can
+        // have set it; this initializes exactly once.
+        let _ = self.loader.set(loader);
+        Ok(self.loader.get().expect("loader just initialized"))
     }
 
     /// Loads with `Assembly.LoadFrom`, so dependencies next to the assembly
