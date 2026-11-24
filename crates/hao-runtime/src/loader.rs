@@ -14,13 +14,12 @@ use hao::{
                 AppDomainMethod, AssemblyMethod, AssemblyNameMethod, ExceptionMethod,
                 GcMethod, MarshalMethod, MemberInfoMethod, MethodBaseMethod,
                 RuntimeHelpersMethod, RuntimeMethodHandleMethod, StringExtMethod,
-                StringMethod, SystemReflectionType, SystemRuntimeCompilerServicesType,
-                SystemType, TypeExtMethod, TypeMethod,
+                StringMethod, SystemReflectionType, SystemType, TypeExtMethod, TypeMethod,
                 WellKnownMethod,
             },
             TypeDefOrRef,
         },
-        il::{Emitter, MemberToken, OpCode},
+        il::{ChainImports, Emitter, MemberToken, OpCode},
         module::{ModuleKind, TargetRuntime},
         signature::{MethodSig, TypeSig},
     },
@@ -61,6 +60,78 @@ struct Tokens {
     type_get_full_name: MemberToken,
     marshal_to_cotask: MemberToken,
     get_length: MemberToken,
+    asm_load_from: MemberToken,
+    hresult: MemberToken,
+    gc_try_start: MemberToken,
+    gc_end: MemberToken,
+}
+
+impl Tokens {
+    /// Imports every type and method the Hao.Loader bodies reference.
+    fn resolve(module: &mut Module) -> hao::error::Result<Self> {
+        Ok(Self {
+            exception: module.corlib_type(SystemType::Exception)?,
+            type_ty: module.corlib_type(SystemType::Type)?,
+            handle_ty: module.corlib_type(SystemType::RuntimeMethodHandle)?,
+            method_info: module.corlib_type(SystemReflectionType::MethodInfo)?,
+            assembly: module.corlib_type(SystemReflectionType::Assembly)?,
+            to_string: module
+                .import_well_known_method(WellKnownMethod::Marshal(MarshalMethod::PtrToStringAuto))?,
+            hresult: module
+                .import_well_known_method(WellKnownMethod::Exception(ExceptionMethod::GetHResult))?,
+            asm_load_from: module
+                .import_well_known_method(WellKnownMethod::Assembly(AssemblyMethod::LoadFrom))?,
+            get_type: module
+                .import_well_known_method(WellKnownMethod::TypeExt(TypeExtMethod::GetTypeStatic))?,
+            get_method: module
+                .import_well_known_method(WellKnownMethod::TypeExt(TypeExtMethod::GetMethodBF))?,
+            method_handle: module.import_well_known_method(WellKnownMethod::MethodBase(
+                MethodBaseMethod::GetMethodHandle,
+            ))?,
+            prepare: module.import_well_known_method(WellKnownMethod::RuntimeHelpers(
+                RuntimeHelpersMethod::PrepareMethod,
+            ))?,
+            function_pointer: module.import_well_known_method(
+                WellKnownMethod::RuntimeMethodHandle(RuntimeMethodHandleMethod::GetFunctionPointer),
+            )?,
+            get_current_domain: module.import_well_known_method(WellKnownMethod::AppDomain(
+                AppDomainMethod::GetCurrentDomain,
+            ))?,
+            get_assemblies: module
+                .import_well_known_method(WellKnownMethod::AppDomain(AppDomainMethod::GetAssemblies))?,
+            get_asm_name: module
+                .import_well_known_method(WellKnownMethod::Assembly(AssemblyMethod::GetName))?,
+            get_name_prop: module.import_well_known_method(WellKnownMethod::AssemblyName(
+                AssemblyNameMethod::GetName,
+            ))?,
+            asm_get_type: module
+                .import_well_known_method(WellKnownMethod::Assembly(AssemblyMethod::GetTypeStr))?,
+            string_equals: module
+                .import_well_known_method(WellKnownMethod::StringExt(StringExtMethod::OpEquality))?,
+            get_methods: module
+                .import_well_known_method(WellKnownMethod::TypeExt(TypeExtMethod::GetMethodsBF))?,
+            get_member_name: module.import_well_known_method(WellKnownMethod::MemberInfo(
+                MemberInfoMethod::GetName,
+            ))?,
+            get_parameters: module.import_well_known_method(WellKnownMethod::MethodBase(
+                MethodBaseMethod::GetParameters,
+            ))?,
+            asm_get_types: module
+                .import_well_known_method(WellKnownMethod::Assembly(AssemblyMethod::GetTypes))?,
+            string_concat: module
+                .import_well_known_method(WellKnownMethod::String(StringMethod::Concat2))?,
+            type_get_full_name: module
+                .import_well_known_method(WellKnownMethod::Type(TypeMethod::GetFullName))?,
+            marshal_to_cotask: module.import_well_known_method(WellKnownMethod::Marshal(
+                MarshalMethod::StringToCoTaskMemUni,
+            ))?,
+            get_length: module
+                .import_well_known_method(WellKnownMethod::String(StringMethod::GetLength))?,
+            gc_try_start: module
+                .import_well_known_method(WellKnownMethod::Gc(GcMethod::TryStartNoGCRegion))?,
+            gc_end: module.import_well_known_method(WellKnownMethod::Gc(GcMethod::EndNoGCRegion))?,
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -73,18 +144,13 @@ struct Tokens {
 /// try { Assembly.LoadFrom(Marshal.PtrToStringAuto(path)); return 0; }
 /// catch (Exception e) { return e.HResult; }
 /// ```
-fn load_from_body(
-    to_string: &MemberToken,
-    exception: &TypeDefOrRef,
-    load_from: MemberToken,
-    hresult: MemberToken,
-) -> hao::dotnet::il::MethodBody {
+fn load_from_body(t: &Tokens) -> hao::dotnet::il::MethodBody {
     hao::managed_body! {
-        exception: exception.clone(),
+        exception: t.exception.clone(),
         methods {
-            to_string: static to_string,
-            load_from: static &load_from,
-            hresult: virtual &hresult,
+            to_string: static &t.to_string,
+            load_from: static &t.asm_load_from,
+            hresult: virtual &t.hresult,
         },
         params(path: nint),
         result: i32 = 0,
@@ -585,10 +651,7 @@ fn get_method_names_body(t: &Tokens) -> hao::dotnet::il::MethodBody {
 /// calling thread with the CLR.  The `calli` uses `SuppressGCTransition` so
 /// the thread stays in cooperative mode — the GC cannot compact while the
 /// target method is running.
-fn invoke_body(
-    callconv_cdecl: &TypeDefOrRef,
-    callconv_suppress: &TypeDefOrRef,
-) -> hao::dotnet::il::MethodBody {
+fn invoke_body(imports: &ChainImports) -> hao::dotnet::il::MethodBody {
     Emitter::build(|e| {
         for i in 1..=6u16 {
             e.ldarg(i);
@@ -597,8 +660,8 @@ fn invoke_body(
         e.calli(MethodSig::unmanaged_suppress_gc(
             TypeSig::INT64,
             vec![TypeSig::INT64; 6],
-            callconv_cdecl,
-            callconv_suppress,
+            &imports.callconv_cdecl,
+            &imports.callconv_suppress_gc,
         ));
         e.ret();
     })
@@ -607,10 +670,7 @@ fn invoke_body(
 /// `double InvokeFloat(IntPtr methodPtr, long a0, long a1, long a2, long a3, long a4, long a5)`
 ///
 /// Same as `Invoke` but returns `double`.
-fn invoke_float_body(
-    callconv_cdecl: &TypeDefOrRef,
-    callconv_suppress: &TypeDefOrRef,
-) -> hao::dotnet::il::MethodBody {
+fn invoke_float_body(imports: &ChainImports) -> hao::dotnet::il::MethodBody {
     Emitter::build(|e| {
         for i in 1..=6u16 {
             e.ldarg(i);
@@ -619,8 +679,8 @@ fn invoke_float_body(
         e.calli(MethodSig::unmanaged_suppress_gc(
             TypeSig::FLOAT64,
             vec![TypeSig::INT64; 6],
-            callconv_cdecl,
-            callconv_suppress,
+            &imports.callconv_cdecl,
+            &imports.callconv_suppress_gc,
         ));
         e.ret();
     })
@@ -630,13 +690,10 @@ fn invoke_float_body(
 ///
 /// Calls `GC.TryStartNoGCRegion(budget)` inside a try/catch.  Returns 1 on
 /// success, 0 on failure (not enough memory, or already in a no-GC region).
-fn suppress_gc_body(
-    exception: &TypeDefOrRef,
-    try_start: MemberToken,
-) -> hao::dotnet::il::MethodBody {
+fn suppress_gc_body(t: &Tokens) -> hao::dotnet::il::MethodBody {
     hao::managed_body! {
-        exception: exception.clone(),
-        methods { try_start: static &try_start },
+        exception: t.exception.clone(),
+        methods { try_start: static &t.gc_try_start },
         params(budget: i64),
         result: i64 = 0,
         body {
@@ -651,13 +708,10 @@ fn suppress_gc_body(
 /// Calls `GC.EndNoGCRegion()` inside a try/catch.  Silently ignores
 /// `InvalidOperationException` when no region is active (the GC already
 /// broke out because allocations exceeded the budget).
-fn resume_gc_body(
-    exception: &TypeDefOrRef,
-    end_no_gc: MemberToken,
-) -> hao::dotnet::il::MethodBody {
+fn resume_gc_body(t: &Tokens) -> hao::dotnet::il::MethodBody {
     hao::managed_body! {
-        exception: exception.clone(),
-        methods { end_no_gc: static &end_no_gc },
+        exception: t.exception.clone(),
+        methods { end_no_gc: static &t.gc_end },
         result: (),
         body {
             end_no_gc();
@@ -691,112 +745,15 @@ pub fn loader_assembly(major: u16) -> Result<Vec<u8>> {
             TargetRuntime::NetCoreImplementation(major),
         );
 
-        // ── Type refs needed for IL locals ────────────────────────────────
-        let exception = module.corlib_type(SystemType::Exception)?;
-        let type_ty = module.corlib_type(SystemType::Type)?;
-        let handle_ty = module.corlib_type(SystemType::RuntimeMethodHandle)?;
-        let method_info = module.corlib_type(SystemReflectionType::MethodInfo)?;
-        let assembly = module.corlib_type(SystemReflectionType::Assembly)?;
-
-        // ── Well-known method imports ─────────────────────────────────────
-        let to_string = module
-            .import_well_known_method(WellKnownMethod::Marshal(MarshalMethod::PtrToStringAuto))?;
-        let hresult = module
-            .import_well_known_method(WellKnownMethod::Exception(ExceptionMethod::GetHResult))?;
-        let asm_load_from = module
-            .import_well_known_method(WellKnownMethod::Assembly(AssemblyMethod::LoadFrom))?;
-        let get_type = module
-            .import_well_known_method(WellKnownMethod::TypeExt(TypeExtMethod::GetTypeStatic))?;
-        let get_method = module
-            .import_well_known_method(WellKnownMethod::TypeExt(TypeExtMethod::GetMethodBF))?;
-        let method_handle = module.import_well_known_method(WellKnownMethod::MethodBase(
-            MethodBaseMethod::GetMethodHandle,
-        ))?;
-        let prepare = module.import_well_known_method(WellKnownMethod::RuntimeHelpers(
-            RuntimeHelpersMethod::PrepareMethod,
-        ))?;
-        let function_pointer = module.import_well_known_method(
-            WellKnownMethod::RuntimeMethodHandle(RuntimeMethodHandleMethod::GetFunctionPointer),
-        )?;
-        let get_current_domain = module
-            .import_well_known_method(WellKnownMethod::AppDomain(AppDomainMethod::GetCurrentDomain))?;
-        let get_assemblies = module
-            .import_well_known_method(WellKnownMethod::AppDomain(AppDomainMethod::GetAssemblies))?;
-        let get_asm_name = module
-            .import_well_known_method(WellKnownMethod::Assembly(AssemblyMethod::GetName))?;
-        let get_name_prop = module.import_well_known_method(WellKnownMethod::AssemblyName(
-            AssemblyNameMethod::GetName,
-        ))?;
-        let asm_get_type = module
-            .import_well_known_method(WellKnownMethod::Assembly(AssemblyMethod::GetTypeStr))?;
-        let string_equals = module
-            .import_well_known_method(WellKnownMethod::StringExt(StringExtMethod::OpEquality))?;
-        let get_methods = module
-            .import_well_known_method(WellKnownMethod::TypeExt(TypeExtMethod::GetMethodsBF))?;
-        let get_member_name = module.import_well_known_method(WellKnownMethod::MemberInfo(
-            MemberInfoMethod::GetName,
-        ))?;
-        let get_parameters = module.import_well_known_method(WellKnownMethod::MethodBase(
-            MethodBaseMethod::GetParameters,
-        ))?;
-        let asm_get_types = module
-            .import_well_known_method(WellKnownMethod::Assembly(AssemblyMethod::GetTypes))?;
-        let string_concat = module
-            .import_well_known_method(WellKnownMethod::String(StringMethod::Concat2))?;
-        let type_get_full_name = module
-            .import_well_known_method(WellKnownMethod::Type(TypeMethod::GetFullName))?;
-        let marshal_to_cotask = module
-            .import_well_known_method(WellKnownMethod::Marshal(MarshalMethod::StringToCoTaskMemUni))?;
-        let get_length = module
-            .import_well_known_method(WellKnownMethod::String(StringMethod::GetLength))?;
-
-        // ── GC control imports ───────────────────────────────────────────
-        let gc_try_start = module
-            .import_well_known_method(WellKnownMethod::Gc(GcMethod::TryStartNoGCRegion))?;
-        let gc_end = module
-            .import_well_known_method(WellKnownMethod::Gc(GcMethod::EndNoGCRegion))?;
-
-        // ── Token bundle ──────────────────────────────────────────────────
-        let tokens = Tokens {
-            to_string,
-            exception,
-            type_ty,
-            method_info,
-            handle_ty,
-            assembly,
-            get_type,
-            get_method,
-            method_handle,
-            prepare,
-            function_pointer,
-            get_current_domain,
-            get_assemblies,
-            get_asm_name,
-            get_name_prop,
-            asm_get_type,
-            asm_get_types,
-            string_equals,
-            string_concat,
-            get_methods,
-            get_member_name,
-            get_parameters,
-            type_get_full_name,
-            marshal_to_cotask,
-            get_length,
-        };
-
-        // ── SuppressGCTransition calli imports ────────────────────────────
-        let callconv_cdecl =
-            module.corlib_type(SystemRuntimeCompilerServicesType::CallConvCdecl)?;
-        let callconv_suppress =
-            module.corlib_type(SystemRuntimeCompilerServicesType::CallConvSuppressGCTransition)?;
+        let tokens = Tokens::resolve(&mut module)?;
+        let imports = ChainImports::resolve(&mut module)?;
 
         // ── Assemble the Hao.Loader class ─────────────────────────────────
         hao::dotnet_class! { &mut module =>
             static class "Hao".Loader {
                 #[unmanaged_callers_only]
                 fn LoadFrom(path: nint) -> i32 =
-                    load_from_body(&tokens.to_string, &tokens.exception, asm_load_from, hresult);
+                    load_from_body(&tokens);
                 #[unmanaged_callers_only]
                 fn GetMethod(full_name: nint, name: nint) -> nint =
                     get_method_body(&tokens);
@@ -808,10 +765,10 @@ pub fn loader_assembly(major: u16) -> Result<Vec<u8>> {
                     find_method_from_loaded_body(&tokens);
                 #[unmanaged_callers_only]
                 fn Invoke(method_ptr: nint, a0: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> i64 =
-                    invoke_body(&callconv_cdecl, &callconv_suppress);
+                    invoke_body(&imports);
                 #[unmanaged_callers_only]
                 fn InvokeFloat(method_ptr: nint, a0: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> f64 =
-                    invoke_float_body(&callconv_cdecl, &callconv_suppress);
+                    invoke_float_body(&imports);
                 #[unmanaged_callers_only]
                 fn GetTypeNames(asm_name: nint) -> nint =
                     get_type_names_body(&tokens);
@@ -820,10 +777,10 @@ pub fn loader_assembly(major: u16) -> Result<Vec<u8>> {
                     get_method_names_body(&tokens);
                 #[unmanaged_callers_only]
                 fn SuppressGC(budget: i64) -> i64 =
-                    suppress_gc_body(&tokens.exception, gc_try_start);
+                    suppress_gc_body(&tokens);
                 #[unmanaged_callers_only]
                 fn ResumeGC() -> () =
-                    resume_gc_body(&tokens.exception, gc_end);
+                    resume_gc_body(&tokens);
             }
         }?;
         module.write()
