@@ -117,6 +117,10 @@ well_known_methods! {
         PtrToStringAuto      = Static "PtrToStringAuto"      (nint)   -> string;
         StringToCoTaskMemUni = Static "StringToCoTaskMemUni" (string) -> nint;
         FreeCoTaskMem        = Static "FreeCoTaskMem"        (nint)   -> void;
+        UnsafeAddrOfPinnedArrayElement = Static "UnsafeAddrOfPinnedArrayElement" ({ WellKnown::System(SystemType::Array) }, i32) -> nint;
+    }
+    Array(ArrayMethod) = WellKnown::System(SystemType::Array) => {
+        GetLength = Instance "get_Length" () -> i32;
     }
     Exception(ExceptionMethod) = WellKnown::System(SystemType::Exception) => {
         GetHResult = Instance "get_HResult" () -> i32;

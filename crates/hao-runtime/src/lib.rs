@@ -258,6 +258,30 @@ impl Runtime {
         }
     }
 
+    /// Resolves a well-known corlib method to a native-callable pointer in
+    /// the loaded `System.Private.CoreLib`, deriving the type name, method
+    /// name and overload arity from the
+    /// [`WellKnownMethod`](hao::dotnet::entries::well_known::WellKnownMethod)
+    /// vocabulary instead of raw strings. CoreCLR only.
+    #[cfg(feature = "hao")]
+    pub fn corlib_method_pointer(
+        &self,
+        method: hao::dotnet::entries::well_known::WellKnownMethod,
+    ) -> Result<*const c_void> {
+        let (namespace, name) = method.declaring().full_name();
+        let full_name = if namespace.is_empty() {
+            name.to_string()
+        } else {
+            format!("{namespace}.{name}")
+        };
+        self.find_method_from_loaded(
+            "System.Private.CoreLib",
+            &full_name,
+            method.method_name(),
+            method.param_count() as i32,
+        )
+    }
+
     /// Like [`method_pointer_from_loaded`](Self::method_pointer_from_loaded)
     /// but matches by parameter count, so it works with overloaded methods.
     /// CoreCLR only.

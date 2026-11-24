@@ -115,6 +115,14 @@ macro_rules! wk_is_instance {
     };
 }
 
+/// Maps any parameter token to `()` so parameters can be counted with
+/// `<[()]>::len`.
+macro_rules! wk_unit {
+    ($p:tt) => {
+        ()
+    };
+}
+
 macro_rules! wk_new_sig {
     (Static, $ret:expr, $params:expr) => {
         MethodSig::new_static($ret, $params)
@@ -164,6 +172,11 @@ macro_rules! well_known_methods {
                 match self { $( Self::$group(m) => m.is_instance(), )+ }
             }
 
+            /// The number of declared parameters (`this` not counted).
+            pub fn param_count(self) -> usize {
+                match self { $( Self::$group(m) => m.param_count(), )+ }
+            }
+
             fn signature(self, module: &mut Module) -> Result<MethodSig> {
                 match self { $( Self::$group(m) => m.signature(module), )+ }
             }
@@ -181,6 +194,11 @@ macro_rules! well_known_methods {
                 }
                 fn is_instance(self) -> bool {
                     match self { $( Self::$variant => wk_is_instance!($kind), )+ }
+                }
+                fn param_count(self) -> usize {
+                    match self {
+                        $( Self::$variant => <[()]>::len(&[ $( wk_unit!($param) ),* ]), )+
+                    }
                 }
                 #[allow(unused_variables)]
                 fn signature(self, module: &mut Module) -> Result<MethodSig> {

@@ -17,10 +17,9 @@ use std::sync::OnceLock;
 
 use hao_runtime::hao::{
     dotnet::{
-        entries::{well_known::SystemRuntimeInteropServicesType, Method, TypeDef},
+        entries::well_known::{ArrayMethod, MarshalMethod, WellKnownMethod},
         il::ChainImports,
         module::{ModuleKind, TargetRuntime},
-        signature::{MethodSig, TypeSig},
     },
     Module,
 };
@@ -86,54 +85,49 @@ fn build_assembly(rt: &Runtime, major: u16) -> Result<Module> {
         TargetRuntime::NetCoreImplementation(major),
     );
 
-    let uco = module
-        .corlib_attribute(SystemRuntimeInteropServicesType::UnmanagedCallersOnlyAttribute)
-        .map_err(hao_err)?;
     let imports = ChainImports::resolve(&mut module).map_err(hao_err)?;
 
-    let body = hao_runtime::hao::callchain! {
-        imports: &imports,
-        methods {
-            tex2d_get: super::rendering_server::TEXTURE_2D_GET.resolve(rt)?,
-            decompress: super::image::DECOMPRESS.resolve(rt)?,
-            convert: super::image::CONVERT.resolve(rt)?,
-            get_data: super::image::GET_DATA.resolve(rt)?,
-            get_width: super::image::GET_WIDTH.resolve(rt)?,
-            get_height: super::image::GET_HEIGHT.resolve(rt)?,
-        },
-        consts { rgba8: super::image::format::RGBA8 },
-        params(rid: i64, result_ptr: nint, buf_size: i64),
-        errors { err_null_image = 1, err_null_data = 2, err_overflow = 3 },
-        chain {
-            let img = tex2d_get(rid) else err_null_image;
-            decompress(img);
-            convert(img, rgba8);
-            let w = get_width(img);
-            let h = get_height(img);
-            let arr = get_data(img) else err_null_data;
-            // .NET byte[]: [MethodTable*:8][Length:4][pad:4][data…]
-            let len: i32 = *(arr + 8);
-        },
-        returns result_ptr: ExtractHeader {
-            width: w,
-            height: h,
-            data_len: len,
-            ..copy(arr + 16, len) within buf_size else err_overflow,
-        },
-    };
-
-    let interop = module.add_static_class("Hao.Godot", "Interop").map_err(hao_err)?;
-    TypeDef::add_method(
-        &interop,
-        Method::public_static(
-            "ExtractImageRgba",
-            MethodSig::new_static(
-                TypeSig::INT64,
-                vec![TypeSig::INT64, TypeSig::NATIVE_INT, TypeSig::INT64],
-            ),
-        )
-        .with_attribute(uco)
-        .with_body(body),
-    );
+    hao_runtime::hao::dotnet_class! { &mut module =>
+        static class "Hao.Godot".Interop {
+            #[unmanaged_callers_only]
+            fn ExtractImageRgba(rid: i64, result_ptr: nint, buf_size: i64) -> i64 = chain {
+                imports: &imports,
+                methods {
+                    tex2d_get: super::rendering_server::TEXTURE_2D_GET.resolve(rt)?,
+                    decompress: super::image::DECOMPRESS.resolve(rt)?,
+                    convert: super::image::CONVERT.resolve(rt)?,
+                    get_data: super::image::GET_DATA.resolve(rt)?,
+                    get_width: super::image::GET_WIDTH.resolve(rt)?,
+                    get_height: super::image::GET_HEIGHT.resolve(rt)?,
+                    array_len: rt.corlib_method_pointer(
+                        WellKnownMethod::Array(ArrayMethod::GetLength))? as usize,
+                    array_data: rt.corlib_method_pointer(
+                        WellKnownMethod::Marshal(
+                            MarshalMethod::UnsafeAddrOfPinnedArrayElement))? as usize,
+                },
+                consts { rgba8: super::image::format::RGBA8, zero: 0 },
+                errors { err_null_image = 1, err_null_data = 2, err_overflow = 3 },
+                chain {
+                    let img = tex2d_get(rid) else err_null_image;
+                    decompress(img);
+                    convert(img, rgba8);
+                    let w = get_width(img);
+                    let h = get_height(img);
+                    let arr = get_data(img) else err_null_data;
+                    let len = array_len(arr);
+                    // The chain's cooperative no-GC-moves window satisfies
+                    // the "pinned" precondition.
+                    let data = array_data(arr, zero);
+                },
+                returns result_ptr: ExtractHeader {
+                    width: w,
+                    height: h,
+                    data_len: len,
+                    ..copy(data + 0, len) within buf_size else err_overflow,
+                },
+            };
+        }
+    }
+    .map_err(hao_err)?;
     Ok(module)
 }
