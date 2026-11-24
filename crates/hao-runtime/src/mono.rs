@@ -41,7 +41,23 @@ struct Api {
     method_get_unmanaged_thunk: unsafe extern "C" fn(Ptr) -> Ptr,
     compile_method: unsafe extern "C" fn(Ptr) -> Ptr,
     get_root_domain: unsafe extern "C" fn() -> Ptr,
+    object_get_class: unsafe extern "C" fn(Ptr) -> Ptr,
+    object_get_virtual_method: unsafe extern "C" fn(Ptr, Ptr) -> Ptr,
+    runtime_invoke: unsafe extern "C" fn(Ptr, Ptr, *mut Ptr, *mut Ptr) -> Ptr,
+    object_unbox: unsafe extern "C" fn(Ptr) -> Ptr,
+    class_get_methods: unsafe extern "C" fn(Ptr, *mut Ptr) -> Ptr,
+    method_get_name: unsafe extern "C" fn(Ptr) -> *const c_char,
+    class_get_name: unsafe extern "C" fn(Ptr) -> *const c_char,
+    class_get_namespace: unsafe extern "C" fn(Ptr) -> *const c_char,
+    image_get_table_rows: unsafe extern "C" fn(Ptr, c_int) -> c_int,
+    class_get: unsafe extern "C" fn(Ptr, u32) -> Ptr,
+    get_corlib: unsafe extern "C" fn() -> Ptr,
 }
+
+/// The `MONO_TABLE_TYPEDEF` index for `mono_image_get_table_rows`.
+const MONO_TABLE_TYPEDEF: c_int = 2;
+/// The top byte of a `TypeDef` metadata token.
+const MONO_TOKEN_TYPE_DEF: u32 = 0x0200_0000;
 
 pub(crate) struct Mono {
     _library: Library,
@@ -78,6 +94,18 @@ fn cstring(value: &str) -> Result<CString> {
     CString::new(value).map_err(|_| Error::Other(format!("{:?} contains a nul byte", value)))
 }
 
+/// Copies a Mono-owned C string into an owned `String`. The memory belongs to
+/// Mono (interned class/method names), so it is read but never freed. A null
+/// pointer, or one holding invalid UTF-8, yields an empty string.
+fn cstr(ptr: *const c_char) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    unsafe { std::ffi::CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned()
+}
+
 impl Mono {
     /// Opens the Mono library and resolves its symbols, without initialising it.
     /// On `attach` the library is already loaded, so this hands back the same one.
@@ -109,6 +137,17 @@ impl Mono {
             method_get_unmanaged_thunk: symbol!("mono_method_get_unmanaged_thunk"),
             compile_method: symbol!("mono_compile_method"),
             get_root_domain: symbol!("mono_get_root_domain"),
+            object_get_class: symbol!("mono_object_get_class"),
+            object_get_virtual_method: symbol!("mono_object_get_virtual_method"),
+            runtime_invoke: symbol!("mono_runtime_invoke"),
+            object_unbox: symbol!("mono_object_unbox"),
+            class_get_methods: symbol!("mono_class_get_methods"),
+            method_get_name: symbol!("mono_method_get_name"),
+            class_get_name: symbol!("mono_class_get_name"),
+            class_get_namespace: symbol!("mono_class_get_namespace"),
+            image_get_table_rows: symbol!("mono_image_get_table_rows"),
+            class_get: symbol!("mono_class_get"),
+            get_corlib: symbol!("mono_get_corlib"),
         };
         Ok((library, api))
     }
@@ -234,27 +273,46 @@ impl Mono {
         }
     }
 
-    /// Resolves `type_name::method` to a `MonoMethod*`.
-    fn resolve_method(&self, assembly: &str, type_name: &str, method: &str) -> Result<Ptr> {
-        self.attach_thread();
+    /// The `MonoImage*` of a loaded assembly, from the registration cache.
+    fn image(&self, assembly: &str) -> Result<Ptr> {
         let image = *self
             .images
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(assembly)
             .ok_or_else(|| Error::NotFound(format!("loaded assembly {}", assembly)))?;
+        Ok(image as Ptr)
+    }
+
+    /// Resolves `type_name::method` to a `MonoMethod*`, matching any arity.
+    fn resolve_method(&self, assembly: &str, type_name: &str, method: &str) -> Result<Ptr> {
+        self.resolve_method_arity(assembly, type_name, method, -1)
+    }
+
+    /// Resolves `type_name::method` to a `MonoMethod*`, matching the overload
+    /// with `params` parameters (`-1` matches any arity).
+    fn resolve_method_arity(
+        &self,
+        assembly: &str,
+        type_name: &str,
+        method: &str,
+        params: c_int,
+    ) -> Result<Ptr> {
+        self.attach_thread();
+        let image = self.image(assembly)?;
         let (namespace, name) = type_name.rsplit_once('.').unwrap_or(("", type_name));
         let (namespace, name, method_name) =
             (cstring(namespace)?, cstring(name)?, cstring(method)?);
         unsafe {
-            let class = (self.api.class_from_name)(image as Ptr, namespace.as_ptr(), name.as_ptr());
+            let class = (self.api.class_from_name)(image, namespace.as_ptr(), name.as_ptr());
             if class.is_null() {
                 return Err(Error::NotFound(format!(
                     "type {} in {}",
                     type_name, assembly
                 )));
             }
-            let method_ptr = (self.api.class_get_method_from_name)(class, method_name.as_ptr(), -1);
+            let method_ptr =
+                (self.api.class_get_method_from_name)(class, method_name.as_ptr(), params);
             if method_ptr.is_null() {
                 return Err(Error::NotFound(format!("method {}::{}", type_name, method)));
             }
