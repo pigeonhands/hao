@@ -36,7 +36,11 @@ struct VkOverlay {
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     descriptor_set_layout: vk::DescriptorSetLayout,
-    descriptor_pool: vk::DescriptorPool,
+    // Grown on demand: COMBINED_IMAGE_SAMPLER sets are allocated from the
+    // last pool, and a fresh pool is appended when one is exhausted (a UI
+    // showing many textures — e.g. a full relic catalog — outgrows a single
+    // fixed pool). Each ManagedTexture records which pool its set came from.
+    descriptor_pools: Vec<vk::DescriptorPool>,
     sampler: vk::Sampler,
     command_pool: vk::CommandPool,
 
@@ -69,8 +73,28 @@ struct VkTexture {
 struct ManagedTexture {
     vk_tex: VkTexture,
     descriptor_set: vk::DescriptorSet,
+    /// The pool `descriptor_set` was allocated from — freed back to it.
+    pool: vk::DescriptorPool,
     atlas: Vec<u8>,
     size: [usize; 2],
+}
+
+/// Descriptor sets per pool; a new pool is appended each time one fills.
+const DESCRIPTOR_POOL_SETS: u32 = 256;
+
+/// Creates one COMBINED_IMAGE_SAMPLER descriptor pool with
+/// [`DESCRIPTOR_POOL_SETS`] capacity and individual-free support.
+unsafe fn create_descriptor_pool(device: &ash::Device) -> vk::DescriptorPool {
+    let pool_size = vk::DescriptorPoolSize::default()
+        .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .descriptor_count(DESCRIPTOR_POOL_SETS);
+    let dp_info = vk::DescriptorPoolCreateInfo::default()
+        .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
+        .max_sets(DESCRIPTOR_POOL_SETS)
+        .pool_sizes(std::slice::from_ref(&pool_size));
+    // Failure to create a pool at all is genuinely fatal (unlike exhausting
+    // an existing one, which is handled by growing).
+    device.create_descriptor_pool(&dp_info, None).unwrap()
 }
 
 struct VkBuffer {
@@ -357,15 +381,9 @@ impl VkOverlay {
         device.destroy_shader_module(vert_module, None);
         device.destroy_shader_module(frag_module, None);
 
-        // Descriptor pool (sized for multiple textures: font + user textures)
-        let pool_size = vk::DescriptorPoolSize::default()
-            .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(64);
-        let dp_info = vk::DescriptorPoolCreateInfo::default()
-            .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
-            .max_sets(64)
-            .pool_sizes(std::slice::from_ref(&pool_size));
-        let descriptor_pool = device.create_descriptor_pool(&dp_info, None).unwrap();
+        // First descriptor pool; more are appended on demand (see
+        // create_texture_image).
+        let descriptor_pool = create_descriptor_pool(&device);
 
         // Sampler
         let sampler_info = vk::SamplerCreateInfo::default()
@@ -435,7 +453,7 @@ impl VkOverlay {
             pipeline_layout,
             pipeline,
             descriptor_set_layout,
-            descriptor_pool,
+            descriptor_pools: vec![descriptor_pool],
             sampler,
             command_pool,
             textures: HashMap::new(),
@@ -482,7 +500,9 @@ impl VkOverlay {
             device.free_memory(mt.vk_tex.memory, None);
         }
         device.destroy_command_pool(self.command_pool, None);
-        device.destroy_descriptor_pool(self.descriptor_pool, None);
+        for pool in &self.descriptor_pools {
+            device.destroy_descriptor_pool(*pool, None);
+        }
         device.destroy_pipeline(self.pipeline, None);
         device.destroy_pipeline_layout(self.pipeline_layout, None);
         device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
@@ -511,7 +531,7 @@ impl VkOverlay {
                     ds.device.destroy_image(old.vk_tex.image, None);
                     ds.device.free_memory(old.vk_tex.memory, None);
                     ds.device
-                        .free_descriptor_sets(self.descriptor_pool, &[old.descriptor_set])
+                        .free_descriptor_sets(old.pool, &[old.descriptor_set])
                         .ok();
                 }
                 let mt = self.create_texture_image(ds, dw, dh, &pixels);
@@ -541,7 +561,7 @@ impl VkOverlay {
             ds.device.destroy_image(mt.vk_tex.image, None);
             ds.device.free_memory(mt.vk_tex.memory, None);
             ds.device
-                .free_descriptor_sets(self.descriptor_pool, &[mt.descriptor_set])
+                .free_descriptor_sets(mt.pool, &[mt.descriptor_set])
                 .ok();
         }
     }
@@ -604,12 +624,28 @@ impl VkOverlay {
             memory,
         };
 
-        // Allocate a descriptor set for this texture
+        // Allocate a descriptor set for this texture, growing the pool chain
+        // if the current pool is exhausted or fragmented.
         let layouts = [self.descriptor_set_layout];
-        let ds_alloc = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(self.descriptor_pool)
-            .set_layouts(&layouts);
-        let descriptor_set = device.allocate_descriptor_sets(&ds_alloc).unwrap()[0];
+        let alloc_from = |pool: vk::DescriptorPool| {
+            let ds_alloc = vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(pool)
+                .set_layouts(&layouts);
+            device.allocate_descriptor_sets(&ds_alloc)
+        };
+        let current = *self.descriptor_pools.last().unwrap();
+        let (pool, descriptor_set) = match alloc_from(current) {
+            Ok(sets) => (current, sets[0]),
+            Err(vk::Result::ERROR_OUT_OF_POOL_MEMORY)
+            | Err(vk::Result::ERROR_FRAGMENTED_POOL) => {
+                let fresh = create_descriptor_pool(device);
+                self.descriptor_pools.push(fresh);
+                let set = alloc_from(fresh)
+                    .expect("fresh descriptor pool cannot be out of memory")[0];
+                (fresh, set)
+            }
+            Err(e) => panic!("allocate_descriptor_sets: {e:?}"),
+        };
 
         let img_info_ds = vk::DescriptorImageInfo::default()
             .sampler(self.sampler)
@@ -669,6 +705,7 @@ impl VkOverlay {
         ManagedTexture {
             vk_tex,
             descriptor_set,
+            pool,
             atlas: pixels.to_vec(),
             size: [w, h],
         }
