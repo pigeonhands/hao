@@ -35,6 +35,8 @@ Tools for working with .NET assemblies and runtimes from Rust.
 | [`hao-il2cpp`](crates/hao-il2cpp) | [![](https://img.shields.io/crates/v/hao-il2cpp.svg?label=)](https://crates.io/crates/hao-il2cpp) | read Unity Il2Cpp games and generate assemblies for them (work in progress) |
 | [`hao-il2cpp-runtime`](crates/hao-il2cpp-runtime) | [![](https://img.shields.io/crates/v/hao-il2cpp-runtime.svg?label=)](https://crates.io/crates/hao-il2cpp-runtime) | hook and call into Il2Cpp games from inside the game, like MelonLoader |
 | [`hao-il2cpp-unity`](crates/hao-il2cpp-unity) | [![](https://img.shields.io/crates/v/hao-il2cpp-unity.svg?label=)](https://crates.io/crates/hao-il2cpp-unity) | typed Unity wrappers (game objects, UI, scenes) for Il2Cpp mods, and example mods |
+| [`hao-godot`](crates/hao-godot) | [![](https://img.shields.io/crates/v/hao-godot.svg?label=)](https://crates.io/crates/hao-godot) | typed Godot/.NET (CoreCLR) interop and texture extraction for game mods |
+| [`hao-egui-overlay`](crates/hao-egui-overlay) | [![](https://img.shields.io/crates/v/hao-egui-overlay.svg?label=)](https://crates.io/crates/hao-egui-overlay) | engine-agnostic egui overlay via OpenGL/Vulkan swapchain hooks |
 | [`hao-runtime-tests`](crates/hao-runtime-tests) | — | binding tests (not published) |
 
 hao's PE handling comes from [pewter](https://github.com/pigeonhands/pewter).
