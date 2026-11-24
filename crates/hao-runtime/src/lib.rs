@@ -17,7 +17,9 @@ pub mod jit;
 #[cfg(feature = "coreclr")]
 mod coreclr;
 mod error;
-#[cfg(feature = "hao")]
+// Only CoreCLR consumes the `Hao.Loader` helper assembly; the `coreclr`
+// feature always enables `hao`, so this is where it belongs.
+#[cfg(feature = "coreclr")]
 mod loader;
 #[cfg(feature = "coreclr")]
 pub mod profiler;
