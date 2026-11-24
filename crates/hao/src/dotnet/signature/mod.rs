@@ -283,7 +283,8 @@ impl MethodSig {
     /// `modopt(CallConvSuppressGCTransition)` + `modopt(CallConvCdecl)`
     /// wrapping the return type, keeping the calling thread in cooperative
     /// GC mode for the duration of the call — the GC cannot relocate
-    /// managed objects while such calls are in flight.
+    /// managed objects while such calls (or sequences of them, see
+    /// [`callchain!`](crate::callchain)) are in flight.
     ///
     /// The modifier nesting order (suppress outermost) is what the runtime
     /// expects; pass the two `System.Runtime.CompilerServices` modifier
