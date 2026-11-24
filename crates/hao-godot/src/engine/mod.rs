@@ -13,18 +13,23 @@
 //!
 //! # Usage
 //!
-//! ```ignore
-//! use hao_godot::engine::{engine, scene_tree, node};
+//! ```no_run
+//! use hao_godot::engine::{engine, node, scene_tree};
+//! use hao_runtime::{Result, Runtime};
 //!
-//! // Get the scene tree (Engine.GetMainLoop returns the SceneTree).
-//! let tree = engine::get_main_loop(rt)?;
-//! let root = scene_tree::get_root(rt, tree as usize)?;
+//! fn walk_tree(rt: &Runtime) -> Result<()> {
+//!     // Get the scene tree (Engine.GetMainLoop returns the SceneTree).
+//!     let tree = engine::get_main_loop(rt)?;
+//!     let root = scene_tree::get_root(rt, tree as usize)?;
 //!
-//! // Walk children of the root node.
-//! let count = node::get_child_count(rt, root as usize)?;
-//! for i in 0..count {
-//!     let child = node::get_child(rt, root as usize, i)?;
-//!     // child is a *const c_void pointing to the managed Node.
+//!     // Walk children of the root node.
+//!     let count = node::get_child_count(rt, root as usize)?;
+//!     for i in 0..count {
+//!         // child is a *const c_void pointing to the managed Node.
+//!         let child = node::get_child(rt, root as usize, i)?;
+//!         let _ = child;
+//!     }
+//!     Ok(())
 //! }
 //! ```
 //!
@@ -68,6 +73,7 @@ pub mod engine;
 pub mod gd;
 pub mod godot_object;
 pub mod image;
+mod image_interop;
 pub mod input;
 pub mod node;
 pub mod node2d;
