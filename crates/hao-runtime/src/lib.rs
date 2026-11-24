@@ -54,6 +54,15 @@ pub enum Backend {
     Mono,
 }
 
+// hao-runtime wraps a *running* .NET runtime, so it needs a backend: without
+// one `Inner` has no variants, `Runtime` has no constructor, and every
+// `match &*self.0` is a non-exhaustive match on the (still inhabited) `&Inner`.
+// Require a backend explicitly rather than emit a wall of E0004s.
+#[cfg(not(any(feature = "coreclr", feature = "mono")))]
+compile_error!(
+    "hao-runtime requires a backend feature: enable `coreclr` (the default) or `mono`"
+);
+
 enum Inner {
     #[cfg(feature = "coreclr")]
     CoreClr(coreclr::CoreClr),
