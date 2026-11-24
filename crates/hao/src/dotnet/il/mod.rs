@@ -2,13 +2,16 @@
 
 pub mod callchain;
 mod emitter;
+pub mod managed_body;
 mod opcodes;
 mod reader;
 mod writer;
 
 pub use crate::callchain;
+pub use crate::managed_body;
 pub use callchain::ChainImports;
 pub use emitter::{EmitLabel, Emitter};
+pub use managed_body::{CallKind, ManagedLocal, ManagedMethod};
 pub use opcodes::*;
 pub(crate) use reader::{BodyReader, BodyResolver};
 pub use writer::compute_max_stack;

@@ -113,6 +113,15 @@ macro_rules! dotnet_class {
     (@bind
         $( #[$attr:ident] )?
         fn $mname:ident ( $($p:ident : $pk:tt),* $(,)? ) -> $ret:tt
+            = managed { $($mb:tt)* } ; $($rest:tt)*
+    ) => {
+        #[allow(non_snake_case)]
+        let $mname = $crate::managed_body!(@from_class params( $($p : $pk),* ), $($mb)*);
+        $crate::dotnet_class!(@bind $($rest)*);
+    };
+    (@bind
+        $( #[$attr:ident] )?
+        fn $mname:ident ( $($p:ident : $pk:tt),* $(,)? ) -> $ret:tt
             = $body:expr ; $($rest:tt)*
     ) => {
         #[allow(non_snake_case)]
@@ -126,6 +135,15 @@ macro_rules! dotnet_class {
         $( #[$attr:ident] )?
         fn $mname:ident ( $($p:ident : $pk:tt),* $(,)? ) -> $ret:tt
             = chain { $($cc:tt)* } ; $($rest:tt)*
+    ) => {
+        $crate::dotnet_class!(@add $module, $class,
+            $( #[$attr] )? fn $mname ( $($p : $pk),* ) -> $ret);
+        $crate::dotnet_class!(@register $module, $class, $($rest)*);
+    };
+    (@register $module:ident, $class:ident,
+        $( #[$attr:ident] )?
+        fn $mname:ident ( $($p:ident : $pk:tt),* $(,)? ) -> $ret:tt
+            = managed { $($mb:tt)* } ; $($rest:tt)*
     ) => {
         $crate::dotnet_class!(@add $module, $class,
             $( #[$attr] )? fn $mname ( $($p : $pk),* ) -> $ret);
