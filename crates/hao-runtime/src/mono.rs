@@ -419,4 +419,57 @@ impl Mono {
             Ok(code)
         }
     }
+
+    /// Returns the full names (`namespace.name`, or bare `name` when the type
+    /// has no namespace) of every type in a loaded assembly, by walking the
+    /// `TypeDef` metadata table.
+    pub fn type_names(&self, assembly: &str) -> Result<Vec<String>> {
+        self.attach_thread();
+        let image = self.image(assembly)?;
+        let rows = unsafe { (self.api.image_get_table_rows)(image, MONO_TABLE_TYPEDEF) };
+        let mut out = Vec::new();
+        // Row 1 is the compiler-synthesised `<Module>` type; real types start at 2.
+        for row in 2..=rows.max(0) as u32 {
+            let class = unsafe { (self.api.class_get)(image, MONO_TOKEN_TYPE_DEF | row) };
+            if class.is_null() {
+                continue;
+            }
+            let namespace = cstr(unsafe { (self.api.class_get_namespace)(class) });
+            let name = cstr(unsafe { (self.api.class_get_name)(class) });
+            out.push(if namespace.is_empty() {
+                name
+            } else {
+                format!("{}.{}", namespace, name)
+            });
+        }
+        Ok(out)
+    }
+
+    /// Returns the names of every method declared on a type in a loaded
+    /// assembly, by iterating the class with `mono_class_get_methods`.
+    pub fn method_names(&self, assembly: &str, type_name: &str) -> Result<Vec<String>> {
+        self.attach_thread();
+        let image = self.image(assembly)?;
+        let (namespace, name) = type_name.rsplit_once('.').unwrap_or(("", type_name));
+        let (namespace_c, name_c) = (cstring(namespace)?, cstring(name)?);
+        let class =
+            unsafe { (self.api.class_from_name)(image, namespace_c.as_ptr(), name_c.as_ptr()) };
+        if class.is_null() {
+            return Err(Error::NotFound(format!(
+                "type {} in {}",
+                type_name, assembly
+            )));
+        }
+        let mut out = Vec::new();
+        // `iter` must start null; Mono advances it and returns null when done.
+        let mut iter: Ptr = std::ptr::null_mut();
+        loop {
+            let method = unsafe { (self.api.class_get_methods)(class, &mut iter) };
+            if method.is_null() {
+                break;
+            }
+            out.push(cstr(unsafe { (self.api.method_get_name)(method) }));
+        }
+        Ok(out)
+    }
 }

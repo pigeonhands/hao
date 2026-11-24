@@ -407,7 +407,7 @@ impl Runtime {
             #[cfg(feature = "coreclr")]
             Inner::CoreClr(clr) => clr.type_names(assembly),
             #[cfg(feature = "mono")]
-            Inner::Mono(_) => Err(Error::Other("type_names is CoreCLR-only".into())),
+            Inner::Mono(mono) => mono.type_names(assembly),
         }
     }
 
@@ -417,7 +417,7 @@ impl Runtime {
             #[cfg(feature = "coreclr")]
             Inner::CoreClr(clr) => clr.method_names(assembly, type_name),
             #[cfg(feature = "mono")]
-            Inner::Mono(_) => Err(Error::Other("method_names is CoreCLR-only".into())),
+            Inner::Mono(mono) => mono.method_names(assembly, type_name),
         }
     }
 }
