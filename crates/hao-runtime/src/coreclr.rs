@@ -75,6 +75,10 @@ type GetTypeNames = unsafe extern "system" fn(*const CharT) -> *mut CharT;
 type GetMethodNames = unsafe extern "system" fn(*const CharT, *const CharT) -> *mut CharT;
 type SuppressGC = unsafe extern "system" fn(i64) -> i64;
 type ResumeGC = unsafe extern "system" fn();
+/// `Hao.Loader::Enumerate` — `object[] Enumerate(object)`. Non-`[UnmanagedCallersOnly]`
+/// so it is callable from a cooperative-mode thread; both the argument and the
+/// returned `object[]` cross as the object's address.
+type Enumerate = unsafe extern "system" fn(usize) -> usize;
 
 /// `GetFunctionPointer`'s sentinel for a `[UnmanagedCallersOnly]` method.
 const UNMANAGED_CALLERS_ONLY: *const CharT = usize::MAX as *const CharT;
@@ -299,6 +303,10 @@ pub(crate) struct CoreClr {
     get_function_pointer: GetFunctionPointer,
     load_assembly_bytes: LoadAssemblyBytes,
     loader: OnceLock<Loader>,
+    // `Hao.Loader::Enumerate`, JIT-compiled and cached by `warm_enumerate`.
+    // Resolution is `[UnmanagedCallersOnly]`-based and must happen off a
+    // cooperative-mode thread; the cached pointer is then callable on one.
+    enumerate: OnceLock<usize>,
 }
 
 // The ComponentActivator delegates are thread safe.
@@ -317,6 +325,7 @@ impl CoreClr {
             get_function_pointer: host.activator_delegate("GetFunctionPointer")?,
             load_assembly_bytes: host.activator_delegate("LoadAssemblyBytes")?,
             loader: OnceLock::new(),
+            enumerate: OnceLock::new(),
             _coreclr: Some(coreclr),
         })
     }
@@ -343,6 +352,7 @@ impl CoreClr {
             get_function_pointer: host.activator_delegate("GetFunctionPointer")?,
             load_assembly_bytes: host.activator_delegate("LoadAssemblyBytes")?,
             loader: OnceLock::new(),
+            enumerate: OnceLock::new(),
             _coreclr: None,
         })
     }
@@ -558,6 +568,53 @@ impl CoreClr {
         let loader = self.loader()?;
         unsafe { (loader.resume_gc)() };
         Ok(())
+    }
+
+    /// JIT-compiles and caches `Hao.Loader::Enumerate` so [`enumerate`](Self::enumerate)
+    /// can call it from a cooperative-mode thread. Resolution goes through the
+    /// `[UnmanagedCallersOnly]` loader helpers, so this MUST be called off such a
+    /// thread (e.g. at init). Idempotent.
+    pub fn warm_enumerate(&self) -> Result<()> {
+        if self.enumerate.get().is_some() {
+            return Ok(());
+        }
+        let ptr = self.method_pointer(LOADER, "Hao.Loader", "Enumerate")? as usize;
+        let _ = self.enumerate.set(ptr);
+        Ok(())
+    }
+
+    /// Materializes any managed `IEnumerable` into the addresses of its elements,
+    /// by calling the `Hao.Loader::Enumerate` helper (a JIT-compiled `foreach`)
+    /// and reading the resulting `object[]`.
+    ///
+    /// Call [`warm_enumerate`](Self::warm_enumerate) once off a cooperative-mode
+    /// thread first; this call itself must run ON the cooperative (game) thread,
+    /// like any [`method_pointer`](Self::method_pointer) call. The returned
+    /// addresses are read while the thread holds the array with no safepoint in
+    /// between, so the GC cannot move it mid-read.
+    pub fn enumerate(&self, obj: usize) -> Result<Vec<usize>> {
+        if obj == 0 {
+            return Ok(Vec::new());
+        }
+        let ptr = *self.enumerate.get().ok_or_else(|| {
+            Error::Other("Enumerate not warmed; call warm_enumerate() off the game thread".into())
+        })?;
+        let func: Enumerate = unsafe { std::mem::transmute::<usize, Enumerate>(ptr) };
+        let array = unsafe { func(obj) };
+        if array == 0 {
+            return Ok(Vec::new());
+        }
+        // object[] layout: [MethodTable:8][length:i32 @ +8][pad][elements @ +16].
+        let len = unsafe { std::ptr::read((array + 8) as *const i32) };
+        if len <= 0 {
+            return Ok(Vec::new());
+        }
+        let len = len as usize;
+        let mut out = Vec::with_capacity(len);
+        for i in 0..len {
+            out.push(unsafe { std::ptr::read((array + 16 + i * 8) as *const usize) });
+        }
+        Ok(out)
     }
 
     /// The .NET major version this runtime was started or attached with.

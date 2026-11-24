@@ -350,6 +350,35 @@ impl Runtime {
         }
     }
 
+    /// JIT-compiles and caches the `Hao.Loader::Enumerate` helper so
+    /// [`enumerate`](Self::enumerate) can be called from a cooperative-mode
+    /// thread. Must be called off such a thread (e.g. at init). CoreCLR only.
+    pub fn warm_enumerate(&self) -> Result<()> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.warm_enumerate(),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Err(Error::Other("enumerate is CoreCLR-only".into())),
+        }
+    }
+
+    /// Materializes any managed `IEnumerable` into the addresses of its
+    /// elements, by calling a JIT-compiled `foreach` helper and reading the
+    /// resulting `object[]`. This handles concrete types native code cannot
+    /// read by hand — lazy iterators, LINQ chains, dictionary views.
+    ///
+    /// Call [`warm_enumerate`](Self::warm_enumerate) once off a cooperative-mode
+    /// thread first; this call must run ON the cooperative (game) thread, like
+    /// any [`method_pointer`](Self::method_pointer) call. CoreCLR only.
+    pub fn enumerate(&self, obj: usize) -> Result<Vec<usize>> {
+        match &*self.0 {
+            #[cfg(feature = "coreclr")]
+            Inner::CoreClr(clr) => clr.enumerate(obj),
+            #[cfg(feature = "mono")]
+            Inner::Mono(_) => Err(Error::Other("enumerate is CoreCLR-only".into())),
+        }
+    }
+
     /// The .NET major version (e.g. 9) the runtime was started or attached
     /// with. `None` on Mono, where no CoreCLR framework version applies.
     pub fn dotnet_major(&self) -> Option<u16> {

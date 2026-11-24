@@ -11,11 +11,11 @@ use hao::{
     dotnet::{
         entries::{
             well_known::{
-                AppDomainMethod, AssemblyMethod, AssemblyNameMethod, BindingFlags,
-                ExceptionMethod, GcMethod, MarshalMethod, MemberInfoMethod, MethodBaseMethod,
-                RuntimeHelpersMethod, RuntimeMethodHandleMethod, StringExtMethod,
-                StringMethod, SystemReflectionType, SystemType, TypeExtMethod, TypeMethod,
-                WellKnownMethod,
+                AppDomainMethod, ArrayListMethod, AssemblyMethod, AssemblyNameMethod, BindingFlags,
+                ExceptionMethod, GcMethod, IEnumerableMethod, IEnumeratorMethod, MarshalMethod,
+                MemberInfoMethod, MethodBaseMethod, RuntimeHelpersMethod, RuntimeMethodHandleMethod,
+                StringExtMethod, StringMethod, SystemCollectionsType, SystemReflectionType,
+                SystemType, TypeExtMethod, TypeMethod, WellKnownMethod,
             },
             TypeDefOrRef,
         },
@@ -70,11 +70,22 @@ struct Tokens {
     hresult: MemberToken,
     gc_try_start: MemberToken,
     gc_end: MemberToken,
+    // IEnumerable materialization (`Enumerate`).
+    arraylist_type: TypeDefOrRef,
+    ienumerator_type: TypeDefOrRef,
+    arraylist_ctor: MemberToken,
+    arraylist_add: MemberToken,
+    arraylist_to_array: MemberToken,
+    get_enumerator: MemberToken,
+    move_next: MemberToken,
+    get_current: MemberToken,
 }
 
 impl Tokens {
     /// Imports every type and method the Hao.Loader bodies reference.
     fn resolve(module: &mut Module) -> hao::error::Result<Self> {
+        let arraylist_type = module.corlib_type(SystemCollectionsType::ArrayList)?;
+        let ienumerator_type = module.corlib_type(SystemCollectionsType::IEnumerator)?;
         Ok(Self {
             exception: module.corlib_type(SystemType::Exception)?,
             type_ty: module.corlib_type(SystemType::Type)?,
@@ -139,6 +150,22 @@ impl Tokens {
             gc_try_start: module
                 .import_well_known_method(WellKnownMethod::Gc(GcMethod::TryStartNoGCRegion))?,
             gc_end: module.import_well_known_method(WellKnownMethod::Gc(GcMethod::EndNoGCRegion))?,
+            arraylist_ctor: module
+                .import_well_known_method(WellKnownMethod::ArrayList(ArrayListMethod::New))?,
+            arraylist_add: module
+                .import_well_known_method(WellKnownMethod::ArrayList(ArrayListMethod::Add))?,
+            arraylist_to_array: module
+                .import_well_known_method(WellKnownMethod::ArrayList(ArrayListMethod::ToArray))?,
+            get_enumerator: module.import_well_known_method(WellKnownMethod::IEnumerable(
+                IEnumerableMethod::GetEnumerator,
+            ))?,
+            move_next: module
+                .import_well_known_method(WellKnownMethod::IEnumerator(IEnumeratorMethod::MoveNext))?,
+            get_current: module.import_well_known_method(WellKnownMethod::IEnumerator(
+                IEnumeratorMethod::GetCurrent,
+            ))?,
+            arraylist_type,
+            ienumerator_type,
         })
     }
 }
@@ -534,6 +561,57 @@ fn resume_gc_body(t: &Tokens) -> hao::dotnet::il::MethodBody {
     }
 }
 
+/// `object[] Enumerate(object enumerable)`
+///
+/// Materializes any `System.Collections.IEnumerable` (including compiler
+/// generated lazy iterators and LINQ chains, whose concrete layout native code
+/// cannot read) into a plain `object[]` the caller can walk:
+///
+/// ```csharp
+/// try {
+///     var list = new ArrayList();
+///     foreach (var x in (IEnumerable)enumerable) list.Add(x);
+///     return list.ToArray();
+/// } catch (Exception) { return null; }
+/// ```
+///
+/// A hand-built [`Emitter`] body rather than `managed_body!` because the
+/// `foreach` is a loop (the macro's `for` is array-index only). This method is
+/// deliberately NOT `[UnmanagedCallersOnly]` so it stays callable from a
+/// cooperative-mode (game) thread via its JIT entry.
+fn enumerate_body(t: &Tokens) -> hao::dotnet::il::MethodBody {
+    use hao::dotnet::signature::TypeSig;
+    Emitter::build(|e| {
+        let list = e.declare_local(TypeSig::class(t.arraylist_type.clone()));
+        let en = e.declare_local(TypeSig::class(t.ienumerator_type.clone()));
+        let result = e.declare_local(TypeSig::sz_array(TypeSig::OBJECT));
+        e.try_catch(
+            t.exception.clone(),
+            |e| {
+                e.newobj(&t.arraylist_ctor).stloc(list);
+                e.ldarg(0).callvirt(&t.get_enumerator).stloc(en);
+                e.while_loop(
+                    |e| {
+                        e.ldloc(en).callvirt(&t.move_next);
+                    },
+                    |e| {
+                        e.ldloc(list)
+                            .ldloc(en)
+                            .callvirt(&t.get_current)
+                            .callvirt(&t.arraylist_add)
+                            .pop(); // ArrayList.Add returns the insert index
+                    },
+                );
+                e.ldloc(list).callvirt(&t.arraylist_to_array).stloc(result);
+            },
+            |e| {
+                e.pop(); // discard the exception; result stays null
+            },
+        );
+        e.ldloc(result).ret();
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Assembly builder
 // ---------------------------------------------------------------------------
@@ -596,9 +674,31 @@ pub fn loader_assembly(major: u16) -> Result<Vec<u8>> {
                 #[unmanaged_callers_only]
                 fn ResumeGC() -> () =
                     resume_gc_body(&tokens);
+                // NOT unmanaged_callers_only: called from a cooperative-mode
+                // thread via its JIT entry, so it must not carry the UCO prolog.
+                fn Enumerate(enumerable: object) -> [object] =
+                    enumerate_body(&tokens);
             }
         }?;
         module.write()
     };
     build().map_err(|e| Error::Other(format!("could not build the loader assembly: {}", e)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::loader_assembly;
+
+    /// The loader (including the hand-emitted `Enumerate` IL body) builds to a
+    /// valid PE image for every supported target runtime. Catches malformed IL
+    /// or bad member tokens at test time, without a live CLR.
+    #[test]
+    fn loader_assembly_builds() {
+        for major in [8u16, 9, 10] {
+            let bytes = loader_assembly(major)
+                .unwrap_or_else(|e| panic!(".NET {major}: loader build failed: {e}"));
+            assert!(bytes.len() > 512, ".NET {major}: suspiciously small image");
+            assert_eq!(&bytes[..2], b"MZ", ".NET {major}: not a PE image");
+        }
+    }
 }
