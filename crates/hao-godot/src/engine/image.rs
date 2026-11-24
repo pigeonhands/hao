@@ -100,20 +100,39 @@ unsafe fn read_managed_byte_array(arr: *const c_void) -> Result<Vec<u8>> {
 pub fn extract_rgba_compound(rt: &Runtime, rid: u64) -> Result<(u32, u32, Vec<u8>)> {
     use super::image_interop::ExtractHeader;
 
-    // Header + up to 16 MiB of pixel data.
     let header_size = std::mem::size_of::<ExtractHeader>();
-    let mut buf = vec![0u8; header_size + 16 * 1024 * 1024];
+    // Start with a modest pixel budget; large atlases (e.g. card portrait
+    // sheets) exceed it. The extraction writes the real header (including
+    // data_len) even when the pixel buffer overflows, so on overflow we
+    // reallocate to the exact size and retry once.
+    let mut cap = 16 * 1024 * 1024usize;
+    const MAX_CAP: usize = 256 * 1024 * 1024;
 
-    super::image_interop::extract_image_rgba(rt, rid, &mut buf)?;
-
-    let header: ExtractHeader = unsafe { std::ptr::read_unaligned(buf.as_ptr().cast()) };
-    let (w, h) = (header.width as u32, header.height as u32);
-    if w == 0 || h == 0 {
-        return Err(hao_runtime::Error::Other("image has zero dimensions".into()));
+    loop {
+        let mut buf = vec![0u8; header_size + cap];
+        let res = super::image_interop::extract_image_rgba(rt, rid, &mut buf);
+        let header: ExtractHeader = unsafe { std::ptr::read_unaligned(buf.as_ptr().cast()) };
+        match res {
+            Ok(()) => {
+                let (w, h) = (header.width as u32, header.height as u32);
+                if w == 0 || h == 0 {
+                    return Err(hao_runtime::Error::Other("image has zero dimensions".into()));
+                }
+                let data = buf[header_size..header_size + header.data_len as usize].to_vec();
+                return Ok((w, h, data));
+            }
+            Err(e) => {
+                // On a buffer-too-small overflow the header carries the
+                // required length; any other error leaves it zero.
+                let needed = header.data_len as usize;
+                if needed > cap && needed <= MAX_CAP {
+                    cap = needed;
+                    continue;
+                }
+                return Err(e);
+            }
+        }
     }
-
-    let data = buf[header_size..header_size + header.data_len as usize].to_vec();
-    Ok((w, h, data))
 }
 
 /// Extract RGBA8 pixel data from a Godot Image.

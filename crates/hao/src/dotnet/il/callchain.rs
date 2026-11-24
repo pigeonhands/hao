@@ -252,10 +252,11 @@ macro_rules! callchain {
                 __imports.exception.clone(),
                 |__e| {
                     $crate::callchain!(@chain __e, __imports, $($stmts)*);
-                    // `returns` marshalling, on the success path.
+                    // `returns` marshalling, on the success path. The struct
+                    // fields are written first — before the tail's bounds
+                    // check — so a caller that under-sized the buffer still
+                    // reads the header (e.g. the required length) on overflow.
                     $(
-                        $($crate::callchain!(@tail_check __e, $rty,
-                            $tlen, $tcap, $terr);)?
                         $(
                             __e.ldloc($rptr);
                             {
@@ -269,6 +270,8 @@ macro_rules! callchain {
                             __e.ldloc($rlocal)
                                 .op($crate::dotnet::il::OpCode::Stind_I8);
                         )+
+                        $($crate::callchain!(@tail_check __e, $rty,
+                            $tlen, $tcap, $terr);)?
                         $($crate::callchain!(@tail_copy __e, $rty, $rptr,
                             $tsrc, $tsoff, $tlen);)?
                     )?

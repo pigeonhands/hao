@@ -101,13 +101,13 @@ fn matches_hand_built_body() {
                 e.op(OpCode::Ldind_I4).op(OpCode::Conv_I8).stloc(peeked);
                 // raw
                 e.ldloc(peeked).pop();
-                // returns: tail bounds check first
-                e.ldc_i4(16).op(OpCode::Conv_I8).ldloc(peeked).op(OpCode::Add);
-                e.ldloc(cap).branch(OpCode::Bgt, err_null);
-                // field stores by offset_of
+                // returns: field stores by offset_of first (header always written)
                 e.ldloc(out_ptr).ldloc(obj).op(OpCode::Stind_I8);
                 e.ldloc(out_ptr).ldc_i4(8).op(OpCode::Add);
                 e.ldloc(peeked).op(OpCode::Stind_I8);
+                // then the tail bounds check
+                e.ldc_i4(16).op(OpCode::Conv_I8).ldloc(peeked).op(OpCode::Add);
+                e.ldloc(cap).branch(OpCode::Bgt, err_null);
                 // tail copy at out_ptr + size_of::<TestHeader>()
                 e.ldloc(out_ptr).ldc_i4(16).op(OpCode::Add);
                 e.ldloc(obj).ldc_i4(16).op(OpCode::Add);
