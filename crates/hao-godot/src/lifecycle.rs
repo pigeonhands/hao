@@ -135,14 +135,7 @@ pub fn hook_scene_tree(lib_name: &str) {
 #[cfg(all(unix, target_arch = "x86_64"))]
 fn deferred_native_hook() {
     fn diag(msg: &str) {
-        use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("/tmp/hao-diag.log")
-        {
-            let _ = writeln!(f, "[lifecycle] {msg}");
-        }
+        hao_runtime::attach::diag(&format!("lifecycle: {msg}"));
     }
 
     std::thread::spawn(|| {
@@ -238,10 +231,7 @@ pub fn intercept_process(
 pub extern "C" fn hao_godot_tick() {
     static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-        use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/hao-diag.log") {
-            let _ = writeln!(f, "[tick] hao_godot_tick called for the first time");
-        }
+        hao_runtime::attach::diag("tick: hao_godot_tick called for the first time");
     }
     tick();
 }
@@ -274,10 +264,7 @@ unsafe extern "C" fn pump_detour(this: usize, a: usize, b: usize, c: usize) -> u
         std::mem::transmute(hooking::original_function_ptr().unwrap());
     static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-        use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/hao-diag.log") {
-            let _ = writeln!(f, "[tick] pump_detour called for the first time");
-        }
+        hao_runtime::attach::diag("tick: pump_detour called for the first time");
     }
     tick();
     unsafe { original(this, a, b, c) }

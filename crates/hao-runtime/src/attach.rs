@@ -110,7 +110,10 @@ impl ClrHost {
 
 type Callback = Box<dyn FnOnce(ClrHost) + Send>;
 
-pub(crate) fn diag(msg: &str) {
+/// Appends a line to `/tmp/hao-diag.log` — early-attach diagnostics that
+/// work before any tracing subscriber exists (and from signal-unsafe spots
+/// where stdout may be redirected by the host process).
+pub fn diag(msg: &str) {
     use std::io::Write;
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
