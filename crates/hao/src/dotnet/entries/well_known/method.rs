@@ -14,8 +14,8 @@
 //! all the `method_name`/`is_instance`/`signature` impls.
 
 use super::{
-    SystemReflectionType, SystemRuntimeCompilerServicesType, SystemRuntimeInteropServicesType,
-    SystemTextType, SystemType, WellKnown,
+    SystemCollectionsType, SystemReflectionType, SystemRuntimeCompilerServicesType,
+    SystemRuntimeInteropServicesType, SystemTextType, SystemType, WellKnown,
 };
 use crate::dotnet::entries::TypeDefOrRef;
 use crate::dotnet::module::Module;
@@ -159,6 +159,18 @@ well_known_methods! {
     StringExt(StringExtMethod) = WellKnown::System(SystemType::String) => {
         OpEquality = Static "op_Equality" (string, string) -> bool;
     }
+    ArrayList(ArrayListMethod) = WellKnown::SystemCollections(SystemCollectionsType::ArrayList) => {
+        New     = Instance ".ctor"   ()       -> void;
+        Add     = Instance "Add"     (object) -> i32;
+        ToArray = Instance "ToArray" ()       -> [object];
+    }
+    IEnumerable(IEnumerableMethod) = WellKnown::SystemCollections(SystemCollectionsType::IEnumerable) => {
+        GetEnumerator = Instance "GetEnumerator" () -> { WellKnown::SystemCollections(SystemCollectionsType::IEnumerator) };
+    }
+    IEnumerator(IEnumeratorMethod) = WellKnown::SystemCollections(SystemCollectionsType::IEnumerator) => {
+        MoveNext   = Instance "MoveNext"    () -> bool;
+        GetCurrent = Instance "get_Current" () -> object;
+    }
 }
 
 impl WellKnownMethod {
@@ -235,6 +247,14 @@ mod tests {
             WellKnownMethod::MemberInfo(MemberInfoMethod::GetName),
             WellKnownMethod::AppDomain(AppDomainMethod::GetCurrentDomain),
             WellKnownMethod::StringExt(StringExtMethod::OpEquality),
+            // Constructor, object param, array-of-object return.
+            WellKnownMethod::ArrayList(ArrayListMethod::New),
+            WellKnownMethod::ArrayList(ArrayListMethod::Add),
+            WellKnownMethod::ArrayList(ArrayListMethod::ToArray),
+            // Interface methods with a class-typed return.
+            WellKnownMethod::IEnumerable(IEnumerableMethod::GetEnumerator),
+            WellKnownMethod::IEnumerator(IEnumeratorMethod::MoveNext),
+            WellKnownMethod::IEnumerator(IEnumeratorMethod::GetCurrent),
         ] {
             let token = module
                 .import_well_known_method(m)

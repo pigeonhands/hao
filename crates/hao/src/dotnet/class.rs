@@ -28,7 +28,8 @@
 ///
 /// Parameter and return types are Rust tokens mapped to
 /// [`TypeSig`](crate::dotnet::signature::TypeSig): `i64`, `i32`, `nint`,
-/// `f64`, `bool`, and `()` (return only).  `#[unmanaged_callers_only]`
+/// `f64`, `bool`, `object`, `string`, a single-dimension array `[T]`
+/// (e.g. `[object]`), and `()` (return only).  `#[unmanaged_callers_only]`
 /// resolves and attaches the corlib `UnmanagedCallersOnlyAttribute`.
 ///
 /// Body expressions are evaluated first, in the caller's context — so `?`
@@ -188,5 +189,12 @@ macro_rules! dotnet_class {
     (@ty nint) => { $crate::dotnet::signature::TypeSig::NATIVE_INT };
     (@ty f64) => { $crate::dotnet::signature::TypeSig::FLOAT64 };
     (@ty bool) => { $crate::dotnet::signature::TypeSig::BOOL };
+    (@ty object) => { $crate::dotnet::signature::TypeSig::OBJECT };
+    (@ty string) => { $crate::dotnet::signature::TypeSig::STRING };
+    // A single-element bracket group is one token tree, so `[object]` /
+    // `[i32]` map to the corresponding `T[]` single-dimension array.
+    (@ty [ $elem:tt ]) => {
+        $crate::dotnet::signature::TypeSig::sz_array($crate::dotnet_class!(@ty $elem))
+    };
     (@ty ()) => { $crate::dotnet::signature::TypeSig::VOID };
 }
