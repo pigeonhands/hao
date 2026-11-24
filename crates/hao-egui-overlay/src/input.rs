@@ -11,6 +11,7 @@ pub(crate) fn gather(
     inv: f32,
     pointer_down: &mut [bool; 2],
     keys_down: &mut [bool; KEY_COUNT],
+    last_pos: &mut Option<egui::Pos2>,
 ) -> egui::RawInput {
     let mut events = Vec::new();
 
@@ -18,7 +19,15 @@ pub(crate) fn gather(
     let (mx, my, buttons) = xlib.map(|x| x.query_pointer()).unwrap_or((0, 0, 0));
     // X11 coords are top-left origin in pixels. Scale to egui point space.
     let pos = egui::pos2(mx as f32 * inv, my as f32 * inv);
-    events.push(egui::Event::PointerMoved(pos));
+    // Only emit PointerMoved when the position actually changes. egui resets its
+    // "last movement time" on EVERY PointerMoved event (even a same-position
+    // one), so a constant per-frame stream keeps the pointer perpetually
+    // "moving" and suppresses hover tooltips (which require the pointer to be
+    // still for a delay).
+    if *last_pos != Some(pos) {
+        events.push(egui::Event::PointerMoved(pos));
+        *last_pos = Some(pos);
+    }
 
     let keymap = xlib.map(|x| x.query_keymap()).unwrap_or([0u8; 32]);
 

@@ -18,6 +18,7 @@ struct GlState {
     ctx: egui::Context,
     pointer_down: [bool; 2],
     keys_down: [bool; input::KEY_COUNT],
+    last_pos: Option<egui::Pos2>,
 }
 
 static STATE: Mutex<Option<GlState>> = Mutex::new(None);
@@ -67,6 +68,7 @@ fn ensure_state() {
         ctx: egui::Context::default(),
         pointer_down: [false; 2],
         keys_down: [false; input::KEY_COUNT],
+        last_pos: None,
     });
 }
 
@@ -94,7 +96,7 @@ unsafe fn frame_gl() {
 
     state.ctx.set_pixels_per_point(scale);
     let raw_input =
-        input::gather(pw, ph, inv, &mut state.pointer_down, &mut state.keys_down);
+        input::gather(pw, ph, inv, &mut state.pointer_down, &mut state.keys_down, &mut state.last_pos);
     let mut output = state.ctx.run_pass(raw_input, |ctx| draw(ctx));
     let primitives = state.ctx.tessellate(output.shapes, scale);
     state.painter.paint_and_update_textures(

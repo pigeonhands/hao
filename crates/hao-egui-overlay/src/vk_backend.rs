@@ -62,6 +62,7 @@ struct VkOverlay {
     ctx: egui::Context,
     pointer_down: [bool; 2],
     keys_down: [bool; input::KEY_COUNT],
+    last_pos: Option<egui::Pos2>,
 }
 
 struct VkTexture {
@@ -469,6 +470,7 @@ impl VkOverlay {
             ctx: egui::Context::default(),
             pointer_down: [false; 2],
             keys_down: [false; input::KEY_COUNT],
+            last_pos: None,
         }
     }
 
@@ -817,7 +819,7 @@ impl VkOverlay {
         let (pw, ph) = (self.extent.width as f32 * inv, self.extent.height as f32 * inv);
 
         self.ctx.set_pixels_per_point(scale);
-        let raw_input = input::gather(pw, ph, inv, &mut self.pointer_down, &mut self.keys_down);
+        let raw_input = input::gather(pw, ph, inv, &mut self.pointer_down, &mut self.keys_down, &mut self.last_pos);
         let output = self.ctx.run_pass(raw_input, |ctx| draw(ctx));
 
         for (id, deltas) in &output.textures_delta.set {
